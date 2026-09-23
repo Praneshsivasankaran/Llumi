@@ -5,8 +5,11 @@ $ErrorActionPreference = 'Stop'
 $source = (Resolve-Path -LiteralPath $ReleaseDirectory).Path
 $root = Join-Path ([IO.Path]::GetTempPath()) ('AgentMeter-DependencyTests-' + [Guid]::NewGuid().ToString('N'))
 $null = New-Item -ItemType Directory -Path $root
-# Copy only the small framework-dependent release into an isolated fixture.
+# Preserve notices when testing either framework-dependent or bundled-runtime output.
 Get-ChildItem -LiteralPath $source -File | Copy-Item -Destination $root
+if (Test-Path -LiteralPath (Join-Path $source 'licenses')) {
+    Copy-Item -LiteralPath (Join-Path $source 'licenses') -Destination $root -Recurse
+}
 & (Join-Path $PSScriptRoot 'assert-release.ps1') -Directory $root
 $passed = 0
 foreach ($name in @('sdk.mjs', 'node.exe', 'claude.exe', 'codex.exe', 'ClaudeBridge', 'node_modules', 'claude-agent-sdk')) {
