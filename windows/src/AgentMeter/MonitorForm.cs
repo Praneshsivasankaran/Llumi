@@ -29,9 +29,11 @@ internal sealed class MonitorForm : Form
     internal IReadOnlyList<string> ProviderNames => providerNames;
     internal Point RestingLocation => new(Location.X + (Width - SizeForDpi(DeviceDpi, providerNames.Length).Width) / 2, Location.Y);
     internal static Color Accent(string name) => SystemInformation.HighContrast ? SystemColors.WindowText :
-        name.StartsWith("Claude", StringComparison.Ordinal) ? Color.FromArgb(255, 186, 143) : Color.FromArgb(115, 230, 196);
-    private static Color Ink => SystemInformation.HighContrast ? SystemColors.WindowText : Color.FromArgb(242, 244, 247);
-    private static Color Muted => SystemInformation.HighContrast ? SystemColors.WindowText : Color.FromArgb(181, 187, 199);
+        name.StartsWith("Claude", StringComparison.Ordinal)
+            ? (Palette.IsLight ? Color.FromArgb(151, 65, 24) : Color.FromArgb(255, 186, 143))
+            : (Palette.IsLight ? Color.FromArgb(13, 112, 86) : Color.FromArgb(115, 230, 196));
+    private static Color Ink => SystemInformation.HighContrast ? SystemColors.WindowText : Palette.Foreground;
+    private static Color Muted => SystemInformation.HighContrast ? SystemColors.WindowText : Palette.Muted;
     internal static bool TransparencyAllowed
     {
         get
@@ -226,11 +228,11 @@ internal sealed class MonitorForm : Form
         // Native per-pixel translucent HUD: no captured desktop pixels, private blur APIs,
         // or forced backdrop incompatible with a nonactivating layered window.
         var alpha = TransparencyAllowed ? 242 : 255;
-        var top = SystemInformation.HighContrast ? SystemColors.Window : Color.FromArgb(34, 38, 46);
-        var bottom = SystemInformation.HighContrast ? SystemColors.Window : Color.FromArgb(17, 20, 26);
+        var top = SystemInformation.HighContrast ? SystemColors.Window : Palette.IsLight ? Color.FromArgb(252, 253, 255) : Color.FromArgb(34, 38, 46);
+        var bottom = SystemInformation.HighContrast ? SystemColors.Window : Palette.IsLight ? Color.FromArgb(235, 239, 245) : Color.FromArgb(17, 20, 26);
         using var background = new LinearGradientBrush(new RectangleF(0, 0, width, Math.Max(1, height)), Color.FromArgb(alpha, top), Color.FromArgb(alpha, bottom), 90);
         g.FillPath(background, shape);
-        using var border = new Pen(SystemInformation.HighContrast ? SystemColors.WindowText : Color.FromArgb(70, 219, 229, 244), SystemInformation.HighContrast ? 1.5f : .75f);
+        using var border = new Pen(SystemInformation.HighContrast ? SystemColors.WindowText : Color.FromArgb(150, Palette.Border), SystemInformation.HighContrast ? 1.5f : .75f);
         g.DrawPath(border, shape);
         using var animatedNumberFont = new Font("Segoe UI Semibold", 13 + 4 * expanded, FontStyle.Regular, GraphicsUnit.Pixel);
         var count = rows.Length;
@@ -240,7 +242,7 @@ internal sealed class MonitorForm : Form
         var offset = (width - contentWidth) / 2;
         for (var i = 0; i < count; i++)
         {
-            var row = rows[i]; var ink = row.Stale ? Color.FromArgb(247, 202, 119) : Accent(row.Name);
+            var row = rows[i]; var ink = row.Stale ? Palette.Warning : Accent(row.Name);
             var compactX = count > 1 ? 16 + i * 96 : 20;
             var columnWidth = (expandedWidth - 36 - (count - 1) * 37) / Math.Max(1, count);
             var expandedX = 18 + i * (columnWidth + 37);
@@ -252,13 +254,13 @@ internal sealed class MonitorForm : Form
             if (row.Stale) { using var stale = new SolidBrush(ink); g.FillEllipse(stale, x + markSize + 61, y + 8, 4, 4); }
             if (i > 0)
             {
-                using var separator = new Pen(Color.FromArgb(48, 255, 255, 255));
+                using var separator = new Pen(Color.FromArgb(110, Palette.Border));
                 g.DrawLine(separator, x - 19, 9 + 9 * expanded, x - 19, 25 + 99 * expanded);
             }
             if (expanded <= .01) continue;
             Color Detail(Color color) => Color.FromArgb((int)(255 * Math.Clamp((expanded - .2) / .8, 0, 1)), color);
             if (count == 1) Draw(g, "remaining", bodyFont, Detail(Muted), new(x + 92, y - 1, 90, 25));
-            using var track = new SolidBrush(Detail(Color.FromArgb(52, 58, 67)));
+            using var track = new SolidBrush(Detail(Palette.Track));
             using var trackShape = DrawingHelpers.RoundedRectangle(new(x, 53, columnWidth, 5), 2.5f);
             g.FillPath(track, trackShape);
             if (row.Remaining is > 0)

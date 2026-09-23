@@ -28,7 +28,6 @@ internal sealed class TrayContext : ApplicationContext
     private Preferences preferences;
     private readonly SetupCompletionStore setupStore;
     private SetupForm? setupWindow;
-    private SetupForm? checkWindow;
     private bool needsSetup;
     private ActivitySnapshot activity = ActivitySnapshot.Empty;
     private Task activityTask = Task.CompletedTask;
@@ -65,14 +64,12 @@ internal sealed class TrayContext : ApplicationContext
         pinMenu = new ToolStripMenuItem("Pin Monitor", null, (_, _) => { if (monitor.Visible) UnpinMonitor(); else OpenMonitor(); });
         menu.Items.Add("Refresh", null, (_, _) => StartRefresh());
         menu.Items.Add("Setup Llumi…", null, (_, _) => OpenSetup());
-        menu.Items.Add("Check Setup…", null, (_, _) => OpenCheckSetup());
         menu.Items.Add("Settings", null, (_, _) => { ShowPopup(); popup.ShowSettings(); });
         startupMenu.Click += (_, _) => ToggleStartup();
         menu.Opening += (_, _) => UpdateStartupState();
         menu.Items.Add("Quit", null, async (_, _) => await ExitAsync());
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowPopup(); };
         popup.SetupRequested += OpenSetup;
-        popup.CheckSetupRequested += OpenCheckSetup;
         popup.RefreshRequested += StartRefresh;
         popup.ExitRequested += async () => await ExitAsync();
         popup.PinRequested += OpenMonitor;
@@ -138,16 +135,8 @@ internal sealed class TrayContext : ApplicationContext
         }
         setupWindow.Show(); setupWindow.Activate();
     }
-    private void OpenCheckSetup()
-    {
-        if (checkWindow is null || checkWindow.IsDisposed)
-            checkWindow = new SetupForm(new SetupFlow(setupStore), () => coordinator.States, StartRefresh,
-                () => preferences, ChangePreferences, startup, ToggleStartup, () => { }, checkOnly: true);
-        checkWindow.Show(); checkWindow.Activate(); StartRefresh();
-    }
-
     private void OnUserPreferenceChanged(object sender, UserPreferenceChangedEventArgs e) => OnUi(() =>
-    { Palette.Apply(preferences.Appearance); popup.ApplyTheme(); if (setupWindow is { IsDisposed: false }) setupWindow.ApplyTheme(); if (checkWindow is { IsDisposed: false }) checkWindow.ApplyTheme(); monitor.UpdateSurface(); });
+    { Palette.Apply(preferences.Appearance); popup.ApplyTheme(); if (setupWindow is { IsDisposed: false }) setupWindow.ApplyTheme(); monitor.UpdateSurface(); });
 
     private void ChangePreferences(Preferences value)
     {
@@ -155,7 +144,6 @@ internal sealed class TrayContext : ApplicationContext
         preferences = value; tray.Visible = value.TrayIcon;
         Palette.Apply(value.Appearance); popup.SetPreferences(value);
         if (setupWindow is { IsDisposed: false }) setupWindow.ApplyTheme();
-        if (checkWindow is { IsDisposed: false }) checkWindow.ApplyTheme();
         monitor.UpdateSurface(); ApplyActivity(activity);
     }
 
@@ -291,7 +279,6 @@ internal sealed class TrayContext : ApplicationContext
         if (exiting) return;
         var states = coordinator.States;
         if (setupWindow is { IsDisposed: false }) setupWindow.RefreshStatuses();
-        if (checkWindow is { IsDisposed: false }) checkWindow.RefreshStatuses();
         if (popup.Visible) popup.Render(states, coordinator.IsRefreshing, log.WriteFailed);
         if (monitor.Visible)
         {
@@ -343,7 +330,7 @@ internal sealed class TrayContext : ApplicationContext
         monitor.AllowExit = true;
         monitor.Close();
         popup.Close();
-        setupWindow?.Close(); checkWindow?.Close();
+        setupWindow?.Close();
         ExitThread();
     }
 
@@ -365,7 +352,7 @@ internal sealed class TrayContext : ApplicationContext
             showWait.Unregister(null);
             quitWait?.Unregister(null);
             poll.Dispose(); display.Dispose(); recovery.Dispose(); activityTimer.Dispose(); tray.Visible = false; tray.Dispose(); menu.Dispose();
-            setupWindow?.Dispose(); checkWindow?.Dispose();
+            setupWindow?.Dispose();
             popup.AllowExit = true; popup.Dispose();
             monitor.AllowExit = true; monitor.Dispose();
             icon.Dispose(); trayIcon.Dispose(); lifetime.Dispose();

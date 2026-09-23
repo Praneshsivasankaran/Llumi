@@ -20,6 +20,15 @@ internal sealed class UsageForm : Form
     private readonly ComboBox appearance = new() { DropDownStyle = ComboBoxStyle.DropDownList, AccessibleName = "Appearance" };
     private readonly Label settingsMessage = new() { AutoSize = false };
     private readonly Label appearanceLabel = new() { Text = "Appearance", AutoSize = true };
+    private readonly Label preferencesHeading = new() { Text = "Preferences", AutoSize = true };
+    private readonly Label providerHeading = new() { Text = "Provider Setup", AutoSize = true };
+    private readonly Label providerHint = new() { Text = "Check your locally installed tools. Sign-in stays with each provider.", AutoSize = false };
+    private readonly Label codexSetup = new() { AutoSize = false, AccessibleName = "Codex setup status" };
+    private readonly Label claudeSetup = new() { AutoSize = false, AccessibleName = "Claude Code setup status" };
+    private readonly Button checkAgain = Palette.Button("Check Again", "Check Again");
+    private readonly Button copyDiagnostics = Palette.Button("Copy Diagnostics", "Copy Diagnostics");
+    private readonly Button setupGuide = Palette.Button("Setup Llumi…", "Setup Llumi");
+    private readonly Label diagnosticMessage = new() { Text = "Copies only app, OS and provider status categories. Nothing is uploaded.", AutoSize = false };
     private readonly ContextMenuStrip actions = new();
     private readonly ToolTip hints = new();
     private readonly Dictionary<string, ProviderCard> cards = new();
@@ -30,7 +39,6 @@ internal sealed class UsageForm : Form
     private Preferences preferences = new();
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] internal bool AllowExit { get; set; }
     internal event Action? SetupRequested;
-    internal event Action? CheckSetupRequested;
     internal event Action? RefreshRequested;
     internal event Action? ExitRequested;
     internal event Action? PinRequested;
@@ -50,7 +58,15 @@ internal sealed class UsageForm : Form
         Controls.AddRange([header, content, settings, footer]);
         foreach (var name in names) { var card = new ProviderCard(hints); cards[name] = card; content.Controls.Add(card); }
         appearance.Items.AddRange(["System", "Light", "Dark"]);
-        settings.Controls.AddRange([launch, compact, tray, appearanceLabel, appearance, settingsMessage]);
+        settings.Controls.AddRange([preferencesHeading, launch, compact, tray, appearanceLabel, appearance, settingsMessage,
+            providerHeading, providerHint, codexSetup, claudeSetup, checkAgain, copyDiagnostics, setupGuide, diagnosticMessage]);
+        preferencesHeading.Font = providerHeading.Font = headingFont;
+        checkAgain.Click += (_, _) => RefreshRequested?.Invoke();
+        setupGuide.Click += (_, _) => SetupRequested?.Invoke();
+        copyDiagnostics.Click += (_, _) => {
+            try { Clipboard.SetText(DiagnosticReport()); diagnosticMessage.Text = "Diagnostics copied. Nothing is uploaded."; }
+            catch (System.Runtime.InteropServices.ExternalException) { diagnosticMessage.Text = "Clipboard is busy. Please try again."; }
+        };
         launch.Location = new(S(20), S(24)); compact.Location = new(S(20), S(68)); tray.Location = new(S(20), S(112));
         appearanceLabel.Location = new(S(20), S(164)); appearance.SetBounds(S(20), S(194), S(200), S(30));
         settingsMessage.SetBounds(S(20), S(244), S(410), S(100));
@@ -61,7 +77,6 @@ internal sealed class UsageForm : Form
         actions.Items.Add("Refresh", null, (_, _) => RefreshRequested?.Invoke());
         actions.Items.Add("Settings", null, (_, _) => ShowSettings());
         actions.Items.Add("Setup Llumi…", null, (_, _) => SetupRequested?.Invoke());
-        actions.Items.Add("Check Setup…", null, (_, _) => CheckSetupRequested?.Invoke());
         actions.Items.Add("Quit", null, (_, _) => ExitRequested?.Invoke());
         menu.Click += (_, _) => { MenuOpening?.Invoke(); actions.Show(menu, new Point(0, menu.Height)); };
         launch.Click += (_, _) => { if (!syncing) StartupToggleRequested?.Invoke(); };
@@ -105,9 +120,14 @@ internal sealed class UsageForm : Form
             foreach (Control child in root.Controls) Theme(child);
         }
         Theme(this); footer.ForeColor = Palette.Muted; settingsMessage.ForeColor = Palette.Muted;
-        foreach (var button in new[] { usageTab, settingsTab }) Palette.StyleButton(button);
+        providerHint.ForeColor = diagnosticMessage.ForeColor = Palette.Muted;
+        foreach (var status in new[] { codexSetup, claudeSetup }) { status.BackColor = Palette.Card; status.Padding = new Padding(S(14)); }
+        foreach (var button in new[] { usageTab, settingsTab, checkAgain, copyDiagnostics, setupGuide })
+        { if (button != usageTab && button != settingsTab) button.BackColor = Palette.Card; Palette.StyleButton(button); }
         Render(lastStates, loading, logFailed); Invalidate(true);
     }
+    internal string DiagnosticReport() => SetupDiagnostics.Report(lastStates,
+        typeof(UsageForm).Assembly.GetName().Version?.ToString(3), typeof(UsageForm).Assembly.GetName().Version?.ToString());
     internal void SetStartupState(bool enabled, bool available) { syncing = true; launch.Checked = enabled; launch.Enabled = available; syncing = false; }
     internal void ShowUsage() { settingsShown = false; Render(lastStates, loading, logFailed); }
     internal void ShowSettings() { settingsShown = true; MenuOpening?.Invoke(); Render(lastStates, loading, logFailed); }
@@ -134,10 +154,36 @@ internal sealed class UsageForm : Form
             menu.SetBounds(width - S(46), S(12), S(28), S(28)); refresh.SetBounds(width - S(136), S(57), S(120), S(30));
             content.SetBounds(S(12), S(105), width - S(24), Math.Max(S(60), height - S(150)));
             settings.Bounds = content.Bounds; settings.Visible = settingsShown; content.Visible = !settingsShown;
-            launch.Location = new(S(20), S(16)); compact.Location = new(S(20), S(56)); tray.Location = new(S(20), S(96));
-            appearanceLabel.Location = new(S(20), S(144)); appearance.SetBounds(S(20), S(171), S(200), S(30));
-            settingsMessage.SetBounds(S(20), S(219), Math.Max(S(100), settings.Width - S(40)), S(64));
-            settingsMessage.Width = Math.Max(S(100), settings.Width - S(40));
+            var settingsScroll = settings.AutoScrollPosition;
+            settings.AutoScrollPosition = Point.Empty;
+            var settingsWidth = Math.Max(S(240), settings.ClientSize.Width - S(40) - SystemInformation.VerticalScrollBarWidth);
+            providerHeading.Location = new(S(20), S(12));
+            providerHint.SetBounds(S(20), S(51), settingsWidth, S(32));
+            var twoColumns = settingsWidth >= S(500);
+            var setupWidth = twoColumns ? (settingsWidth - S(12)) / 2 : settingsWidth;
+            codexSetup.SetBounds(S(20), S(88), setupWidth, S(128));
+            claudeSetup.SetBounds(twoColumns ? S(32) + setupWidth : S(20), twoColumns ? S(88) : S(228), setupWidth, S(128));
+            var actionsY = twoColumns ? 232 : 372;
+            checkAgain.SetBounds(S(20), S(actionsY), S(112), S(36));
+            copyDiagnostics.SetBounds(S(144), S(actionsY), S(144), S(36));
+            diagnosticMessage.SetBounds(S(20), S(actionsY + 48), settingsWidth, S(48));
+            setupGuide.SetBounds(S(20), S(actionsY + 104), S(140), S(36));
+            var preferencesY = actionsY + 170;
+            preferencesHeading.Location = new(S(20), S(preferencesY));
+            launch.Location = new(S(20), S(preferencesY + 44)); compact.Location = new(S(20), S(preferencesY + 80)); tray.Location = new(S(20), S(preferencesY + 116));
+            appearanceLabel.Location = new(S(20), S(preferencesY + 162)); appearance.SetBounds(S(20), S(preferencesY + 189), S(200), S(30));
+            settingsMessage.SetBounds(S(20), S(preferencesY + 235), settingsWidth, S(100));
+            settings.AutoScrollMinSize = new(0, S(preferencesY + 350));
+            settings.AutoScrollPosition = new(0, -settingsScroll.Y);
+            string SetupText(string name, string title)
+            {
+                var state = states.FirstOrDefault(s => s.Name == name || (name == "Claude" && s.Name == "Claude Code"))
+                    ?? new ProviderState(name, ProviderStatus.Loading);
+                var value = SetupDiagnostic.From(state);
+                return $"{title} · {value.Status}\nInstallation: {value.Detected}\nAuthentication: {value.Authentication}\nUsage: {value.Usage}";
+            }
+            codexSetup.Text = SetupText("Codex", "Codex"); claudeSetup.Text = SetupText("Claude", "Claude Code");
+            checkAgain.Enabled = !loading; checkAgain.Text = loading ? "Checking…" : "Check Again";
             refresh.Visible = !settingsShown; refresh.Text = loading ? "Refreshing…" : "Refresh";
             footer.SetBounds(S(24), height - S(39), width - S(48), S(30));
             var observed = states.Where(s => s.Snapshot is not null).Select(s => s.Snapshot!.ObservedAt).DefaultIfEmpty().Min();

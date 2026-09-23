@@ -14,7 +14,6 @@ internal sealed class SetupForm : Form
     private readonly IStartupRegistration startup;
     private readonly Action toggleStartup;
     private readonly Action finished;
-    private readonly bool checkOnly;
     private readonly FlowLayoutPanel body = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(24) };
     private readonly FlowLayoutPanel navigation = new() { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(10) };
     private readonly Button next = Palette.Button("Continue", "Continue setup");
@@ -26,20 +25,19 @@ internal sealed class SetupForm : Form
 
     internal SetupForm(SetupFlow flow, Func<IReadOnlyList<ProviderState>> states, Action refresh,
         Func<Preferences> preferences, Action<Preferences> savePreferences, IStartupRegistration startup,
-        Action toggleStartup, Action finished, bool checkOnly = false)
+        Action toggleStartup, Action finished)
     {
         this.flow = flow; this.states = states; this.refresh = refresh; this.preferences = preferences;
         this.savePreferences = savePreferences; this.startup = startup; this.toggleStartup = toggleStartup;
-        this.finished = finished; this.checkOnly = checkOnly;
-        Text = checkOnly ? "Check Setup" : "Setup Llumi"; Font = bodyFont;
+        this.finished = finished;
+        Text = "Setup Llumi"; Font = bodyFont; Icon = AppIcon.Load();
         AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(620, 580);
         MinimumSize = new Size(560, 480); StartPosition = FormStartPosition.CenterScreen;
         Controls.Add(body); Controls.Add(navigation);
-        next.AutoSize = back.AutoSize = true; navigation.Controls.Add(next); navigation.Controls.Add(back);
+        next.AutoSize = back.AutoSize = true; next.MinimumSize = back.MinimumSize = new Size(112, 38); navigation.Controls.Add(next); navigation.Controls.Add(back);
         back.Click += (_, _) => { flow.Back(); RenderStep(); };
         next.Click += (_, _) =>
         {
-            if (checkOnly) { Close(); return; }
             if (flow.Step == SetupStep.Done)
             {
                 if (!flow.Complete()) { message.Text = "Setup completion could not be saved. Please try again."; return; }
@@ -56,7 +54,7 @@ internal sealed class SetupForm : Form
     }
     private Button ActionButton(string title, Action action)
     {
-        var button = Palette.Button(title, title); button.AutoSize = true;
+        var button = Palette.Button(title, title); button.AutoSize = true; button.MinimumSize = new Size(112, 36); button.Margin = new Padding(0, 0, 0, 14);
         button.Click += (_, _) => action(); body.Controls.Add(button); return button;
     }
     private void Command(string title, string command)
@@ -92,7 +90,7 @@ internal sealed class SetupForm : Form
                 ?? new ProviderState(name, ProviderStatus.Loading);
             label.Text = SetupDiagnostic.From(state).Summary;
         }
-        if (!checkOnly && flow.Step == SetupStep.Verify)
+        if (flow.Step == SetupStep.Verify)
             next.Text = states().Any(s => ((flow.Codex && s.Name == "Codex") || (flow.Claude && s.Name is "Claude" or "Claude Code"))
                 && SetupDiagnostic.From(s).Status == "Ready") ? "Continue" : "Finish Anyway";
     }
@@ -101,13 +99,15 @@ internal sealed class SetupForm : Form
         body.SuspendLayout(); body.Controls.Remove(message);
         foreach (var control in body.Controls.Cast<Control>().ToArray()) control.Dispose();
         body.Controls.Clear(); statusLabels.Clear(); message.Text = "";
-        back.Visible = !checkOnly && flow.Step != SetupStep.Welcome;
-        next.Text = checkOnly ? "Close" : flow.Step == SetupStep.Welcome ? "Set Up Llumi" : flow.Step == SetupStep.Done ? "Start Llumi" : "Continue";
-        if (checkOnly) { TextLine("Check Setup", true); Statuses(); }
-        else switch (flow.Step)
+        back.Visible = flow.Step != SetupStep.Welcome;
+        next.Text = flow.Step == SetupStep.Welcome ? "Set Up Llumi" : flow.Step == SetupStep.Done ? "Start Llumi" : "Continue";
+        switch (flow.Step)
         {
             case SetupStep.Welcome:
-                TextLine("Llumi", true); TextLine("Track your AI coding usage.");
+                var identity = new Panel { Width = 64, Height = 64, Margin = new Padding(0, 8, 0, 24) };
+                identity.Paint += (_, e) => { using var mark = AppIcon.Load(); e.Graphics.DrawIcon(mark, new Rectangle(0, 0, 64, 64)); };
+                body.Controls.Add(identity);
+                TextLine("Welcome to Llumi", true); TextLine("Track your AI coding usage.");
                 TextLine("Llumi monitors usage from your locally installed Codex and Claude Code tools. Use either provider, or both. Your sign-in stays with your provider."); break;
             case SetupStep.Providers:
                 TextLine("Choose providers", true);
@@ -152,10 +152,10 @@ internal sealed class SetupForm : Form
     internal void ApplyTheme()
     {
         void Theme(Control root) { root.BackColor = Palette.Background; root.ForeColor = Palette.Foreground;
-            if (root is Button button) Palette.StyleButton(button);
+            if (root is Button button) { button.BackColor = Palette.Card; Palette.StyleButton(button); }
             foreach (Control child in root.Controls) Theme(child); }
         Theme(this);
     }
     protected override void Dispose(bool disposing)
-    { base.Dispose(disposing); if (disposing) { bodyFont.Dispose(); headingFont.Dispose(); } }
+    { base.Dispose(disposing); if (disposing) { Icon?.Dispose(); bodyFont.Dispose(); headingFont.Dispose(); } }
 }

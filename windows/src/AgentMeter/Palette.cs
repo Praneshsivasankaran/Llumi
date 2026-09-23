@@ -8,14 +8,20 @@ internal static class Palette
     public static Color Border = Color.FromArgb(77, 85, 94);
     public static Color Foreground = Color.FromArgb(244, 247, 251);
     public static Color Muted = Color.FromArgb(183, 190, 200);
-    public static void Apply(Appearance appearance)
+    public static bool IsLight { get; private set; }
+    public static void Apply(Appearance appearance, bool? systemLight = null)
     {
         var light = appearance == Appearance.Light;
         if (appearance == Appearance.System)
         {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
-            light = key?.GetValue("AppsUseLightTheme") is int value && value != 0;
+            if (systemLight is { } supplied) light = supplied;
+            else
+            {
+                using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(@"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize");
+                light = key?.GetValue("AppsUseLightTheme") is int value && value != 0;
+            }
         }
+        IsLight = light;
         Background = light ? Color.FromArgb(245, 245, 245) : Color.FromArgb(38, 38, 38);
         Foreground = light ? Color.FromArgb(28, 28, 28) : Color.FromArgb(244, 247, 251);
         Muted = light ? Color.FromArgb(84, 84, 84) : Color.FromArgb(183, 190, 200);

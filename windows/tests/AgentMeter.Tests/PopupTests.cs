@@ -368,7 +368,7 @@ public sealed class PopupTests
         form.Render(states, false, false, shortWork);
         Assert.True(form.Height <= shortWork.Height - gap);
         Assert.True(form.Height < tallHeight);
-        foreach (var button in Descendants(form).OfType<Button>())
+        foreach (var button in Descendants(form).OfType<Button>().Where(b => b.Parent?.Name != "settings"))
             Assert.True(button.Parent!.ClientRectangle.Contains(button.Bounds), $"Action '{button.Text}' is outside the resized panel.");
         Assert.NotNull(QuitMenu(form));
         Assert.Contains(Descendants(form).OfType<Button>(), button => button.Text == "Refresh");

@@ -123,8 +123,8 @@ public sealed class SetupFormTests
         var refreshes = 0;
         using var form = new SetupForm(new(new(path)), () => states, () => {
             refreshes++; states = [new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "fixture"))];
-        }, () => new(), _ => { }, new Startup(), () => { }, () => { }, checkOnly: true);
-        form.Show(); form.RefreshStatuses();
+        }, () => new(), _ => { }, new Startup(), () => { }, () => { });
+        form.Show(); Button(form, "Set Up Llumi").PerformClick(); form.RefreshStatuses();
         Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text.Contains("Authentication: unknown"));
         Button(form, "Check Again").PerformClick(); form.RefreshStatuses();
         Assert.Equal(1, refreshes);
