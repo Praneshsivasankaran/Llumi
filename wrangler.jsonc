@@ -1,0 +1,16 @@
+{
+  "name": "llumi-website",
+  "main": "site/worker.mjs",
+  "compatibility_date": "2026-09-27",
+  "workers_dev": false,
+  "preview_urls": false,
+  "routes": [
+    { "pattern": "tryllumi.com", "custom_domain": true },
+    { "pattern": "www.tryllumi.com", "custom_domain": true }
+  ],
+  "assets": {
+    "directory": "./_site",
+    "binding": "ASSETS",
+    "run_worker_first": true
+  }
+}

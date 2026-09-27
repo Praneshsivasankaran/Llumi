@@ -116,7 +116,7 @@ class SiteTests(unittest.TestCase):
                 self.assertFalse(urlsplit(asset).netloc)
         css = (SITE / "styles.css").read_text(encoding="utf-8")
         self.assertNotIn("@import", css)
-        script = (SITE / "app.js").read_text()
+        script = (SITE / "app.js").read_text(encoding="utf-8")
         for forbidden in ("fetch(", "XMLHttpRequest", "localStorage", "document.cookie", "sendBeacon", "eval("):
             self.assertNotIn(forbidden, script)
 
@@ -131,12 +131,12 @@ class SiteTests(unittest.TestCase):
                     self.downloads.append(attrs)
         config = builder.load_config()
         parser = Buttons()
-        parser.feed((SITE / "index.html").read_text())
+        parser.feed((SITE / "index.html").read_text(encoding="utf-8"))
         unavailable = sum(not config[p]["download_url"] for p in ("macos", "windows"))
         self.assertEqual(len(parser.downloads), 2 * unavailable)
         for button in parser.downloads:
             self.assertIn("disabled", button)
-        self.assertNotIn("Signed and notarized", (SITE / "index.html").read_text())
+        self.assertNotIn("Signed and notarized", (SITE / "index.html").read_text(encoding="utf-8"))
 
     def test_configuration_rejects_unsafe_urls_and_legacy_artifacts(self):
         for value in ("javascript:alert(1)", "http://example.com/file.dmg", "https://user:pass@example.com/file"):
@@ -153,11 +153,11 @@ class SiteTests(unittest.TestCase):
         config["macos"]["download_url"] = "https://example.com/Llumi-test.dmg"
         with tempfile.TemporaryDirectory() as directory, patch.object(builder, "load_config", return_value=config):
             builder.build(Path(directory), "https://example.com/AgentMeter/")
-            home = (Path(directory) / "index.html").read_text()
+            home = (Path(directory) / "index.html").read_text(encoding="utf-8")
             self.assertEqual(home.count('href="https://example.com/Llumi-test.dmg"'), 2)
             self.assertIn('rel="canonical" href="https://example.com/AgentMeter/"', home)
             self.assertIn('https://example.com/AgentMeter/media/llumi-social.png', home)
-            policy = (Path(directory) / "privacy/index.html").read_text()
+            policy = (Path(directory) / "privacy/index.html").read_text(encoding="utf-8")
             self.assertIn('href="../#download"', policy)
 
     def test_approved_brand_is_unchanged(self):

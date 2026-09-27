@@ -8,4 +8,4 @@ Tests must use synthetic data and must not require a provider account. Preserve 
 
 Never commit credentials, raw provider output, personal paths, logs, internal validation reports, signing material or generated build artifacts. Review screenshots for private content and identify real captures accurately.
 
-Use [issues](https://github.com/Praneshsivasankaran/AgentMeter/issues/new/choose) for bugs and focused proposals. Report vulnerabilities through the [security policy](SECURITY.md). See [distribution requirements](docs/DISTRIBUTION.md) before proposing release automation.
+Use [issues](https://github.com/Praneshsivasankaran/Llumi/issues/new/choose) for bugs and focused proposals. Report vulnerabilities through the [security policy](SECURITY.md). See [distribution requirements](docs/DISTRIBUTION.md) before proposing release automation.

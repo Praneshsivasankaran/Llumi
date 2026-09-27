@@ -1,65 +1,38 @@
 # Llumi
 
-Track your AI coding usage.
+**Track your AI coding usage.**
 
-This branch prepares the AgentMeter → Llumi migration. No Llumi release is available yet; linked beta releases and the screenshots/demo below are historical AgentMeter artifacts. Existing repository and support URLs remain unchanged pending a coordinated migration.
+Llumi monitors Codex and Claude Code usage on **macOS and Windows**, with native usage windows and a compact monitor that appears for supported coding activity.
 
-Llumi monitors Codex and Claude Code usage on **macOS and Windows**, with a native usage window and a compact monitor that appears when supported sessions are active.
+[Website](https://tryllumi.com/) · [Privacy](https://tryllumi.com/privacy/) · [Support](https://tryllumi.com/support/)
 
-[Website](https://praneshsivasankaran.github.io/AgentMeter/) · [Privacy](https://praneshsivasankaran.github.io/AgentMeter/privacy/) · [Support](https://praneshsivasankaran.github.io/AgentMeter/support/)
+## Availability
 
-## Existing AgentMeter downloads (historical)
+- **macOS 1.1.1:** production download pending. Requires macOS 14 or later; Apple Silicon and Intel.
+- **Windows 2.0.2.0:** Microsoft Store certification pending. Requires Windows 10 22H2 or later, or Windows 11; x64. No direct Windows installer is offered.
 
-| | macOS | Windows |
-| --- | --- | --- |
-| **Store** | Mac App Store — **Coming soon** | Microsoft Store — **Coming soon** |
-| **Direct download** | [GitHub Release · Public beta](https://github.com/Praneshsivasankaran/AgentMeter/releases/tag/macos-0.1.0-beta.3) | GitHub Release — **Coming soon** |
-| **Status** | Public beta; Apple signing, notarization and App Store distribution pending | Microsoft Store submission candidate; Store publication pending |
-| **Source** | [`/macos`](macos/) | [`/windows`](windows/) |
+Historical AgentMeter releases remain available in [release history](https://github.com/Praneshsivasankaran/Llumi/releases); they are not Llumi downloads.
 
-The macOS beta requires macOS 14 or later and is currently unsigned. Read the [installation notes](docs/macos/INSTALL.md); do not disable Gatekeeper. Windows source targets Windows 10 version 2004 or later, x64. Neither Store release is live yet.
-
-GitHub is Llumi's official product, source and direct-download home. Direct builds for both platforms are planned; [distribution requirements](docs/DISTRIBUTION.md) apply independently to each channel.
-
-## See it in action
-
-| macOS | Windows |
-| --- | --- |
-| ![Real macOS Usage window](assets/screenshots/macos/usage.png) | ![Real Windows Usage window](assets/screenshots/windows/usage.png) |
-| Native SwiftUI and AppKit | Native Windows Forms |
-
-**macOS notch monitor**
-
-![Real macOS notch monitor appearing and expanding on hover](assets/demo/agentmeter-macos.gif)
-
-**Windows desktop monitor**
-
-| Compact | Expanded on hover |
-| --- | --- |
-| ![Real Windows compact Codex monitor](assets/screenshots/windows/codex-compact.png) | ![Real Windows expanded Codex monitor](assets/screenshots/windows/codex-expanded.png) |
-
-[More screenshots and capture details](assets/screenshots/README.md). Windows views are separate real captures, not an animation.
+![Real Llumi macOS usage window](site/media/llumi-macos-usage.webp)
 
 ## What it does
 
-- Shows remaining allowance, reset information and explicit loading, stale and unavailable states.
-- Keeps Codex and Claude Code independent so one unavailable provider does not block the other.
-- Shows a contextual notch/top-edge monitor on macOS and a movable desktop monitor on Windows.
-- Expands on hover, opens Usage on click, and provides native menu-bar or tray controls.
-- Supports optional launch at login/startup and System, Light and Dark appearance.
+- Shows supported allowances, reset information and explicit unavailable states for each provider.
+- Offers a contextual notch monitor on macOS and movable desktop monitor on Windows, with details on hover.
+- Includes guided setup, setup diagnostics, optional startup and Light, Dark or System appearance.
 
-Llumi refreshes every 30 seconds through your separately installed, authenticated Codex CLI and standalone Claude Code. Desktop apps can trigger the monitor; allowance comes from those CLI tools. Use the same subscription account across clients. Provider interfaces can change, and unavailable values are never estimated.
+Live usage requires separately installed, authenticated Codex CLI and/or standalone Claude Code and a supported provider subscription. Provider interfaces can change; unavailable values are never estimated.
 
 ## Privacy
 
 No Llumi account, telemetry, analytics or backend. Llumi does not read prompts, responses, source code, terminal contents or keystrokes, and does not copy provider credentials. Usage checks send no model prompts. Provider tools retain their own authentication and contact their own services. [Privacy policy](PRIVACY.md).
 
-## Source and contributions
+## Development
 
-[macOS build and tests](docs/macos/BUILD.md) · [Windows build and tests](docs/windows/BUILD.md) · [Shared product specification](docs/product-spec/README.md)
+[macOS build and tests](docs/macos/BUILD.md) · [Windows build and tests](docs/windows/BUILD.md) · [Website development](docs/PAGES.md) · [Shared product specification](docs/product-spec/README.md)
 
-Product behavior is specified together and implemented natively on each platform. Start with the shared specification when proposing a change, and identify any platform differences.
+Product behavior is specified together and implemented natively on each platform. Preserve intentional migration identifiers and historical releases.
 
-[Report an issue](https://github.com/Praneshsivasankaran/AgentMeter/issues/new/choose) · [Contribute](CONTRIBUTING.md) · [Report a security concern](SECURITY.md)
+[Report an issue](https://github.com/Praneshsivasankaran/Llumi/issues/new/choose) · [Contribute](CONTRIBUTING.md) · [Security](SECURITY.md) · [Distribution](docs/DISTRIBUTION.md) · [Release handoff](docs/RELEASE-HANDOFF.md)
 
 Llumi's original source is [MIT licensed](LICENSE). [Third-party materials and trademarks retain their own terms](THIRD-PARTY-NOTICES.md). Llumi is independent of OpenAI and Anthropic.

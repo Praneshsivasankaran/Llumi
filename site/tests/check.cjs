@@ -84,7 +84,7 @@ const results = [];
     await page.setViewportSize({ width: 1440, height: 1000 });
     await page.goto("http://127.0.0.1:4173/");
     await page.waitForFunction(() => document.querySelector('.hero .notch-toggle').getAttribute('aria-expanded') === 'true');
-    await page.keyboard.press(engine === "webkit" ? "Alt+Tab" : "Tab");
+    await page.keyboard.press(engine === "webkit" && process.platform === "darwin" ? "Alt+Tab" : "Tab");
     assert.equal(
       await page
         .locator(".skip")

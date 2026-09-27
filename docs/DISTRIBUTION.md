@@ -4,10 +4,10 @@ GitHub is the canonical home for Llumi's product documentation, issues, source a
 
 | Platform | Store channel | GitHub Releases |
 | --- | --- | --- |
-| macOS | Mac App Store planned; not published | Current unsigned public beta |
-| Windows | Microsoft Store submission candidate; not published | Coming soon; no public binary |
+| macOS | Mac App Store planned; not published | Llumi 1.1.1 production artifact upload and publication pending |
+| Windows | Llumi 2.0.2.0 in certification, manual publishing hold | No direct Windows launch download |
 
-The macOS beta remains a beta until Developer ID signing and notarization are complete. Apple signing/notarization and Mac App Store publication are distinct gates. See the [macOS distribution guide](macos/DISTRIBUTION.md).
+Historical AgentMeter beta assets remain unchanged. The owner reports the final Llumi macOS DMG is signed and notarized; the receiving release session must verify the exact uploaded bytes and receipt before enabling a download. See the [release handoff](RELEASE-HANDOFF.md) and [macOS distribution guide](macos/DISTRIBUTION.md).
 
 ## Windows direct-download requirements
 

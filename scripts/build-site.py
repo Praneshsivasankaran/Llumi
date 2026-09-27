@@ -37,7 +37,7 @@ def config_url(value, name):
 
 
 def load_config():
-    config = json.loads((ROOT / "site/config.json").read_text())
+    config = json.loads((ROOT / "site/config.json").read_text(encoding="utf-8"))
     config_url(config["github_url"], "GitHub URL")
     if config.get("canonical_base_url"):
         config_url(config["canonical_base_url"], "Canonical URL")
@@ -102,7 +102,7 @@ def build(output, base_url=""):
             values[key + "_DOWNLOAD"] = values[key + "_CTA"]
             values[key + "_COMPATIBILITY"] = html.escape(item["compatibility"])
             values[key + "_VERSION"] = html.escape(("Version " + item["version"]) if item["version"] else "Release version pending")
-            values[key + "_STATUS"] = "Direct download" if item["download_url"] else "Not yet available"
+            values[key + "_STATUS"] = "Direct download" if item["download_url"] else ("Microsoft Store certification pending" if platform == "windows" else "Release pending")
         values["MAC_SIGNING"] = '<p>Signed and notarized by Apple</p>' if config["macos"].get("signed_notarized") else ""
         rendered = layout
         for key, value in values.items():

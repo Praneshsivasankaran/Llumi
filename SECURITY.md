@@ -2,7 +2,7 @@
 
 Llumi is beta software. Provider authentication stays with the provider's tools; Llumi does not offer its own login or collect credentials.
 
-Report security problems through [GitHub private vulnerability reporting](https://github.com/Praneshsivasankaran/AgentMeter/security/advisories/new). Do not post exploit details in public issues.
+Report security problems through [GitHub private vulnerability reporting](https://github.com/Praneshsivasankaran/Llumi/security/advisories/new). Do not post exploit details in public issues.
 
 Never attach tokens, cookies, authentication files, raw provider responses, private conversations, terminal history, or source repositories. Start with the affected version, a failure category, and reproduction steps using synthetic data.
 
