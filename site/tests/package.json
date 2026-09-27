@@ -1,0 +1,12 @@
+{
+  "name": "llumi-website-validation",
+  "private": true,
+  "scripts": {
+    "test": "node check.cjs"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "4.13.0",
+    "html-validate": "11.16.0",
+    "playwright": "1.63.0"
+  }
+}

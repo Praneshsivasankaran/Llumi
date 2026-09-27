@@ -1,6 +1,1 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 22">
-  <style>rect { fill: #202321; } @media (prefers-color-scheme: dark) { rect { fill: #eff3ef; } }</style>
-  <rect x="1" y="13" width="4" height="8" rx="1.5"/>
-  <rect x="8" y="7" width="4" height="14" rx="1.5"/>
-  <rect x="15" y="1" width="4" height="20" rx="1.5"/>
-</svg>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024"><defs><linearGradient id="raspberry"><stop stop-color="#9224fa"/><stop offset=".52" stop-color="#e83af0"/><stop offset="1" stop-color="#ff297a"/></linearGradient><linearGradient id="background" x2="0" y2="1"><stop stop-color="#1f2129"/><stop offset="1" stop-color="#06090c"/></linearGradient></defs><rect x="64" y="64" width="896" height="896" rx="210" fill="url(#background)"/><path d="M215 625 C215 461 348 328 512 328 C676 328 809 461 809 625" fill="none" stroke="url(#raspberry)" stroke-width="92" stroke-linecap="round"/><path d="M480 607 L710 425 L548 653 Z" fill="#fafafa"/><circle cx="514" cy="637" r="50" fill="#fafafa"/></svg>

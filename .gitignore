@@ -47,3 +47,6 @@ auth.json
 
 # Generated static GitHub Pages output
 /_site/
+
+# Local website review evidence (never published)
+/.review/

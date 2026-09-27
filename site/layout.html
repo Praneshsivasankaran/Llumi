@@ -1,31 +1,56 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="{{DESCRIPTION}}">
-  <meta name="color-scheme" content="light dark">
-  <title>{{TITLE}}</title>
-  {{CANONICAL}}
-  <link rel="icon" href="{{PREFIX}}mark.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="{{PREFIX}}styles.css">
-</head>
-<body>
-  <a class="skip" href="#main">Skip to content</a>
-  <header>
-    <a class="brand" href="{{PREFIX}}"><img src="{{PREFIX}}mark.svg" width="24" height="28" alt="">AgentMeter</a>
-    <nav aria-label="Main navigation">
-      <a href="{{PREFIX}}privacy/">Privacy</a>
-      <a href="{{PREFIX}}support/">Support</a>
-      <a href="https://github.com/Praneshsivasankaran/AgentMeter">GitHub</a>
-    </nav>
-  </header>
-  <main id="main">
-{{CONTENT}}
-  </main>
-  <footer>
-    <p>Developed by Pranesh S.</p>
-    <p>AgentMeter is independent of OpenAI and Anthropic and is not endorsed by either provider.</p>
-  </footer>
-</body>
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="description" content="{{DESCRIPTION}}">
+    <meta name="color-scheme" content="light">
+    <meta name="theme-color" content="#faf9fb">
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="{{TITLE}}">
+    <meta property="og:description" content="{{DESCRIPTION}}">
+    {{SOCIAL_IMAGE}}
+    <title>{{TITLE}}</title>
+    {{CANONICAL}}
+    <link rel="icon" href="{{PREFIX}}mark.svg" type="image/svg+xml">
+    <link rel="stylesheet" href="{{PREFIX}}styles.css">
+    <script src="{{PREFIX}}app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">Skip to content</a>
+    <header class="header">
+      <div class="nav-inner">
+        <a class="brand" href="{{PREFIX}}" aria-label="Llumi home"
+          ><img src="{{PREFIX}}mark.svg" width="36" height="36" alt=""><span
+            >Llumi</span
+          ></a
+        >
+        <nav aria-label="Main navigation">
+          <a class="nav-download" href="{{PREFIX}}#download"
+            >Download <span aria-hidden="true">↓</span></a
+          >
+        </nav>
+      </div>
+    </header>
+    <main id="main" tabindex="-1" class="{{PAGE_CLASS}}">{{CONTENT}}</main>
+    <footer class="footer wrap">
+      <div>
+        <a class="brand" href="{{PREFIX}}"
+          ><img
+            src="{{PREFIX}}mark.svg"
+            width="32"
+            height="32"
+            alt=""
+         >Llumi</a
+        >
+        <p>Track your AI coding usage.</p>
+      </div>
+      <nav aria-label="Footer">
+        <a href="{{GITHUB}}">GitHub</a><a href="{{PREFIX}}privacy/">Privacy</a
+        ><a href="{{PREFIX}}support/">Support</a
+        ><a href="{{GITHUB}}/blob/main/LICENSE">License</a>
+      </nav>
+      <small>© 2026 Pranesh S</small>
+    </footer>
+  </body>
 </html>
