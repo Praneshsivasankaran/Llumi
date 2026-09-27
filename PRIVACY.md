@@ -8,7 +8,7 @@ On macOS, activity detection uses executable identity, process lifetime, a bound
 
 On Windows, activity detection uses executable identity, process lifetime, a bounded invocation-mode check, and foreground/visible/non-minimized window metadata. It does not read window titles, terminal contents, keystrokes, screen pixels, prompts, responses or source repositories. Usage helpers run in isolated temporary working directories outside source worktrees. Llumi sends no model prompts.
 
-On macOS, preferences stay in local system preferences. Small rotating diagnostic logs contain health events, timings, and failure categories rather than raw provider responses or account identity. Mac logs are in `~/Library/Logs/AgentMeter`. Inspect and sanitize any diagnostic material before sharing it.
+On macOS, preferences stay in local system preferences. Small rotating diagnostic logs contain health events, timings, and failure categories rather than raw provider responses or account identity. Mac logs are in `~/Library/Logs/Llumi`. Inspect and sanitize any diagnostic material before sharing it.
 
 The Microsoft Store package runs as an ordinary-user desktop application. Its runFullTrust capability supports the tray, compact monitor and separately installed provider tools; it does not grant administrator access. Launch at Startup is optional and controlled through Windows StartupTask.
 
