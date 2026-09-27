@@ -1,7 +1,7 @@
 name: Llumi website validation
 on:
   push:
-    branches: [main]
+    branches: [main, 'codex/llumi-public-launch']
     paths:
       - 'site/**'
       - 'PRIVACY.md'
@@ -24,7 +24,7 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 15
     permissions:
       contents: read
       pages: read
@@ -38,6 +38,14 @@ jobs:
         run: python3 scripts/check-public-tree.py
       - name: Canonical redirect checks
         run: node --test site/tests/routing.test.mjs
+      - name: Install website validation tools
+        run: |
+          npm ci --prefix site/tests
+          npx --prefix site/tests playwright install --with-deps chromium firefox webkit
+      - name: Browser and accessibility validation
+        run: |
+          python3 -m http.server 4173 --bind 127.0.0.1 --directory _site > /tmp/llumi-site-server.log 2>&1 &
+          node site/tests/check.cjs
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
           path: _site
