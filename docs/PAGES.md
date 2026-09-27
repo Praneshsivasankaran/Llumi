@@ -27,7 +27,7 @@ The browser harness covers Chromium, Firefox and WebKit; desktop and narrow layo
 
 ## Configuration and deployment
 
-`site/config.json` supplies canonical/OG URLs, the canonical GitHub repository and download status. Both platform downloads stay disabled until their actual Llumi release is public. The final macOS target is Llumi 1.1.1; Windows 2.0.2.0 remains pending Microsoft Store certification. No unsigned Windows download is offered.
+`site/config.json` supplies canonical/OG URLs, the canonical GitHub repository and download status. macOS links to the verified public Llumi 1.1.1 DMG. Windows 2.0.2.0 remains disabled pending Microsoft Store certification and publication. No unsigned Windows download is offered.
 
 `wrangler.jsonc` declares only the two owner-confirmed website domains. `site/worker.mjs` implements canonical redirects, then delegates to static assets. Deployment is explicit with `wrangler deploy` after build, tests and authorization. Do not alter unrelated DNS or mail records. The GitHub website workflow validates and packages output; it does not deploy automatically.
 
@@ -41,4 +41,4 @@ Preserve these exact, case-sensitive routes during certification:
 
 The account Pages repository `Praneshsivasankaran/Praneshsivasankaran.github.io` contains a frozen copy of the historical public pages under `AgentMeter/`. This preserves the URLs independently of the product repository rename. Do not recreate a repository named AgentMeter, which would replace GitHub's old-repository redirect. Verify the old routes after any Pages configuration changes.
 
-See [release handoff](RELEASE-HANDOFF.md) for draft assets and the separate public-download gate. Website publication does not authorize either GitHub release publication or Microsoft Publish now.
+See [release handoff](RELEASE-HANDOFF.md) for the published macOS artifact receipt and independent release gates. Website publication does not authorize future GitHub releases or Microsoft Publish now.

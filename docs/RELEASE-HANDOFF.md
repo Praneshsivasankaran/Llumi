@@ -5,7 +5,7 @@ GitHub is the common source of truth between macOS and Windows release sessions.
 ## Verified current GitHub handoff
 
 - Canonical repository: `Praneshsivasankaran/Llumi`
-- Draft release: **Llumi 1.1.1 for macOS**, ID `397602229`
+- Public release: [Llumi 1.1.1 for macOS](https://github.com/Praneshsivasankaran/Llumi/releases/tag/llumi-macos-1.1.1), ID `397602229`, published 2026-09-27
 - Tag: `llumi-macos-1.1.1`, source `af2199b572a8b2bb4273664ed38d87476a21eca1`
 - Assets: `Llumi-1.1.1-macos.dmg` and its original `.sha256` sidecar
 - DMG SHA-256: `21724ba1b9255c5cbf56003422abe4f2576c3ce8bd8ef599dce769a9766c808c`
@@ -14,11 +14,11 @@ The Windows receiving session downloaded the authenticated draft assets from Git
 
 The Mac owner reports independent verification of Llumi 1.1.1 build 1, bundle ID `io.github.praneshsivasankaran.llumi`, universal arm64/x86_64, Developer ID team `K38622WCYD`, Hardened Runtime, secure timestamp, zero entitlements, accepted notarization, a valid staple and Gatekeeper acceptance as Notarized Developer ID. These Apple checks were performed on the Mac, not rerun on Windows. Internal signing evidence remains private.
 
-The release remains a draft. `site/config.json` preserves its tag, source and checksum while leaving the actual download URL null. An authenticated draft transfer is not an anonymous public-download round-trip.
+The owner explicitly authorized publication of the existing draft on 2026-09-27. Its two original assets and tag were preserved. The receiving Windows session then downloaded both public assets without authentication: HTTP 200, the expected filename, 1,967,043 DMG bytes, and the same SHA-256 and original sidecar. `site/config.json` now uses the actual public asset URL returned by GitHub and preserves the tag, source and checksum. Apple-tool checks were not rerun on Windows.
 
 ## macOS production artifact
 
-The owner reports the final Llumi 1.1.1 signed, notarized and stapled artifact exists on the Mac. Transfer that exact `Llumi-1.1.1-macos.dmg` and its existing SHA-256 sidecar to a **draft** release in `Praneshsivasankaran/Llumi`. Do not rebuild, replace accepted bytes or generate substitute signing evidence on another machine.
+The final Llumi 1.1.1 signed, notarized and stapled artifact was transferred from the Mac through the GitHub draft and is now public. For future releases, transfer the exact accepted DMG and existing SHA-256 sidecar to a **draft** release in `Praneshsivasankaran/Llumi`. Do not rebuild, replace accepted bytes or generate substitute signing evidence on another machine.
 
 Before creating the release, compare the release receipt's source commit with the proposed tag. The historical `macos-1.1.1` tag points to the pre-Llumi AgentMeter source `44d4b7e106b2ecd5d4c73be2bc74601449f45063`; preserve it. The new `llumi-macos-1.1.1` tag matches the confirmed Llumi source above. Future releases must likewise match the final Mac receipt, rather than moving historical tags or assuming current main built the DMG.
 

@@ -5,6 +5,7 @@ const fs = require("fs");
 const path = require("path");
 const assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "../..");
+const config = JSON.parse(fs.readFileSync(path.join(root, "site/config.json"), "utf8"));
 const output = path.join(root, ".review");
 fs.mkdirSync(output, { recursive: true });
 const results = [];
@@ -63,7 +64,18 @@ const results = [];
         true,
         engine + width + " overflow",
       );
-      assert.equal(await page.locator("button[disabled]").count(), 4);
+      for (const [platform, label] of [["macos", "macOS"], ["windows", "Windows"]]) {
+        const url = config[platform].download_url;
+        const links = page.getByRole("link", { name: `Download for ${label}`, exact: true });
+        const buttons = page.getByRole("button", { name: `Download for ${label} — not yet available`, exact: true });
+        assert.equal(await links.count(), url ? 2 : 0);
+        assert.equal(await buttons.count(), url ? 0 : 2);
+        if (url) {
+          for (const link of await links.all()) assert.equal(await link.getAttribute("href"), url);
+        } else {
+          for (const button of await buttons.all()) assert.equal(await button.isDisabled(), true);
+        }
+      }
       const scan = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
         .analyze();

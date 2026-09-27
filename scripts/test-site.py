@@ -136,7 +136,13 @@ class SiteTests(unittest.TestCase):
         self.assertEqual(len(parser.downloads), 2 * unavailable)
         for button in parser.downloads:
             self.assertIn("disabled", button)
-        self.assertNotIn("Signed and notarized", (SITE / "index.html").read_text(encoding="utf-8"))
+        home = (SITE / "index.html").read_text(encoding="utf-8")
+        self.assertEqual("Developer ID signed and Apple notarized" in home,
+                         bool(config["macos"].get("signed_notarized")))
+        for platform in ("macos", "windows"):
+            url = config[platform]["download_url"]
+            if url:
+                self.assertEqual(self.pages["index.html"].links.count(url), 2)
 
     def test_configuration_rejects_unsafe_urls_and_legacy_artifacts(self):
         for value in ("javascript:alert(1)", "http://example.com/file.dmg", "https://user:pass@example.com/file"):

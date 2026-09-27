@@ -4,6 +4,8 @@ The canonical Llumi website is `https://tryllumi.com/`, with privacy and support
 
 The website presents both native platforms with independent release states. macOS uses the exact signed and notarized Llumi DMG after its separately authorized public release. Windows uses Microsoft Store only after the Llumi update is published. Disabled download controls must remain visibly unavailable while either platform is pending; historical AgentMeter artifacts must never appear as current Llumi downloads.
 
+The macOS 1.1.1 public download uses the asset URL returned by GitHub for `llumi-macos-1.1.1`. Keep its accepted source commit and SHA-256 in site configuration. Both Mac download controls link to the same verified DMG; Windows remains disabled independently. Describe signing accurately as Developer ID signing and Apple notarization.
+
 Preserve the approved website layout and copy, local assets, no-tracking behavior and substantive privacy policy. The skip-to-content link must be reachable by keyboard, including browsers that exclude ordinary links from their default tab sequence. The website should remain readable at 320px without horizontal overflow.
 
 Historical GitHub Pages routes used by Microsoft certification remain functional independently of the repository rename. Repository publication, website deployment, binary publication and Store certification are distinct states and permissions.
