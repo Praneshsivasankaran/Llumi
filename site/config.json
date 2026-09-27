@@ -5,7 +5,15 @@
     "version": "1.1.1",
     "download_url": null,
     "compatibility": "macOS 14+ · Apple Silicon + Intel",
-    "signed_notarized": false
+    "signed_notarized": false,
+    "release": {
+      "tag": "llumi-macos-1.1.1",
+      "id": 397602229,
+      "source_commit": "af2199b572a8b2bb4273664ed38d87476a21eca1",
+      "state": "draft",
+      "artifact_name": "Llumi-1.1.1-macos.dmg",
+      "artifact_sha256": "21724ba1b9255c5cbf56003422abe4f2576c3ce8bd8ef599dce769a9766c808c"
+    }
   },
   "windows": {
     "version": "2.0.2.0",
