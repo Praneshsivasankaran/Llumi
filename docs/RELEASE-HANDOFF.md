@@ -38,7 +38,7 @@ Draft downloads are authenticated evidence checks, not a public distribution rou
 
 ## Windows
 
-Microsoft Store is the launch distribution channel. The owner published package Submission 2 and metadata-only Submission 3. Published Submission 3 preserves 2.0.2.0 and saves the tryllumi.com Website, Privacy and Support URLs. Public metadata is a separate verification gate: keep the Windows website CTA disabled until the corrected links are visible and the owner separately authorizes activation. Final website-to-Store installation/version verification remains part of that gate. See the [frozen launch record](releases/2026-09-launch.md).
+Microsoft Store is the launch distribution channel. The owner published package Submission 2 and metadata-only Submission 3. Published Submission 3 preserves 2.0.2.0 and saves the tryllumi.com Website, Privacy and Support URLs. Corrected public metadata was verified on 2026-09-28. The owner subsequently confirmed Store installation and physical checks and authorized website activation. The installed package independently reports 2.0.2.0 with Store signature and OK status. The website now links to the same product. Future release activations retain these separate metadata, acceptance and authorization gates. See the [frozen launch record](releases/2026-09-launch.md).
 
 ## Independent gates
 

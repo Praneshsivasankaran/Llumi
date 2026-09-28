@@ -4,8 +4,8 @@ Baseline: immutable Llumi 2.0.2 / MSIX 2.0.2.0. No new application defects were 
 
 | Item | Status and evidence | Completion criterion |
 | --- | --- | --- |
-| Final Store installation path | Launch verification pending, not a source defect. Historical 2.0.1.0 and desktop review copies were uninstalled at the owner's request. | Public listing → native Store → install/update → verify installed Llumi 2.0.2.0, provider usage, startup and quit/relaunch; record offered and installed versions separately. |
-| Public metadata propagation | Published Submission 3 saves correct Llumi URLs; anonymous en-US/India listing still showed historical links on 2026-09-28. | All three public hrefs use tryllumi.com. If mismatch persists, collect evidence for Microsoft support before proposing another metadata change. |
+| Final Store installation path | Closed for launch: owner confirmed Store installation, real providers, compact monitor, startup and quit/relaunch. Installed package independently verified as 2.0.2.0, Store-signed, OK. | Repeat for future releases; keep user-reported physical checks distinct from automated evidence. |
+| Public metadata propagation | Closed: all three tryllumi.com hrefs verified on the anonymous en-US/India Store listing on 2026-09-28. | Preserve these public URLs and recheck after future submissions. |
 | Discoverability | Decision open: published submission is public, free, worldwide, direct-link-only. No setting changed. | Owner chooses whether/when to make Store search discovery available; separately authorize any change. |
 | Future Windows observations | Intake scaffold; no unreported UI bug is assumed. Prior Claude setup, five-hour compact/weekly hover, theme and lifecycle issues were accepted as resolved. | Add exact version/channel, steps, expected/actual behavior and sanitized capture; reproduce before assigning a source fix. |
 | Compact monitor regression coverage | Maintenance watch list: provider choice, five-hour compact/weekly hover, scaling/multiple displays, Light/Dark, activity transitions. | Exercise on real hardware for the next candidate and record unknown values truthfully. |

@@ -2,7 +2,7 @@
 
 Native Windows Forms implementation of Llumi, using .NET 10.
 
-**Status:** Llumi 2.0.2.0 is published in Microsoft Store. Website download remains on hold for final public metadata and installation-path verification. No direct Windows download is offered; that channel requires a separate distribution review.
+**Status:** Llumi 2.0.2.0 is published in Microsoft Store. [Download from Microsoft Store](https://apps.microsoft.com/detail/9NV153Q5K5MQ). No direct Windows download is offered; that channel requires a separate distribution review.
 
 - [Build, test and run](../docs/windows/BUILD.md)
 - [Shared product specification](../docs/product-spec/README.md)
