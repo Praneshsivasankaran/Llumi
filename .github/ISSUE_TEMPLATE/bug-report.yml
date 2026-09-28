@@ -1,5 +1,5 @@
 name: Bug report
-description: Report an AgentMeter problem on macOS or Windows.
+description: Report an Llumi problem on macOS or Windows.
 labels: [bug]
 body:
   - type: markdown
@@ -15,8 +15,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: AgentMeter version and installation source
-      description: "For example, macOS beta 3 from GitHub, or a Windows source build."
+      label: Llumi version and installation source
+      description: "For example, macOS 1.1.1 from GitHub, or Windows 2.0.2 from Microsoft Store."
     validations:
       required: true
   - type: input

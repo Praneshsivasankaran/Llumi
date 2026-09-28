@@ -1,0 +1,42 @@
+{
+  "frozen_on": "2026-09-28",
+  "repository": "Praneshsivasankaran/Llumi",
+  "policy": "Never rebuild, replace assets, move existing tags or reuse these versions for changed bytes. Future releases use new versions and independent authorization.",
+  "macos": {
+    "version": "1.1.1",
+    "build": "1",
+    "source_commit": "af2199b572a8b2bb4273664ed38d87476a21eca1",
+    "tag": "llumi-macos-1.1.1",
+    "release_id": 397602229,
+    "asset_id": 592677807,
+    "artifact": "Llumi-1.1.1-macos.dmg",
+    "size_bytes": 1967043,
+    "sha256": "21724ba1b9255c5cbf56003422abe4f2576c3ce8bd8ef599dce769a9766c808c",
+    "sidecar_asset_id": 592677809,
+    "bundle_id": "io.github.praneshsivasankaran.llumi",
+    "architectures": ["arm64", "x86_64"],
+    "developer_id_team": "K38622WCYD",
+    "channel": "Public GitHub Release"
+  },
+  "windows": {
+    "version": "2.0.2",
+    "package_version": "2.0.2.0",
+    "source_commit": "fb5431777a8aaeb2fdb21976e4e0a6d97e21752b",
+    "artifact": "Llumi-2.0.2.0-x64.msix",
+    "size_bytes": 57973244,
+    "submitted_artifact_sha256": "f1c992fb57c669148629b55e13554d4dd183f7171813fb0ca64de15cfe15ac98",
+    "hash_scope": "Original submission artifact; Microsoft-delivered signed bytes are not asserted identical.",
+    "product_id": "9NV153Q5K5MQ",
+    "identity": "PraneshS.AgentMeterforWindows",
+    "publisher": "CN=8971912E-75C4-4D4B-8B53-3814AB80FF0F",
+    "application_id": "AgentMeter",
+    "startup_task": "AgentMeterStartup",
+    "capability": "runFullTrust",
+    "architecture": "x64",
+    "device_family": "Windows.Desktop",
+    "minimum_os": "10.0.19045.0",
+    "package_submission": "1152921505701984719",
+    "metadata_submission": "1152921505701986410",
+    "channel": "Microsoft Store; no GitHub Windows binary"
+  }
+}

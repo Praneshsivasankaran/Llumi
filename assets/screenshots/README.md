@@ -1,4 +1,6 @@
-# AgentMeter screenshots
+# Historical AgentMeter screenshots
+
+These retained captures document pre-Llumi releases and are not current Llumi marketing assets. Current website media and provenance live in [site/media](../../site/media/README.md); accepted Llumi Store captures remain with the private launch archive and live listing.
 
 ## macOS
 
@@ -14,4 +16,4 @@
 
 These are real application captures. The Usage and individual monitor images were supplied from the running Windows application; Settings was captured from the installed Store submission candidate. Monitor images are separate crops at their captured sizes, not frames of a recorded interaction. Values describe the capture moment, not current allowance. No UI values have been repainted or synthesized.
 
-The Windows Store release and direct-download release remain pending. A Windows motion demo will be added when a suitable real recording is available.
+These files are historical evidence, not a statement of current release availability. Do not relabel or repaint them as Llumi; any future motion demo needs a real recording.

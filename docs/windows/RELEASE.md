@@ -1,10 +1,12 @@
-# Windows release candidate
+# Llumi 2.0.2 for Windows
 
 The user physically accepted commit `ee0e0fb263b78d1117118f4f98473a7539c78446` on 2026-09-23 after 607 automated tests passed. The reported PASS covers Llumi/Raspberry branding, real Codex and Claude usage, Claude five-hour compact and weekly details, Light/Dark, onboarding, sanitized diagnostics, lifecycle/single-instance behavior, integrations and startup. This is user-reported physical acceptance, separate from packaging and distribution acceptance.
 
-The next Windows version is **2.0.2**, with file/MSIX version **2.0.2.0**, greater than historical Store candidate 2.0.1.0. This packaging pass does not change provider behavior or UI.
+The frozen published Windows version is **2.0.2**, with file/MSIX version **2.0.2.0**, greater than historical Store release 2.0.1.0. Package Submission 2 was published by the owner; metadata-only Submission 3 retains the same package. See [the launch record](../releases/2026-09-launch.md) for source, hash and remaining website gate. Future package versions must increase; do not rebuild or replace this baseline.
 
-## Direct download
+This release introduces Llumi/Raspberry branding, guided provider setup, Check Setup diagnostics, refined compact-monitor behavior, Claude five-hour and weekly information, and appearance/startup/lifecycle improvements.
+
+## Direct-download engineering option (not published)
 
 Use a per-user Inno Setup EXE containing the self-contained win-x64 publish. No admin elevation or separate .NET installation is required. The installer creates a Start menu shortcut and an uninstall entry; startup is optional and preserved on Llumi upgrades. Uninstall retains preferences and does not touch provider credentials or installations. New installs use the Llumi directory and identity; older AgentMeter installs remain untouched, with allowlisted preferences imported by the application. Only the exact known legacy startup command is removed to avoid duplicate startup. The shared legacy mutex prevents concurrent provider services across old/new/Store copies.
 
@@ -12,7 +14,7 @@ Framework-dependent output is smaller but requires .NET 10 Desktop Runtime x64. 
 
 Updates are manual downloads from the eventual official release channel; no updater is introduced. Keep the stable Llumi installer identity and preserve preferences. Do not distribute a downgrade as an upgrade. Do not interpret a successful install on a developer PC as validation of an OS without SDKs/runtimes.
 
-## Store preparation
+## Preserved Store identity and future package preparation
 
 The historical package is immutable. Its SHA-256 is `5cd7219626334f2312fbbebe7b5540dbd57b4df9a5ba8a586589a9d131486bcd`.
 
@@ -23,7 +25,7 @@ The historical package is immutable. Its SHA-256 is `5cd7219626334f2312fbbebe7b5
 - Architecture: x64; capability: `runFullTrust`; packaged classic/full-trust medium-IL app
 - Minimum OS: `10.0.19045.0`; maximum tested: `10.0.26200.0`
 
-Derive the new manifest from that hash-verified package with `windows/tools/prepare-store.ps1`. Change only version, customer-facing branding and executable references to Llumi; regenerate the same resource scales from approved Raspberry artwork. Keep Store output separate from the direct installer. Local preparation does not submit, sign, certify or validate the installed Store startup contract.
+For a separately authorized future release, derive the new manifest from that hash-verified package with `windows/tools/prepare-store.ps1`. Change only version, customer-facing branding and executable references to Llumi; regenerate the same resource scales from approved Raspberry artwork. Keep Store output separate from the direct installer. Local preparation does not submit, sign, certify or validate the installed Store startup contract.
 
 ## Signing and publication gates
 

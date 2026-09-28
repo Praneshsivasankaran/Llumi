@@ -38,7 +38,7 @@ Draft downloads are authenticated evidence checks, not a public distribution rou
 
 ## Windows
 
-Microsoft Store is the launch distribution channel. Submission 2 remains under manual publishing hold. A passing certification does not authorize Publish now. Keep the Windows website CTA disabled until Llumi itself is published; do not present the historical AgentMeter listing or unsigned direct installer as Llumi.
+Microsoft Store is the launch distribution channel. The owner published package Submission 2 and metadata-only Submission 3. Published Submission 3 preserves 2.0.2.0 and saves the tryllumi.com Website, Privacy and Support URLs. Public metadata is a separate verification gate: keep the Windows website CTA disabled until the corrected links are visible and the owner separately authorizes activation. Final website-to-Store installation/version verification remains part of that gate. See the [frozen launch record](releases/2026-09-launch.md).
 
 ## Independent gates
 

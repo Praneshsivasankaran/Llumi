@@ -6,6 +6,6 @@
 - `llumi-social.png`: 512 px derivative of the approved production brand PNG.
 - `codex.svg` and `claude.svg`: unchanged provider marks from the current macOS resource catalog. See the repository third-party notices.
 
-HTML/CSS compact, setup, activity, platform and appearance visuals are synthetic/simplified illustrations. Their provenance stays here; on-page editorial captions were removed at the user’s request. They are not screen recordings or real screenshots. Claude compact uses 5-hour remaining allowance; weekly is separate. Windows final screenshots and recordings remain pending physical acceptance. Historical AgentMeter screenshots are not used.
+HTML/CSS compact, setup, activity, platform and appearance visuals are synthetic/simplified illustrations. Their provenance stays here; on-page editorial captions were removed at the user’s request. They are not screen recordings or real screenshots. Claude compact uses 5-hour remaining allowance; weekly is separate. Windows physical acceptance is recorded for 2.0.2, and the Store uses real Llumi captures. This website does not claim a Windows recording or use historical captures as current Llumi media. Historical AgentMeter screenshots are not used.
 
 Original capture and browser review screenshots stay in ignored `.review/` or the task output directory. This README is not emitted into the website.

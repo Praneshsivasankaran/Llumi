@@ -1,15 +1,13 @@
-# macOS 0.1.0-beta.3
+# Llumi 1.1.1 for macOS
 
-Public technical beta for monitoring Codex and Claude Code usage. Native usage window, menu-bar controls, and a contextual notch/top-edge monitor. Hover expands the primary allowance; clicking opens the application.
+Published 27 September 2026. This launch release is frozen; see [source, tag and checksum](../releases/2026-09-launch.md).
 
-- macOS 14 deployment target; universal arm64/x86_64 executable.
-- Physically tested on an Apple Silicon M2 MacBook Air. Intel and broader multi-display coverage remain unverified.
-- Provider interfaces can change; unknown CLI invocation modes fail closed.
-- Local ad-hoc build only. Developer ID signed: **No**. Notarized: **No**.
-- Gatekeeper assessment: **rejected — no usable signature**. The archive is for users comfortable evaluating an unsigned technical beta; Apple Developer enrollment is being processed, and a signed and notarized build is planned next.
+- Codex and Claude Code usage, including Claude five-hour and weekly allowances.
+- Contextual notch and menu-bar monitoring, guided setup and Light/Dark/System appearance.
+- No Llumi account or telemetry; provider authentication remains with provider tools.
+- macOS 14+, universal arm64/x86_64; physical acceptance reported on Apple Silicon. Universal architecture is not a claim of physical Intel testing.
+- Developer ID signed, Apple notarized, stapled and Gatekeeper accepted on the Mac. Windows verified downloaded bytes, not Apple tooling.
 
-Release packaging strips debug-symbol paths from the distributed executable; symbols remain outside the application bundle. The privacy audit checks all binary sections.
+[Download and original notes](https://github.com/Praneshsivasankaran/Llumi/releases/tag/llumi-macos-1.1.1) · [Install](INSTALL.md) · [Support](https://tryllumi.com/support/).
 
-The native bundle version is 0.1.0 (build 2), with release version 0.1.0-beta.3 shown in About.
-
-Found something broken? [Open an issue](https://github.com/Praneshsivasankaran/AgentMeter/issues/new/choose) without credentials or private content.
+Historical AgentMeter beta releases, unsigned captures and their original trust status remain in Git/release history; they are not current Llumi downloads.

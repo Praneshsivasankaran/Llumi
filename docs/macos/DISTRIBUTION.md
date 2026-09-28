@@ -1,10 +1,8 @@
-> Llumi migration preparation only. Historical AgentMeter tags and notarization receipts do not cover Llumi; fresh signing/submission needs separate authorization. No final packaging is authorized during the rename.
-
 # macOS distribution
 
-The published beta remains unsigned and unnotarized. Current source prepares 1.1.1, build 1, bundle ID `io.github.praneshsivasankaran.llumi`. These scripts prepare a future Developer ID release; they do not configure an Apple account or credentials. Existing beta assets must never be silently replaced. Signing requires independent re-audit and explicit authorization; source version 1.1.1 is not a release-availability claim.
+Llumi 1.1.1 (build 1), bundle ID `io.github.praneshsivasankaran.llumi`, is published as a Developer ID signed, notarized and stapled DMG. Its exact source, asset and checksum are frozen in the [launch baseline](../releases/2026-09-launch.md). Never rebuild or replace that release, retarget its tag, or apply these instructions to its accepted bytes.
 
-Inspect the intended production filename without packaging: `scripts/macos/create-dmg.sh <app> --print-production-name` resolves to `Llumi-1.1.1-macos.dmg`. The existing `macos-1.0.0` tag and signed 1.0.0 artifact are superseded and remain unchanged. Do not sign, notarize or tag this candidate until review authorizes it. A future 1.1.1 release needs a new version-appropriate source tag; do not move the historical 1.0.0 tag.
+The procedures below apply to a **new version** under separate release authorization. Existing AgentMeter tags, beta artifacts and receipts remain historical. A source build cannot inherit signing acceptance from another artifact.
 
 ## Local unsigned rehearsal
 
@@ -34,13 +32,13 @@ Expected app entitlements: **none**. App Sandbox remains intentionally disabled.
 - Launch at Login uses `SMAppService.mainApp`; no embedded helper is currently shipped. Registration must be rechecked in the final signed installed app.
 - The current bundle contains no nested executable/framework. The validator deliberately rejects newly introduced nested code. If a later release adds it, review and sign each nested item inside-out with its own minimal entitlements before signing the outer app. Never use `codesign --deep` as a substitute for a signing plan (`--deep` verification is fine).
 
-The future signing command enables Hardened Runtime with `--options runtime` and a secure timestamp. Compatibility above is a source/bundle audit, **not a claim that a Developer ID-signed build has been tested**. Validate the final signed app with real Codex and Claude Code before release. Do not add exception entitlements to make a failed check disappear.
+The signing command for a new release enables Hardened Runtime with `--options runtime` and a secure timestamp. Compatibility above is a source/bundle audit, **not a claim that a Developer ID-signed build has been tested**. Validate the final signed app with real Codex and Claude Code before release. Do not add exception entitlements to make a failed check disappear.
 
 See Apple's [notarization overview](https://developer.apple.com/documentation/security/notarizing-macos-software-before-distribution), [custom workflow](https://developer.apple.com/documentation/security/customizing-the-notarization-workflow), and [Hardened Runtime guidance](https://help.apple.com/xcode/mac/current/en.lproj/devf87a2ac8f.html).
 
 ## Future signed release — after independent re-audit and authorization
 
-The reserved version is **1.1.1 (build 1)**, with matching `LlumiReleaseVersion`. Run the complete tests and privacy/secret/artifact audits, then build a fresh app. Do not reuse the published beta tag for changed bytes. Intended future identity: `Developer ID Application: Pranesh S (K38622WCYD)`; never use it in unsigned validation.
+Select a new version and build number greater than the frozen **1.1.1 (build 1)** baseline, with matching `LlumiReleaseVersion`. Run the complete tests and privacy/secret/artifact audits, then build a fresh app. Do not reuse the published beta tag for changed bytes. Established release identity: `Developer ID Application: Pranesh S (K38622WCYD)`; never use it in unsigned validation.
 
 Set `DEVELOPER_ID_APPLICATION` to the exact real **Developer ID Application** identity installed in your Keychain. No certificate hash, private key, password, or identity is stored in these scripts. Do not use Apple Development, ad-hoc, or self-signed identities as substitutes.
 
@@ -66,7 +64,7 @@ Verification checks the Developer ID authority, secure timestamp, Hardened Runti
 1. Build, sign, notarize, and staple the final app and DMG. Review all validation and notary logs.
 2. Upload the final DMG and SHA-256 to a **new** GitHub release. Keep previous release bytes unchanged.
 3. Download that published artifact through a browser on a clean test Mac. Verify SHA-256 before mounting.
-4. Mount read-only; validate the DMG signature/ticket and the contained app. Drag AgentMeter to Applications and eject the DMG.
+4. Mount read-only; validate the DMG signature/ticket and the contained app. Drag Llumi to Applications and eject the DMG.
 5. Launch through Finder/LaunchServices with Gatekeeper enabled. Verify acceptance without a security bypass.
 6. Verify real Codex and Claude Code usage; notch appearance, hover, click, hide; menu, Settings, restart, and Quit/child cleanup.
 7. Verify zero unexpected Documents, Desktop, Downloads, Apple Music/Media Library, Accessibility, Screen Recording, Automation, or Full Disk Access prompts. Preserve isolated provider working directories, Git ceiling/worktree isolation, and all existing privacy guards. Stop if an unrelated prompt appears.

@@ -102,7 +102,7 @@ def build(output, base_url=""):
             values[key + "_DOWNLOAD"] = values[key + "_CTA"]
             values[key + "_COMPATIBILITY"] = html.escape(item["compatibility"])
             values[key + "_VERSION"] = html.escape(("Version " + item["version"]) if item["version"] else "Release version pending")
-            values[key + "_STATUS"] = "Direct download" if item["download_url"] else ("Microsoft Store certification pending" if platform == "windows" else "Release pending")
+            values[key + "_STATUS"] = "Direct download" if item["download_url"] else ("Microsoft Store download coming soon" if platform == "windows" else "Release pending")
         values["MAC_SIGNING"] = '<p>Developer ID signed and Apple notarized</p>' if config["macos"].get("signed_notarized") else ""
         rendered = layout
         for key, value in values.items():

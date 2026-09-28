@@ -27,13 +27,13 @@ The browser harness covers Chromium, Firefox and WebKit; desktop and narrow layo
 
 ## Configuration and deployment
 
-`site/config.json` supplies canonical/OG URLs, the canonical GitHub repository and download status. macOS links to the verified public Llumi 1.1.1 DMG. Windows 2.0.2.0 remains disabled pending Microsoft Store certification and publication. No unsigned Windows download is offered.
+`site/config.json` supplies canonical/OG URLs, the canonical GitHub repository and download status. macOS links to the verified public Llumi 1.1.1 DMG. Windows 2.0.2.0 is published in Microsoft Store, but its website CTA remains disabled pending corrected public metadata, separate activation authorization and final Store round-trip verification. No unsigned Windows download is offered.
 
 `wrangler.jsonc` declares only the two owner-confirmed website domains. `site/worker.mjs` implements canonical redirects, then delegates to static assets. Deployment is explicit with `wrangler deploy` after build, tests and authorization. Do not alter unrelated DNS or mail records. The GitHub website workflow validates and packages output; it does not deploy automatically.
 
 ## Historical Store URL compatibility
 
-Preserve these exact, case-sensitive routes during certification:
+Preserve these exact, case-sensitive historical routes while Store propagation and installed-client migration still depend on them:
 
 - https://praneshsivasankaran.github.io/AgentMeter/
 - https://praneshsivasankaran.github.io/AgentMeter/privacy/

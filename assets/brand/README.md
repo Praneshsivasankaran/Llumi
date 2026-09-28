@@ -12,4 +12,4 @@ The source SVGs and native raster exporter are original reconstructions of the a
 
 Regenerate all raster resources with `python3 scripts/export-brand.py`. For individual PNG exports use `swift macos/Scripts/make-icon.swift /tmp/Llumi.iconset`, then `iconutil -c icns /tmp/Llumi.iconset`. Windows ICO frames use the exported `windows-*.png` images. AppKit menu rendering uses a template gauge; Windows tray rendering uses a transparent high-contrast gauge with a contrasting outline. Neither uses the colored app tile.
 
-Provider marks remain separate and unchanged. Historical three-bar artwork survives in Git history and historical release artifacts only. Store tile export is pending the accepted MSIX asset specification; no replacement Store packaging system is introduced.
+Provider marks remain separate and unchanged. Historical three-bar artwork survives in Git history and historical release artifacts only. The accepted Windows 2.0.2.0 Store package uses Raspberry tile assets derived from the historical MSIX requirements; retain its existing Microsoft identity and resource scale structure.

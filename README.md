@@ -9,7 +9,7 @@ Llumi monitors Codex and Claude Code usage on **macOS and Windows**, with native
 ## Availability
 
 - **macOS 1.1.1:** [Download the signed and notarized DMG](https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-1.1.1/Llumi-1.1.1-macos.dmg) · [Release notes and checksum](https://github.com/Praneshsivasankaran/Llumi/releases/tag/llumi-macos-1.1.1). Requires macOS 14 or later; Apple Silicon and Intel.
-- **Windows 2.0.2.0:** Microsoft Store certification pending. Requires Windows 10 22H2 or later, or Windows 11; x64. No direct Windows installer is offered.
+- **Windows 2.0.2.0:** Published in Microsoft Store; website download remains on hold until corrected Store metadata is publicly verified and the final Store installation path is accepted. Requires Windows 10 22H2 or later, or Windows 11; x64. No direct Windows installer is offered.
 
 Historical AgentMeter releases remain available in [release history](https://github.com/Praneshsivasankaran/Llumi/releases); they are not Llumi downloads.
 
@@ -33,6 +33,6 @@ No Llumi account, telemetry, analytics or backend. Llumi does not read prompts, 
 
 Product behavior is specified together and implemented natively on each platform. Preserve intentional migration identifiers and historical releases.
 
-[Report an issue](https://github.com/Praneshsivasankaran/Llumi/issues/new/choose) · [Contribute](CONTRIBUTING.md) · [Security](SECURITY.md) · [Distribution](docs/DISTRIBUTION.md) · [Release handoff](docs/RELEASE-HANDOFF.md)
+[Report an issue](https://github.com/Praneshsivasankaran/Llumi/issues/new/choose) · [Contribute](CONTRIBUTING.md) · [Security](SECURITY.md) · [Distribution](docs/DISTRIBUTION.md) · [Release handoff](docs/RELEASE-HANDOFF.md) · [Frozen launch baselines](docs/releases/2026-09-launch.md) · [Maintenance checklist](docs/RELEASE-CHECKLIST.md)
 
 Llumi's original source is [MIT licensed](LICENSE). [Third-party materials and trademarks retain their own terms](THIRD-PARTY-NOTICES.md). Llumi is independent of OpenAI and Anthropic.
