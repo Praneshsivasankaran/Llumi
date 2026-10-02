@@ -16,6 +16,11 @@ on:
       - 'scripts/test-site.py'
       - '.github/workflows/pages.yml'
   workflow_dispatch:
+    inputs:
+      verify_production_privacy:
+        description: Check the deployed canonical website for unexpected analytics
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -46,6 +51,11 @@ jobs:
         run: |
           python3 -m http.server 4173 --bind 127.0.0.1 --directory _site > /tmp/llumi-site-server.log 2>&1 &
           node site/tests/check.cjs
+      - name: Production privacy checker regression tests
+        run: npm run --prefix site/tests test:privacy-regression
+      - name: Deployed website privacy verification
+        if: github.event_name == 'workflow_dispatch' && inputs.verify_production_privacy
+        run: npm run --prefix site/tests test:production-privacy
       - uses: actions/upload-pages-artifact@7b1f4a764d45c48632c6b24a0339c27f5614fb0b # v4
         with:
           path: _site

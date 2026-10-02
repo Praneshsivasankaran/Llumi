@@ -2,7 +2,9 @@
   "name": "llumi-website-validation",
   "private": true,
   "scripts": {
-    "test": "node check.cjs"
+    "test": "node check.cjs",
+    "test:privacy-regression": "node --test production-privacy.test.cjs",
+    "test:production-privacy": "node production-privacy.cjs"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",

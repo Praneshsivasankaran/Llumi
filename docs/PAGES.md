@@ -25,6 +25,17 @@ node site/tests/check.cjs
 
 The browser harness covers Chromium, Firefox and WebKit; desktop and narrow layouts; accessibility, keyboard behavior, appearance, reduced motion, asset loading and absent third-party requests. WebKit testing is not physical Safari acceptance. Output remains in ignored `_site/` and `.review/`.
 
+Local output checks cannot detect scripts injected by production hosting. After deployment or hosting analytics changes, verify the actual public site:
+
+```sh
+npm run --prefix site/tests test:privacy-regression
+npm run --prefix site/tests test:production-privacy
+```
+
+The production check requests home, privacy and support HTML both normally and with cache bypass, then loads both URL forms in fresh anonymous Chromium, Firefox and WebKit contexts. It allows only the intended app script and static resources, observes requests without blocking them, waits five seconds, and navigates to another canonical page with a further observation window for pagehide/sendBeacon traffic. A DOM observer also detects transient injected scripts. Because browsers can omit pagehide keepalive requests from network events, passive wrappers additionally record sendBeacon/fetch attempts while forwarding the original arguments and return value unchanged; reports distinguish attempts from browser network events. A unique test-only sessionStorage ledger retains those attempt metadata across document teardown inside the disposable context; it contains no payload or query values and disappears when the context closes. Unexpected external scripts, analytics requests, same-origin `/cdn-cgi/rum` POSTs and other runtime requests fail the check. Ordinary GitHub/Microsoft download anchors are allowed; the checker does not follow those external downloads. The synthetic regressions prove that actual delayed and pagehide telemetry reaches the fixture server and is detected.
+
+Results are saved to ignored `.review/production-privacy.json`; request bodies, cookie values, query identifiers and page contents are not recorded. `LLUMI_PRIVACY_OUTPUT` can select a separate evidence file. A failure or unavailable browser is not a pass. This is a bounded observation, not proof against every future conditional or delayed request. The existing website workflow always tests the checker with synthetic fixtures; its manual `verify_production_privacy` option also runs the deployed check. These checks neither deploy nor change hosting settings.
+
 ## Configuration and deployment
 
 `site/config.json` supplies canonical/OG URLs, the canonical GitHub repository and download status. macOS links to the verified public Llumi 1.1.1 DMG. Windows 2.0.2.0 is published in Microsoft Store. Both Windows download links point to product `9NV153Q5K5MQ`, enabled with owner authorization after public metadata verification and physical installation acceptance. No unsigned Windows download is offered.
