@@ -1,0 +1,13 @@
+{
+  "version": "1.1.2",
+  "build": "2",
+  "bundle_id": "io.github.praneshsivasankaran.llumi",
+  "developer_id_identity": "Developer ID Application: Pranesh S (K38622WCYD)",
+  "developer_id_team": "K38622WCYD",
+  "sparkle_version": "2.10.0",
+  "sparkle_revision": "eef1a539a373c1f1a320624b1130fc5de7b2e100",
+  "sparkle_archive_sha256": "17e28312b8e18ab7cdbbe09a6fb28cc55a5479ec6c371dbc07cdecd2a14fd959",
+  "feed_url": "https://tryllumi.com/appcast.xml",
+  "keychain_account": "io.github.praneshsivasankaran.llumi.sparkle",
+  "public_ed_key": "xLp/Wg9dAo3HWfBMc4LWEmz1LDbQJOUq9IuX4+h93C4="
+}

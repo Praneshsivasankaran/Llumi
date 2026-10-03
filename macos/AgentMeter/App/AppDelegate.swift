@@ -1,7 +1,8 @@
 import AppKit
 import SwiftUI
+import Sparkle
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, SPUUpdaterDelegate {
   let model = Presentation()
   private var store: UsageStore!
   private var activity: ActivityMonitor!
@@ -14,11 +15,15 @@ import SwiftUI
   private var wake: Task<Void, Never>?
   private var observers: [NSObjectProtocol] = []
   private var quitting = false
+  private var updaterStarted = false
+  private lazy var updaterController = SPUStandardUpdaterController(
+    startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
   func applicationDidFinishLaunching(_ notification: Notification) {
     DistributedNotificationCenter.default().addObserver(
       self, selector: #selector(openMain), name: InstanceLease.reopen, object: nil)
     Diagnostics.shared.record("launch")
     createApplicationMenu()
+    startUpdaterIfReady()
     let discovery = ProviderDiscovery()
     activity = ActivityMonitor { [weak self] snapshot in
       guard let self, !self.quitting else { return }
@@ -82,10 +87,22 @@ import SwiftUI
     startValidationIfRequested()
   }
   func applicationDidBecomeActive(_ notification: Notification) { model.loginItem.synchronize() }
+  private func startUpdaterIfReady() {
+    guard !updaterStarted, !setup.needsAutomaticSetup else { return }
+    updaterStarted = true
+    updaterController.startUpdater()
+  }
+  // Even an inherited Sparkle preference must not add system-profile fields.
+  func allowedSystemProfileKeys(for updater: SPUUpdater) -> [String]? { [] }
   private func createApplicationMenu() {
     let main = NSMenu()
     let appItem = NSMenuItem(title: "Llumi", action: nil, keyEquivalent: "")
     let appMenu = NSMenu(title: "Llumi")
+    let update = NSMenuItem(title: "Check for Updates…",
+      action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
+    update.target = updaterController
+    appMenu.addItem(update)
+    appMenu.addItem(.separator())
     for (title, action, key) in [
       ("Settings…", #selector(openSettings), ","), ("Quit Llumi", #selector(quit), "q"),
     ] {
@@ -200,6 +217,7 @@ import SwiftUI
       w.contentView = NSHostingView(rootView: SetupView(model: model, flow: setup) { [weak self] in
         self?.setupWindow?.orderOut(nil)
         self?.openMain()
+        self?.startUpdaterIfReady()
       })
       w.center()
       setupWindow = w
