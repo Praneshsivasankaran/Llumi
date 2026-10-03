@@ -30,6 +30,14 @@ def validate(app):
         if rel.startswith('Contents/Frameworks/Sparkle.framework/'):
             continue  # Exact vendor file and symlink inventory checked above.
         assert not path.is_symlink(), 'Unexpected bundle symlink'
+        if rel == 'Contents/CodeResources':
+            # stapler adds the detached notarization ticket outside _CodeSignature.
+            # Accept only a ticket that Apple's tool validates, not an extra resource.
+            assert path.is_file(), 'Unexpected notarization ticket directory'
+            ticket = subprocess.run(['/usr/bin/xcrun', 'stapler', 'validate', str(app)],
+                                    capture_output=True, text=True)
+            assert ticket.returncode == 0, 'Invalid stapled notarization ticket'
+            continue
         if path.is_dir():
             assert rel in allowed_dirs or rel.startswith(('Contents/Resources/', 'Contents/_CodeSignature')), 'Unreviewed nested directory'
         else:

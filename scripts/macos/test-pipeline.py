@@ -114,4 +114,12 @@ class DistributionGuards(unittest.TestCase):
             result = self.run_script('verify-release.sh', str(app), '--unsigned')
             self.assertNotEqual(result.returncode, 0)
             self.assertIn('Unreviewed Sparkle symlink layout', result.stderr)
+    def test_invalid_stapled_ticket_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = pathlib.Path(directory) / 'Llumi.app'
+            shutil.copytree(APP, app, symlinks=True)
+            (app/'Contents/CodeResources').write_bytes(b'not a notarization ticket')
+            result = self.run_script('verify-release.sh', str(app), '--unsigned')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Invalid stapled notarization ticket', result.stderr)
 unittest.main()
