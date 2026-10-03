@@ -1,6 +1,6 @@
-# macOS 1.1.2 updater candidate
+# macOS 1.1.2 updates
 
-Local source work only. Public 1.1.1/build 1, its tag, DMG and installed app remain frozen. The candidate is 1.1.2/build 2 in `macos/release-candidate.json`; future candidates must advance version and build and match the bundle metadata. This file is separate from the immutable launch baseline.
+macOS 1.1.2/build 2 was published on 3 October 2026. The signed production feed and website download are live, and the final public app was installed and physically verified on the owner's Mac. See the [publication receipt](../releases/2026-10-macos-1.1.2.md). Historical 1.1.1/build 1, its tag and DMG remain frozen. `macos/release-candidate.json` records 1.1.2/build 2; future candidates must advance version and build and match bundle metadata. This file is separate from the immutable launch baseline.
 
 Existing 1.1.1 users must install 1.1.2 manually once; compatible later macOS updates can then be delivered in-app. Windows Store 2.0.2 is unchanged. The Claude presentation fix remains its own cross-platform commit, `c9a77c5`; Windows native UI regression execution is required before another Windows package.
 
@@ -8,7 +8,7 @@ Existing 1.1.1 users must install 1.1.2 manually once; compatible later macOS up
 
 Sparkle 2.10.0 is pinned exactly through Swift Package Manager, with its resolved commit and upstream binary checksum recorded. The standard `SPUStandardUpdaterController` targets the main app bundle. Application menu → Check for Updates… uses its standard UI and menu validation. Startup waits for guided setup completion. Automatic checks use Sparkle's standard second-launch consent; silent automatic downloading/installing is disabled. No custom install UI or version comparator is introduced.
 
-Production feed: `https://tryllumi.com/appcast.xml`. Nothing has been deployed there by this work. Feed and release notes require Sparkle signatures; signature failure expiration is disabled. Downloaded archives are verified before extraction. System profiling is disabled, and the updater delegate returns no allowed profile keys even if an inherited Sparkle preference enables profile submission. No Llumi/provider data is attached to update requests.
+Production feed: `https://tryllumi.com/appcast.xml`. The final signed 1.1.2 feed is deployed and verified against the published DMG. Feed and release notes require Sparkle signatures; signature failure expiration is disabled. Downloaded archives are verified before extraction. System profiling is disabled, and the updater delegate returns no allowed profile keys even if an inherited Sparkle preference enables profile submission. No Llumi/provider data is attached to update requests.
 
 Official references: [setup](https://sparkle-project.org/documentation/), [programmatic controller](https://sparkle-project.org/documentation/programmatic-setup/), [consent/security options](https://sparkle-project.org/documentation/customization/), [publishing](https://sparkle-project.org/documentation/publishing/), [stable release](https://github.com/sparkle-project/Sparkle/releases/tag/2.10.0).
 
@@ -28,9 +28,11 @@ scripts/macos/generate-appcast.sh /path/to/pinned/Sparkle/bin /path/to/local/arc
 scripts/macos/generate-appcast.sh /path/to/pinned/Sparkle/bin /path/to/local/archives --execute
 ```
 
-Default is a plan only. Execution checks the official generator's checksum, exact final DMG name, notarized publisher, mounted app version/build/bundle ID/public key and nested code before generation. It selects the current build, avoids delta archives and requires an updater host build of at least 2. Output stays local. Published download URL is prepared for the eventual new GitHub release; no feed/release upload is performed. Actual enclosure byte length, EdDSA signature, feed signature and release date remain pending until the final authorized bytes exist.
+Default is a plan only. Execution checks the official generator's checksum, exact final DMG name, notarized publisher, mounted app version/build/bundle ID/public key and nested code before generation. It selects the current build, avoids delta archives and requires an updater host build of at least 2. Output stays local. Published download URL is prepared for the eventual new GitHub release; no feed/release upload is performed. The final enclosure length, archive/feed signatures and release date are recorded in the published feed. Future releases require regeneration from their own final stapled bytes.
 
-## Validation and remaining gates
+## Prepublication validation record
+
+The following paragraphs record the earlier staged approvals and tests. Their pending gates were subsequently completed for 1.1.2; the publication receipt above records the final state. Physical Intel and Windows acceptance remain separate from this Mac release.
 
 The raw-bucket fix was physically verified before this integration: Release Usage and compact monitor used real authenticated provider data; the unchanged source's Debug acceptance runner held the expanded native monitor on screen. The internal bucket remained parsed while the UI showed only five-hour/weekly windows. No provider authentication/account was changed. A transient Claude timeout recovered. Private captures remain outside the repository.
 
