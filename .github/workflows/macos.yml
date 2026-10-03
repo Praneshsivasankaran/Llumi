@@ -27,3 +27,5 @@ jobs:
         run: python3 macos/Scripts/privacy-check.py "$HOME/Library/Developer/Xcode/DerivedData/AgentMeter/Build/Products/Release/Llumi.app"
       - name: Distribution guard tests (no signing or submission)
         run: python3 scripts/macos/test-pipeline.py "$HOME/Library/Developer/Xcode/DerivedData/AgentMeter/Build/Products/Release/Llumi.app"
+      - name: Updater policy guards (no signing or network)
+        run: python3 scripts/macos/test-updater-policy.py
