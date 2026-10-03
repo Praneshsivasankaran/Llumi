@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Local/CI distribution guard tests. Never sign or submit; requires a built app."""
-import os, pathlib, plistlib, shutil, subprocess, sys, tempfile, unittest
+import json, os, pathlib, plistlib, shutil, subprocess, sys, tempfile, unittest
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 APP = str(pathlib.Path(sys.argv.pop(1)).resolve())
 SCRIPTS = ROOT / 'scripts/macos'
+CANDIDATE = json.loads((ROOT/'macos/release-candidate.json').read_text())
 class DistributionGuards(unittest.TestCase):
     def test_llumi_identity_and_current_visible_copy(self):
         info = plistlib.loads((pathlib.Path(APP)/'Contents/Info.plist').read_bytes())
         self.assertEqual(info['CFBundleName'], 'Llumi')
         self.assertEqual(info['CFBundleIdentifier'], 'io.github.praneshsivasankaran.llumi')
         self.assertEqual(info['CFBundleExecutable'], 'Llumi')
-        self.assertEqual(info['CFBundleShortVersionString'], '1.1.1')
+        self.assertEqual(info['CFBundleShortVersionString'], CANDIDATE['version'])
         for folder in ('Views', 'App', 'Notch'):
             for source in (ROOT/'macos/AgentMeter'/folder).glob('*.swift'):
                 self.assertNotIn('AgentMeter', source.read_text(), str(source))
@@ -38,11 +39,11 @@ class DistributionGuards(unittest.TestCase):
     def test_production_name_without_packaging(self):
         r = self.run_script('create-dmg.sh', APP, '--print-production-name')
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertEqual(r.stdout.splitlines()[-1], 'Llumi-1.1.1-macos.dmg')
+        self.assertEqual(r.stdout.splitlines()[-1], f"Llumi-{CANDIDATE['version']}-macos.dmg")
     def test_rejects_placeholder_identity_and_incoherent_versions(self):
         for key, value in [('CFBundleIdentifier', 'local.agentmeter.mac'),
                            ('CFBundleShortVersionString', '0.1.0'),
-                           ('CFBundleVersion', '2'),
+                           ('CFBundleVersion', '1'),
                            ('LlumiReleaseVersion', '0.1.0-beta.3')]:
             with self.subTest(key=key), tempfile.TemporaryDirectory() as directory:
                 app = pathlib.Path(directory) / 'Llumi.app'
@@ -89,4 +90,24 @@ class DistributionGuards(unittest.TestCase):
         r = self.run_script('verify-release.sh', APP, '--unsigned')
         self.assertEqual(r.returncode, 0, r.stderr)
         self.assertIn('NOT NOTARIZED', r.stdout)
+    def test_unreviewed_sparkle_helper_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = pathlib.Path(directory) / 'Llumi.app'
+            shutil.copytree(APP, app, symlinks=True)
+            helper = app / 'Contents/Frameworks/Sparkle.framework/Versions/B/XPCServices/Unexpected.xpc/Contents/MacOS/Unexpected'
+            helper.parent.mkdir(parents=True)
+            shutil.copyfile(app/'Contents/MacOS/Llumi', helper)
+            result = self.run_script('verify-release.sh', str(app), '--unsigned')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Unreviewed Sparkle files', result.stderr)
+    def test_sparkle_symlink_escape_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            app = pathlib.Path(directory) / 'Llumi.app'
+            shutil.copytree(APP, app, symlinks=True)
+            link = app/'Contents/Frameworks/Sparkle.framework/Versions/Current'
+            link.unlink()
+            link.symlink_to('/tmp')
+            result = self.run_script('verify-release.sh', str(app), '--unsigned')
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn('Unreviewed Sparkle symlink layout', result.stderr)
 unittest.main()

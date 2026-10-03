@@ -19,10 +19,12 @@ The frozen release is 1.1.1 (build 1). A local source build does not reproduce t
 
 ```sh
 mkdir -p "$HOME/Library/Caches/LlumiCandidate"
-ditto -c -k --norsrc --noextattr --keepParent "$HOME/Library/Developer/Xcode/DerivedData/AgentMeter/Build/Products/Release/Llumi.app" "$HOME/Library/Caches/LlumiCandidate/Llumi-1.1.1-unsigned-source-build.zip"
-shasum -a 256 "$HOME/Library/Caches/LlumiCandidate/Llumi-1.1.1-unsigned-source-build.zip"
+ditto -c -k --norsrc --noextattr --keepParent "$HOME/Library/Developer/Xcode/DerivedData/AgentMeter/Build/Products/Release/Llumi.app" "$HOME/Library/Caches/LlumiCandidate/Llumi-1.1.2-unsigned-source-build.zip"
+shasum -a 256 "$HOME/Library/Caches/LlumiCandidate/Llumi-1.1.2-unsigned-source-build.zip"
 ```
 
 This creates a local ad-hoc build, not Developer ID signing or notarization. Builds are source-reproducible; byte-identical archives are not promised. The macOS workflow uses GitHub's `xcode-27` preview runner with synthetic tests and no provider authentication or signing secrets. Preview runner availability may vary; no passing badge is advertised until a real run completes.
 
 For an unsigned DMG rehearsal and the future signing/notarization steps, see [Distribution](DISTRIBUTION.md).
+
+The active candidate is 1.1.2/build 2 with pinned Sparkle 2.10.0. Xcode resolves the official binary dependency and embeds its framework; no signing occurs in unsigned source builds. See [updater candidate and remaining gates](UPDATES.md).
