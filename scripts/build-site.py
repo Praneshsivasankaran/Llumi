@@ -72,7 +72,7 @@ def build(output, base_url=""):
         base_url = base_url.rstrip("/") + "/"
     media = ["codex.svg", "claude.svg", "llumi-macos-usage.webp", "llumi-macos-usage-small.webp", "llumi-social.png"]
     output.mkdir(parents=True, exist_ok=True)
-    allowed = {"index.html", "privacy/index.html", "support/index.html", "styles.css", "mark.svg", "app.js", ".nojekyll"} | {"media/" + name for name in media}
+    allowed = {"index.html", "privacy/index.html", "support/index.html", "styles.css", "mark.svg", "app.js", "appcast.xml", ".nojekyll"} | {"media/" + name for name in media}
     existing = {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()}
     if existing - allowed or any(p.is_symlink() for p in output.rglob("*")):
         raise ValueError("Unexpected files or links in site output; use a fresh output directory")
@@ -117,6 +117,8 @@ def build(output, base_url=""):
         target.write_text("\n".join(line.rstrip() for line in rendered.splitlines()) + "\n", encoding="utf-8")
     for name in ("styles.css", "mark.svg", "app.js"):
         shutil.copyfile(ROOT / "site" / name, output / name)
+    # Preserve Sparkle's signed feed byte for byte; template rendering invalidates it.
+    shutil.copyfile(ROOT / "site/appcast.xml", output / "appcast.xml")
     (output / "media").mkdir(exist_ok=True)
     for name in media:
         shutil.copyfile(ROOT / "site/media" / name, output / "media" / name)

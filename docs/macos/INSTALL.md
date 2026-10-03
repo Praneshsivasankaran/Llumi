@@ -1,6 +1,6 @@
 # Install Llumi for macOS
 
-Download the signed, notarized and stapled **Llumi 1.1.1** DMG from [tryllumi.com](https://tryllumi.com/) or its [GitHub release](https://github.com/Praneshsivasankaran/Llumi/releases/tag/llumi-macos-1.1.1). Requires macOS 14 or later, Apple Silicon or Intel. Verify the download against the original SHA-256 sidecar before opening it.
+Download the signed, notarized and stapled **Llumi 1.1.2** DMG from [tryllumi.com](https://tryllumi.com/) or its [GitHub release](https://github.com/Praneshsivasankaran/Llumi/releases/tag/llumi-macos-1.1.2). Requires macOS 14 or later, Apple Silicon or Intel. Verify the download against the original SHA-256 sidecar before opening it.
 
 Open the DMG, drag `Llumi.app` into Applications, eject the DMG and launch Llumi from Applications. Keep Gatekeeper enabled. Report unexpected security failures rather than bypassing them. When replacing AgentMeter, disable its Launch at Login setting and quit it normally first; enable startup in Llumi only after installation. See [migration details](../LLUMI-MIGRATION.md).
 

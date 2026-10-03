@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 import unittest
 import json
+import base64
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 import tempfile
 from urllib.parse import urljoin, urlsplit, unquote
@@ -74,7 +76,26 @@ class SiteTests(unittest.TestCase):
         cls.pages = {name: Page((SITE / name).read_text(encoding="utf-8")) for name in cls.files if name.endswith(".html")}
 
     def test_only_intended_public_output(self):
-        self.assertEqual(self.files, {"index.html", "privacy/index.html", "support/index.html", "styles.css", "mark.svg", "app.js", ".nojekyll", "media/codex.svg", "media/claude.svg", "media/llumi-macos-usage.webp", "media/llumi-macos-usage-small.webp", "media/llumi-social.png"})
+        self.assertEqual(self.files, {"index.html", "privacy/index.html", "support/index.html", "styles.css", "mark.svg", "app.js", "appcast.xml", ".nojekyll", "media/codex.svg", "media/claude.svg", "media/llumi-macos-usage.webp", "media/llumi-macos-usage-small.webp", "media/llumi-social.png"})
+
+    def test_signed_appcast_is_preserved_without_rendering(self):
+        feed = (SITE / "appcast.xml").read_bytes()
+        self.assertEqual(feed, (ROOT / "site/appcast.xml").read_bytes())
+        self.assertIn(b'<!-- sparkle-signatures:', feed)
+        self.assertNotIn(b'untagged-', feed)
+        ns = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
+        items = ET.fromstring(feed).findall('./channel/item')
+        self.assertTrue(items)
+        for item in items:
+            version = item.findtext('sparkle:shortVersionString', namespaces=ns)
+            self.assertRegex(version, r'^\d+\.\d+\.\d+$')
+            self.assertRegex(item.findtext('sparkle:version', namespaces=ns), r'^[1-9]\d*$')
+            enclosure = item.find('enclosure')
+            expected = f'https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-{version}/Llumi-{version}-macos.dmg'
+            self.assertEqual(enclosure.attrib['url'], expected)
+            self.assertGreater(int(enclosure.attrib['length']), 0)
+            signature = enclosure.attrib['{' + ns['sparkle'] + '}edSignature']
+            self.assertEqual(len(base64.b64decode(signature, validate=True)), 64)
 
     def test_titles_identity_and_visible_content(self):
         for name, title in [("index.html", "Llumi — Track your AI coding usage"), ("privacy/index.html", "Llumi Privacy Policy"), ("support/index.html", "Llumi Support")]:

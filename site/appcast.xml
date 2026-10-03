@@ -1,0 +1,26 @@
+<?xml version="1.0" standalone="yes"?><!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+--><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Llumi</title>
+        <item>
+            <title>1.1.2</title>
+            <pubDate>Sat, 03 Oct 2026 20:16:42 +0530</pubDate>
+            <sparkle:minimumUpdateVersion>2</sparkle:minimumUpdateVersion>
+            <sparkle:version>2</sparkle:version>
+            <sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="plain-text"><![CDATA[Llumi 1.1.2
+
+- Adds in-app update support for future macOS releases.
+- Prevents internal Claude usage bucket names from appearing in the Usage interface.
+
+Existing Llumi 1.1.1 users need to install 1.1.2 manually once. Future compatible macOS updates can then be installed directly from Llumi.
+]]></description>
+            <enclosure url="https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-1.1.2/Llumi-1.1.2-macos.dmg" length="2529034" type="application/octet-stream" sparkle:edSignature="a23q5/T8BMscFrl+c0L97HsNKMYv2cHxykpMdDhXNTtMJKRhQ73zreyLeuz3V3kIUKLXVcM0WCb62hW9UjvsCA=="></enclosure>
+        </item>
+    </channel>
+</rss><!-- sparkle-signatures:
+edSignature: WwMF5Xsy30ijUDXGghBRuFyYWwWivVQQjcFI1cdk1QL+D0K8RO0cx+VtKAHHbFeVjaGOAzUmOEMFNAAGGwhPDw==
+length: 1509
+-->

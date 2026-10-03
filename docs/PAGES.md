@@ -27,9 +27,9 @@ The browser harness covers Chromium, Firefox and WebKit; desktop and narrow layo
 
 ## Configuration and deployment
 
-`site/config.json` supplies canonical/OG URLs, the canonical GitHub repository and download status. macOS links to the verified public Llumi 1.1.1 DMG. Windows 2.0.2.0 is published in Microsoft Store. Both Windows download links point to product `9NV153Q5K5MQ`, enabled with owner authorization after public metadata verification and physical installation acceptance. No unsigned Windows download is offered.
+`site/config.json` supplies canonical/OG URLs, the canonical GitHub repository and download status. macOS links to the verified public Llumi 1.1.2 DMG. Windows 2.0.2.0 is published in Microsoft Store. Both Windows download links point to product `9NV153Q5K5MQ`, enabled with owner authorization after public metadata verification and physical installation acceptance. No unsigned Windows download is offered.
 
-`wrangler.jsonc` declares only the two owner-confirmed website domains. `site/worker.mjs` implements canonical redirects, then delegates to static assets. Deployment is explicit with `wrangler deploy` after build, tests and authorization. Do not alter unrelated DNS or mail records. The GitHub website workflow validates and packages output; it does not deploy automatically.
+`wrangler.jsonc` declares only the two owner-confirmed website domains. `site/worker.mjs` implements canonical redirects, then delegates to static assets. The builder also copies the finalized Sparkle-signed `site/appcast.xml` byte for byte to `/appcast.xml`; verify the deployed feed and its enclosure signature against the public DMG. Deployment is explicit with `wrangler deploy` after build, tests and authorization. Do not alter unrelated DNS or mail records. The GitHub website workflow validates and packages output; it does not deploy automatically.
 
 ## Historical Store URL compatibility
 
