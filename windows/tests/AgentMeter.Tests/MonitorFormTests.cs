@@ -46,6 +46,41 @@ public sealed class MonitorFormTests
         Assert.Equal(MonitorForm.SizeForDpi(form.DeviceDpi), form.ClientSize);
     });
 
+    [Theory]
+    [InlineData(true, true, 0)]
+    [InlineData(true, true, 1)]
+    [InlineData(false, false, 1)]
+    [InlineData(false, true, 1)]
+    [InlineData(true, true, 3)]
+    public Task ClaudeCompactAndExpandedSurfacesHideInternalWindows(bool fiveHour, bool weekly, int unknownCount) => RunSta(() =>
+    {
+        using var form = NewForm();
+        var states = States();
+        var windows = new List<UsageWindow>();
+        if (fiveHour) windows.Add(new("five_hour", "raw_primary_label", 20, Now.AddHours(3)));
+        if (weekly) windows.Add(new("seven_day", "raw_weekly_label", 30, Now.AddDays(2)));
+        var unknown = new[] { "iguana_necktie", "future_internal", "model:five_hour" };
+        windows.AddRange(unknown.Take(unknownCount).Select(id => new UsageWindow(id, id, 1, null)));
+        states[1] = new("Claude", ProviderStatus.Ready, new(windows, Now, "fixture"));
+        foreach (var expanded in new[] { false, true })
+        {
+            form.SetExpanded(expanded, false);
+            form.Render(states, Now);
+            Assert.Equal("29%", form.RowValues[0]); // Existing Codex fixture presentation is unchanged.
+            Assert.Equal(fiveHour ? "80%" : "—", form.RowValues[1]);
+            var text = form.AccessibilityObject.GetChild(1)!.Name!;
+            foreach (var raw in unknown.Append("raw_primary_label").Append("raw_weekly_label"))
+                Assert.DoesNotContain(raw, text);
+            if (fiveHour) Assert.Contains("5-hour · 80% remaining", text);
+            else Assert.DoesNotContain("5-hour ·", text);
+            if (weekly) Assert.Contains("Weekly · 70% remaining", text);
+            else Assert.DoesNotContain("Weekly ·", text);
+            using var preview = form.CreatePreviewBitmap();
+            Assert.Equal(form.ClientSize.Width, preview.Width);
+        }
+        Assert.Equal((fiveHour ? 1 : 0) + (weekly ? 1 : 0) + unknownCount, states[1].Snapshot!.Windows.Count);
+    });
+
     [Fact]
     public Task StalePercentagesNeverLookLikeLiveMonitorNumbers() => RunSta(() =>
     {

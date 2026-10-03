@@ -4,11 +4,12 @@ param([Parameter(Mandatory=$true)][string]$HistoricalPackage,
       [Parameter(Mandatory=$true)][string]$PayloadDirectory,
       [Parameter(Mandatory=$true)][string]$SdkBinDirectory)
 $ErrorActionPreference = 'Stop'
-$expected = '5cd7219626334f2312fbbebe7b5540dbd57b4df9a5ba8a586589a9d131486bcd'
-if ((Get-FileHash -LiteralPath $HistoricalPackage).Hash -ne $expected) { throw 'Historical package hash mismatch.' }
+. "$PSScriptRoot/release-version.ps1"
 $root = Split-Path -Parent $PSScriptRoot
 $version = [string]([xml](Get-Content "$root/src/AgentMeter/AgentMeter.csproj" -Raw)).Project.PropertyGroup.FileVersion
-if ([version]$version -le [version]'2.0.1.0' -or ([version]$version).Revision -ne 0) { throw 'Invalid next Store version.' }
+Assert-NextWindowsPackageVersion -PackageVersion $version
+$expected = '5cd7219626334f2312fbbebe7b5540dbd57b4df9a5ba8a586589a9d131486bcd'
+if ((Get-FileHash -LiteralPath $HistoricalPackage).Hash -ne $expected) { throw 'Historical package hash mismatch.' }
 foreach ($name in @('makeappx.exe','makepri.exe')) {
     $signature = Get-AuthenticodeSignature -LiteralPath (Join-Path $SdkBinDirectory $name)
     if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'O=Microsoft Corporation') { throw 'Invalid SDK tool signature.' }

@@ -32,6 +32,7 @@ try {
     Copy-Item -LiteralPath (Join-Path $projectRoot '../THIRD-PARTY-NOTICES.md') -Destination (Join-Path $release 'THIRD-PARTY-NOTICES.txt')
     & "$PSScriptRoot/assert-release.ps1" -Directory $release
     & "$PSScriptRoot/test-package-notices.ps1"
+    & "$PSScriptRoot/test-release-version.ps1"
     & "$PSScriptRoot/test-v2-dependencies.ps1" -ReleaseDirectory $release
     & "$PSScriptRoot/write-inventory.ps1" -Directory $release
     & "$PSScriptRoot/test-inventory.ps1" -PackageDirectory $release

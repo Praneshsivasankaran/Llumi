@@ -439,6 +439,28 @@ public sealed class PopupTests
         Assert.Equal(Palette.Background.ToArgb(), bitmap.GetPixel(110, 50).ToArgb());
     });
 
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void ClaudeCardMissingPrimaryNeverPromotesWeekly(bool fiveHour, bool weekly) => RunSta(() =>
+    {
+        using var hints = new ToolTip();
+        using var card = new ProviderCard(hints) { Size = new Size(390, 280) };
+        var windows = new List<UsageWindow> { new("model:five_hour", "synthetic_internal", 0, null) };
+        if (weekly) windows.Add(new("seven_day", "raw_weekly", 30, null));
+        if (fiveHour) windows.Add(new("five_hour", "raw_primary", 20, null));
+        card.Render(new("Claude Code", ProviderStatus.Ready, new(windows, Now, "fixture")), Now, 1);
+        var texts = card.Controls.Cast<Control>().Select(c => c.Text).ToArray();
+        Assert.Equal(fiveHour, texts.Contains("80% remaining"));
+        Assert.DoesNotContain("70% remaining", texts);
+        Assert.Equal(weekly, texts.Contains("7 days"));
+        var all = string.Join("\n", card.Controls.Cast<Control>().Select(c => c.Text + hints.GetToolTip(c) + c.AccessibleName));
+        foreach (var raw in new[] { "model:", "synthetic_internal", "raw_weekly", "raw_primary" })
+            Assert.DoesNotContain(raw, all);
+        if (!fiveHour && !weekly) Assert.Contains("Verified allowance is temporarily unavailable.", texts);
+    });
+
     private static void AssertImportantTextFits(UsageForm form)
     {
         foreach (var label in Descendants(form).OfType<Label>().Where(l => !string.IsNullOrEmpty(l.Text) && !l.Text.Contains("\n") && !l.AutoEllipsis && l.Parent?.Name != "settings"))
