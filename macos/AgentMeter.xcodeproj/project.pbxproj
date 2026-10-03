@@ -848,9 +848,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.1</string>
+				<string>1.1.2</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>1</string>
+				<string>2</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi</string>
 				<key>INFOPLIST_FILE</key>
@@ -884,9 +884,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.1</string>
+				<string>1.1.2</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>1</string>
+				<string>2</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi</string>
 				<key>INFOPLIST_FILE</key>
@@ -940,9 +940,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.1</string>
+				<string>1.1.2</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>1</string>
+				<string>2</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi.tests</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
@@ -976,9 +976,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.1</string>
+				<string>1.1.2</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>1</string>
+				<string>2</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi.tests</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
@@ -1051,7 +1051,9 @@
 			<key>buildActionMask</key>
 			<integer>2147483647</integer>
 			<key>files</key>
-			<array/>
+			<array>
+				<string>AC7B27D7F490407398A642B5</string>
+			</array>
 			<key>runOnlyForDeploymentPostprocessing</key>
 			<integer>0</integer>
 		</dict>
@@ -1095,6 +1097,10 @@
 			<string>763D774377779C412BB71F6F</string>
 			<key>productType</key>
 			<string>com.apple.product-type.application</string>
+			<key>packageProductDependencies</key>
+			<array>
+				<string>D35ABA03F5804C1E8D4CED19</string>
+			</array>
 		</dict>
 		<key>798B65A4B63A4D08FDD4C755</key>
 		<dict>
@@ -1215,6 +1221,10 @@
 				<string>AC44A5EE06496B21A17CA082</string>
 				<string>3A0C9CEF9D8F3BC090274361</string>
 			</array>
+			<key>packageReferences</key>
+			<array>
+				<string>CC7EEA54B3974A20BE15E612</string>
+			</array>
 		</dict>
 		<key>A2E507111111111111111111</key>
 		<dict>
@@ -1319,6 +1329,36 @@
 			<string>PBXBuildFile</string>
 			<key>fileRef</key>
 			<string>735E830F18D6A28E57FE5459</string>
+		</dict>
+		<key>CC7EEA54B3974A20BE15E612</key>
+		<dict>
+			<key>isa</key>
+			<string>XCRemoteSwiftPackageReference</string>
+			<key>repositoryURL</key>
+			<string>https://github.com/sparkle-project/Sparkle</string>
+			<key>requirement</key>
+			<dict>
+				<key>kind</key>
+				<string>exactVersion</string>
+				<key>version</key>
+				<string>2.10.0</string>
+			</dict>
+		</dict>
+		<key>D35ABA03F5804C1E8D4CED19</key>
+		<dict>
+			<key>isa</key>
+			<string>XCSwiftPackageProductDependency</string>
+			<key>package</key>
+			<string>CC7EEA54B3974A20BE15E612</string>
+			<key>productName</key>
+			<string>Sparkle</string>
+		</dict>
+		<key>AC7B27D7F490407398A642B5</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>productRef</key>
+			<string>D35ABA03F5804C1E8D4CED19</string>
 		</dict>
 	</dict>
 	<key>rootObject</key>
