@@ -57,6 +57,7 @@ public static class PopupText
 
     public static string WindowName(string provider, UsageWindow window)
     {
+        if (UsagePresentation.IsClaude(provider)) return UsagePresentation.ClaudeLabel(window) ?? "";
         var prefix = provider + " · ";
         return window.Name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? window.Name[prefix.Length..] : window.Name;
     }

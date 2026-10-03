@@ -398,6 +398,32 @@ public sealed class PopupTests
     });
 
     [Fact]
+    public void ClaudeCardHidesInternalRowsAndTooltipsWithoutDiscardingParsedWindows() => RunSta(() =>
+    {
+        using var hints = new ToolTip();
+        using var card = new ProviderCard(hints) { Size = new Size(390, 280) };
+        var windows = new UsageWindow[] {
+            new("seven_day", "provider_generated_weekly_label", 30, null),
+            new("iguana_necktie", "iguana_necktie", 1, null),
+            new("model:synthetic_model", "synthetic_model", 2, null),
+            new("five_hour", "provider_generated_primary_label", 20, null) };
+        var state = new ProviderState("Claude Code", ProviderStatus.Ready, new(windows, Now, "fixture"));
+        card.Render(state, Now, 1);
+        var texts = card.Controls.Cast<Control>().Select(c => c.Text).ToArray();
+        Assert.Contains("5 hours", texts); Assert.Contains("7 days", texts);
+        Assert.Equal(214, card.LogicalHeight);
+        var content = string.Join("\n", card.Controls.Cast<Control>().Select(c => c.Text + hints.GetToolTip(c) + c.AccessibleName));
+        foreach (var name in new[] { "iguana_necktie", "synthetic_model", "provider_generated_" })
+            Assert.DoesNotContain(name, content);
+        Assert.Equal(4, state.Snapshot!.Windows.Count);
+
+        card.Render(state with { Snapshot = new([windows[1], windows[2]], Now, "fixture") }, Now, 1);
+        Assert.Equal(82, card.LogicalHeight);
+        Assert.Contains(card.Controls.Cast<Control>(), c => c.Text == "Verified allowance is temporarily unavailable.");
+        Assert.DoesNotContain(card.Controls.Cast<Control>(), c => c.Text.Contains("%") || c.Text.Contains("iguana_necktie"));
+    });
+
+    [Fact]
     public void TransparentLabelBackgroundPaintingPreservesAdjacentPixels() => RunSta(() =>
     {
         using var hints = new ToolTip();

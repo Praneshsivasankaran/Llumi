@@ -569,6 +569,97 @@ private actor FakeSource: UsageSource {
   }
 }
 
+@MainActor final class ClaudeConsumerWindowTests: XCTestCase {
+  private let five = #""five_hour":{"utilization":20,"resets_at":null}"#
+  private let week = #""seven_day":{"utilization":30,"resets_at":null}"#
+  private let internalBucket = #""iguana_necktie":{"utilization":1,"resets_at":null}"#
+
+  private func snapshot(_ limits: String) throws -> UsageSnapshot {
+    var root = try XCTUnwrap(json(ParserTests.usage).object)
+    root["rate_limits"] = try json("{" + limits + "}")
+    let windows = try Parsers.claude(.object(root), plan: "max")
+    var result = UsageSnapshot(provider: .claude)
+    result.apply(.success(.init(binding: "fixture", windows: windows, date: Date())))
+    return result
+  }
+
+  func testStandardWindowsDisplayFiveHourThenWeekly() throws {
+    let s = try snapshot(week + "," + five)
+    XCTAssertEqual(s.consumerWindows.map(\.id), ["five_hour", "seven_day"])
+    XCTAssertEqual(s.consumerWindows.compactMap(\.claudeDisplayLabel), ["5 hours", "7 days"])
+    XCTAssertEqual(s.primary?.id, "five_hour")
+    XCTAssertEqual(ProviderGlance(snapshot: s).percentage, "80%")
+    XCTAssertEqual(s.detailWindows, s.consumerWindows)
+  }
+
+  func testObservedIdentifierIsAnUnknownTopLevelBucketRetainedOnlyInternally() throws {
+    let s = try snapshot(five + "," + internalBucket + "," + week)
+    let parsed = try XCTUnwrap(s.reading?.windows.first { $0.id == "iguana_necktie" })
+    XCTAssertEqual(parsed.bucket, "claude")
+    XCTAssertNil(parsed.durationMinutes)
+    XCTAssertEqual(parsed.label, "iguana necktie")
+    XCTAssertEqual(s.reading?.windows.count, 3)
+    XCTAssertEqual(s.consumerWindows.map(\.id), ["five_hour", "seven_day"])
+    XCTAssertNil(parsed.claudeDisplayLabel)
+    XCTAssertEqual(s.primary?.remaining, 80)
+  }
+
+  func testUnknownBucketOnlyNeverFabricatesAnAllowance() throws {
+    let s = try snapshot(internalBucket)
+    XCTAssertEqual(s.reading?.windows.count, 1)
+    XCTAssertNil(s.primary)
+    XCTAssertTrue(s.consumerWindows.isEmpty)
+    XCTAssertTrue(s.detailWindows.isEmpty)
+    XCTAssertEqual(ProviderGlance(snapshot: s).percentage, "--")
+    XCTAssertFalse(s.compact.contains("%"))
+  }
+
+  func testWeeklyWithoutFiveHourRemainsDetailAndNotCompactPrimary() throws {
+    let s = try snapshot(week + "," + internalBucket)
+    XCTAssertNil(s.primary)
+    XCTAssertEqual(s.consumerWindows.map(\.id), ["seven_day"])
+    XCTAssertEqual(s.detailWindows.map(\.id), ["seven_day"])
+    XCTAssertEqual(ProviderGlance(snapshot: s).percentage, "--")
+    XCTAssertFalse(s.compact.contains("%"))
+  }
+
+  func testMultipleUnknownAndModelScopedWindowsNeverLeakIntoConsumerSurfaces() throws {
+    let extra = #""future_internal":{"utilization":2},"seven_day_sonnet":{"utilization":3},"model_scoped":[{"display_name":"synthetic_model","utilization":4},{"display_name":"five_hour","utilization":5}]"#
+    let s = try snapshot(five + "," + week + "," + internalBucket + "," + extra)
+    XCTAssertEqual(s.reading?.windows.count, 7)
+    XCTAssertTrue(s.reading?.windows.contains { $0.id == "model:synthetic_model" } == true)
+    XCTAssertTrue(s.reading?.windows.contains { $0.id == "model:five_hour" } == true)
+    XCTAssertEqual(s.consumerWindows.map(\.id), ["five_hour", "seven_day"])
+    XCTAssertEqual(s.detailWindows.map(\.id), ["five_hour", "seven_day"])
+    let consumerText = s.consumerWindows.compactMap(\.claudeDisplayLabel).joined()
+      + s.compact + ProviderGlance(snapshot: s).accessibility
+    let diagnostics = SetupDiagnostics.report([.claude: s], version: "1.1.2", build: "2")
+    for name in ["iguana_necktie", "future_internal", "seven_day_sonnet", "synthetic_model", "model:"] {
+      XCTAssertFalse(consumerText.contains(name))
+      XCTAssertFalse(diagnostics.contains(name))
+    }
+  }
+
+  func testOnlyUnknownAndModelScopedWindowsStayUnknown() throws {
+    let s = try snapshot(internalBucket + #", "seven_day_sonnet":{"utilization":3},"model_scoped":[{"display_name":"five_hour","utilization":4}]"#)
+    XCTAssertNil(s.primary)
+    XCTAssertTrue(s.consumerWindows.isEmpty)
+    XCTAssertTrue(s.detailWindows.isEmpty)
+    XCTAssertEqual(ProviderGlance(snapshot: s).percentage, "--")
+  }
+
+  func testCodexMainAndAdditionalWindowsRemainUnchanged() throws {
+    let windows = try Parsers.codex(json(#"{"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":20,"windowDurationMins":300},"secondary":{"usedPercent":30,"windowDurationMins":10080}},"codex_bengalfox":{"limitName":"Spark","primary":{"usedPercent":1,"windowDurationMins":300}}}}"#))
+    var s = UsageSnapshot(provider: .codex)
+    s.apply(.success(.init(binding: "fixture", windows: windows, date: Date())))
+    XCTAssertEqual(s.consumerWindows, windows)
+    XCTAssertEqual(s.primary?.id, "codex:secondary")
+    XCTAssertEqual(ProviderGlance(snapshot: s).percentage, "70%")
+    XCTAssertEqual(s.detailWindows.map(\.id), ["codex:secondary"])
+    XCTAssertTrue(s.consumerWindows.contains { $0.label == "Spark" })
+  }
+}
+
 final class ProductPassTests: XCTestCase {
   func testClaudeCompactAlwaysFiveHourAndDetailsOrdered() throws {
     for (short, long) in [(10.0, 80.0), (80.0, 10.0), (37.0, 19.0)] {

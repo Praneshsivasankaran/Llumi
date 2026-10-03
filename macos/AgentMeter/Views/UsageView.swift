@@ -77,9 +77,7 @@ private struct ProviderSection: View {
           AllowanceBar(remaining: primary.remaining, color: snapshot.provider.accent)
         }
         VStack(alignment: .leading, spacing: 16) {
-          ForEach(reading.windows.filter {
-            snapshot.provider != .claude || $0.id != "nimbus_quill"
-          }.sorted { a, b in a.id == primary?.id && b.id != primary?.id }) {
+          ForEach(snapshot.consumerWindows.sorted { a, b in a.id == primary?.id && b.id != primary?.id }) {
             window in
             VStack(alignment: .leading, spacing: 5) {
               HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -100,6 +98,9 @@ private struct ProviderSection: View {
               }
             }
           }
+        }
+        if snapshot.consumerWindows.isEmpty {
+          Text(unavailable).font(.callout).foregroundStyle(.secondary)
         }
         if snapshot.state == .stale {
           Text(UsageCopy.updated(reading.date, now: now) + " · last verified allowance").font(
@@ -125,7 +126,6 @@ private struct ProviderSection: View {
   private func label(_ window: UsageWindow) -> String {
     let duration = UsageCopy.duration(window.durationMinutes)
     if snapshot.provider == .codex { return window.label + (duration.map { " · \($0)" } ?? "") }
-    if window.id == "seven_day" || window.id == "five_hour" { return duration ?? window.id }
-    return window.id  // Do not invent semantics for provider-defined windows.
+    return window.claudeDisplayLabel ?? ""
   }
 }

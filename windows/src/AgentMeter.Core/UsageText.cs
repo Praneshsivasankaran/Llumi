@@ -15,12 +15,13 @@ public static class UsageText
         text.AppendLine(status);
         if (state.Detail is not null) text.AppendLine(state.Detail);
         if (state.Snapshot is not { } snapshot) return text.Append("Usage and reset times unavailable.").ToString();
-        foreach (var window in snapshot.Windows)
+        foreach (var window in UsagePresentation.Windows(state))
         {
             var expired = window.ResetPassed(now);
             var remaining = window.RemainingPercent?.ToString("0.#", CultureInfo.InvariantCulture);
             text.AppendLine();
-            text.Append(window.Name).Append("   ").Append(remaining is null ? "Unavailable" : remaining + "% remaining");
+            text.Append(UsagePresentation.IsClaude(state.Name) ? PopupText.WindowName(state.Name, window) : window.Name)
+                .Append("   ").Append(remaining is null ? "Unavailable" : remaining + "% remaining");
             if (stale || expired) text.Append(" (stale)");
             text.AppendLine();
             text.Append("Reset: ").AppendLine(Reset(window.ResetsAt, now));

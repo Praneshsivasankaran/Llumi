@@ -24,6 +24,14 @@ struct UsageWindow: Equatable, Sendable, Identifiable {
   let used: Double?
   let reset: Date?
   var remaining: Double? { used.map { 100 - $0 } }
+  var claudeDisplayLabel: String? {
+    guard bucket == "claude" else { return nil }
+    switch id {
+    case "five_hour": return "5 hours"
+    case "seven_day": return "7 days"
+    default: return nil
+    }
+  }
   init(
     id: String, bucket: String, label: String, durationMinutes: Int?, used: Double?, reset: Date?
   ) throws {
@@ -83,6 +91,11 @@ struct UsageSnapshot: Sendable {
   var detailWindows: [UsageWindow] {
     provider == .claude ? [claudeWindow("five_hour"), claudeWindow("seven_day")].compactMap { $0 }
       : primary.map { [$0] } ?? []
+  }
+  // Parsing preserves provider windows; consumer Claude surfaces use only the
+  // recognized five-hour/weekly semantics already used by the expanded monitor.
+  var consumerWindows: [UsageWindow] {
+    provider == .claude ? detailWindows : reading?.windows ?? []
   }
   var compact: String {
     guard let remaining = primary?.remaining else {

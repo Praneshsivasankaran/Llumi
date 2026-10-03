@@ -84,8 +84,11 @@ internal sealed class ProviderCard : Panel
         primary.Visible = selected is not null; primaryBar.Visible = selected is not null;
         primary.ForeColor = stale ? Palette.Warning : Palette.Foreground;
         primaryBar.UpdateValue(selected?.RemainingPercent, stale);
-        var windows = (state.Snapshot?.Windows ?? []).Where(w => w.Id != "nimbus_quill")
+        var windows = UsagePresentation.Windows(state)
             .OrderBy(w => w.Id == selected?.Id ? 0 : 1).ToArray();
+        if (state.Status == ProviderStatus.Ready && !stale && state.Snapshot is not null &&
+            windows.Length == 0 && UsagePresentation.IsClaude(state.Name))
+            summary.Text = "Verified allowance is temporarily unavailable.";
         if (!ids.SequenceEqual(windows.Select(w => w.Id)))
         {
             foreach (var row in rows)
@@ -105,7 +108,7 @@ internal sealed class ProviderCard : Panel
             row.Value.Text = window.Id == selected?.Id ? "" : PopupText.Remaining(window);
             row.Value.ForeColor = stale ? Palette.Warning : Palette.Foreground;
             row.Reset.Text = PopupText.Reset(window, now);
-            hints.SetToolTip(row.Name, window.Name);
+            hints.SetToolTip(row.Name, UsagePresentation.IsClaude(state.Name) ? PopupText.WindowName(state.Name, window) : window.Name);
             hints.SetToolTip(row.Reset, UsageText.Reset(window.ResetsAt, now));
             row.Bar.Accent = accent;
             row.Bar.UpdateValue(window.RemainingPercent, stale);

@@ -8,12 +8,8 @@ internal static class MonitorSelection
 {
     internal static UsageWindow[] Details(ProviderState state)
     {
-        if (state.Name is not ("Claude" or "Claude Code")) return Select(state) is { } main ? [main] : [];
-        return new[] { "five_hour", "seven_day" }.Select(id =>
-        {
-            var matches = state.Snapshot?.Windows.Where(w => w.Id.Equals(id, StringComparison.OrdinalIgnoreCase)).Take(2).ToArray();
-            return matches?.Length == 1 ? matches[0] : null;
-        }).OfType<UsageWindow>().ToArray();
+        if (!UsagePresentation.IsClaude(state.Name)) return Select(state) is { } main ? [main] : [];
+        return UsagePresentation.Windows(state);
     }
     internal static UsageWindow? Select(ProviderState state)
     {
