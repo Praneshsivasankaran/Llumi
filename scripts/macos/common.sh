@@ -2,7 +2,7 @@
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 export PYTHONPATH="$ROOT/scripts/macos${PYTHONPATH:+:$PYTHONPATH}"
-OUT="$ROOT/dist/macos"
+OUT="${LLUMI_RELEASE_OUTPUT:-$ROOT/dist/macos}"
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 app_check() {
   [[ -d "$1/Contents/MacOS" ]] || fail 'Expected an application bundle.'

@@ -77,6 +77,10 @@ class DistributionGuards(unittest.TestCase):
         r = self.run_script('sign-app.sh', APP, '--execute')
         self.assertNotEqual(r.returncode, 0)
         self.assertIn('Set DEVELOPER_ID_APPLICATION', r.stderr)
+    def test_signed_candidate_packaging_requires_approved_identity(self):
+        r = self.run_script('create-dmg.sh', APP, '--signed-candidate')
+        self.assertNotEqual(r.returncode, 0)
+        self.assertIn('Set DEVELOPER_ID_APPLICATION', r.stderr)
     def test_notary_requires_existing_profile(self):
         r = self.run_script('notarize.sh', APP, '--execute')
         self.assertNotEqual(r.returncode, 0)

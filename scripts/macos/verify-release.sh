@@ -43,5 +43,13 @@ CHECK
   fi
 fi
 if [[ "$TARGET" == *.dmg ]]; then
+  # A validly signed container is insufficient: inspect the contained product too.
+  MOUNT=$(mktemp -d)
+  trap '/usr/bin/hdiutil detach "$MOUNT" >/dev/null 2>&1 || true; rmdir "$MOUNT" 2>/dev/null || true' EXIT
+  /usr/bin/hdiutil attach -readonly -nobrowse -mountpoint "$MOUNT" "$TARGET" >/dev/null
+  "$ROOT/scripts/macos/verify-release.sh" "$MOUNT/Llumi.app" "$MODE"
+  /usr/bin/hdiutil detach "$MOUNT" >/dev/null
+  rmdir "$MOUNT"
+  trap - EXIT
   (cd "$(dirname "$TARGET")" && shasum -a 256 "$(basename "$TARGET")" > "$(basename "$TARGET").sha256")
 fi
