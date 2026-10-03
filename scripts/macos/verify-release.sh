@@ -15,9 +15,14 @@ if [[ "$MODE" == --unsigned ]]; then
 else
   /usr/bin/codesign --verify --deep --strict --verbose=2 "$TARGET"
   INFO=$(/usr/bin/codesign -d --verbose=4 "$TARGET" 2>&1)
-  [[ "$INFO" == *'Authority=Developer ID Application:'* ]] || fail 'Not Developer ID Application signed'
-  [[ "$INFO" == *'Timestamp='* ]] || fail 'Missing secure timestamp'
+  printf '%s\n' "$INFO" | python3 -c 'import sys; from release_policy import validate_publisher; validate_publisher(sys.stdin.read(), "Developer ID Application: Pranesh S (K38622WCYD)", "K38622WCYD", sys.argv[1] == "app")' "$( [[ "$TARGET" == *.app ]] && printf app || printf dmg )"
   if [[ "$TARGET" == *.app ]]; then
+    FRAMEWORK="$TARGET/Contents/Frameworks/Sparkle.framework/Versions/B"
+    for CODE in "$FRAMEWORK/Autoupdate" "$FRAMEWORK/Updater.app" \
+      "$FRAMEWORK/XPCServices/Installer.xpc" "$FRAMEWORK/XPCServices/Downloader.xpc" \
+      "$TARGET/Contents/Frameworks/Sparkle.framework"; do
+      /usr/bin/codesign -d --verbose=4 "$CODE" 2>&1 | python3 -c 'import sys; from release_policy import validate_publisher; validate_publisher(sys.stdin.read(), "Developer ID Application: Pranesh S (K38622WCYD)", "K38622WCYD")'
+    done
     [[ "$INFO" == *'(runtime)'* ]] || fail 'Missing Hardened Runtime'
     ENT=$(mktemp)
     trap 'rm -f "$ENT"' EXIT

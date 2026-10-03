@@ -1,6 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+export PYTHONPATH="$ROOT/scripts/macos${PYTHONPATH:+:$PYTHONPATH}"
 OUT="$ROOT/dist/macos"
 fail() { printf '%s\n' "$*" >&2; exit 1; }
 app_check() {
