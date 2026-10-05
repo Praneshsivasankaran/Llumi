@@ -1,23 +1,19 @@
+import AppKit
 import SwiftUI
 
 struct MeterMark: View {
   var dimension: CGFloat = 22
+  private static let appIcon = Bundle.main.url(forResource: "Llumi", withExtension: "icns")
+    .flatMap { NSImage(contentsOf: $0) }
   var body: some View {
-    Canvas { context, size in
-      var arc = Path()
-      arc.move(to: CGPoint(x: size.width * 0.12, y: size.height * 0.72))
-      arc.addCurve(to: CGPoint(x: size.width * 0.88, y: size.height * 0.72),
-        control1: CGPoint(x: size.width * 0.12, y: size.height * 0.1),
-        control2: CGPoint(x: size.width * 0.88, y: size.height * 0.1))
-      context.stroke(arc, with: .foreground, style: StrokeStyle(lineWidth: size.width * 2.5 / 22, lineCap: .round))
-      var needle = Path()
-      needle.move(to: CGPoint(x: size.width * 0.47, y: size.height * 0.64))
-      needle.addLine(to: CGPoint(x: size.width * 0.75, y: size.height * 0.35))
-      needle.addLine(to: CGPoint(x: size.width * 0.55, y: size.height * 0.75))
-      needle.closeSubpath()
-      context.fill(needle, with: .foreground)
-      context.fill(Path(ellipseIn: CGRect(x: size.width * 0.43, y: size.height * 0.63,
-        width: size.width * 0.16, height: size.height * 0.16)), with: .foreground)
+    Group {
+      if let appIcon = Self.appIcon {
+        Image(nsImage: appIcon)
+          .renderingMode(.original)
+          .resizable()
+          .interpolation(.high)
+          .scaledToFit()
+      }
     }.frame(width: dimension, height: dimension).accessibilityHidden(true)
   }
 }

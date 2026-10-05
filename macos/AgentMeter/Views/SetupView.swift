@@ -110,21 +110,14 @@ struct SetupView: View {
     }
   }
   private func providerInstructions(_ provider: ProviderID) -> some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: 22) {
       heading(provider == .codex ? "Set up Codex" : "Set up Claude Code",
         "Llumi uses the locally installed command-line tool. Install it and sign in to get started.")
-      Text("Open Terminal from Applications → Utilities. Copy each command, paste it into Terminal, then press Return.")
+      Text("Open Terminal, paste each command, then press Return.")
         .font(.callout).foregroundStyle(.secondary)
       CommandBlock(title: "1. Install \(provider == .codex ? "Codex" : "Claude Code")",
-        explanation: provider == .codex ? "Installs Codex using Homebrew. Skip this if Codex is already installed." : "Runs Anthropic’s official installer. Skip this if Claude Code is already installed.",
         command: ProviderSetup.install(provider))
-      if provider == .codex {
-        Text("Homebrew is required for this command. If you don’t have it, the official guide also offers a standalone installer.")
-          .font(.caption).foregroundStyle(.secondary)
-      }
-      CommandBlock(title: "2. Sign in", explanation: provider == .codex
-        ? "Opens Codex’s sign-in flow. Choose your ChatGPT subscription account."
-        : "Opens Claude Code’s sign-in flow. Choose your Claude subscription account, not Console/API billing.",
+      CommandBlock(title: "2. Sign in",
         command: ProviderSetup.login(provider))
       HStack {
         checkAgain
@@ -159,13 +152,11 @@ struct ProviderSwitchRow: View {
 
 private struct CommandBlock: View {
   let title: String
-  let explanation: String
   let command: String
   @State private var copied = false
   var body: some View {
-    VStack(alignment: .leading, spacing: 7) {
+    VStack(alignment: .leading, spacing: 10) {
       Text(title).font(.headline)
-      Text(explanation).font(.callout).foregroundStyle(.secondary)
       HStack(spacing: 12) {
         Text(command).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
           .frame(maxWidth: .infinity, alignment: .leading)
