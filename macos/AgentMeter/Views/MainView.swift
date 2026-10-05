@@ -85,13 +85,9 @@ struct SettingsView: View {
                 Button("Check for Updates…") { checks.updates.checkAction() }
                   .disabled(!checks.updates.canCheck)
               }
-              Toggle("Automatically check for updates", isOn: Binding(
-                get: { checks.updates.automaticChecks },
-                set: { checks.updates.automaticChecks = $0 }))
-                .toggleStyle(.switch)
-              Toggle("Automatically download updates", isOn: Binding(
-                get: { checks.updates.automaticDownloads },
-                set: { checks.updates.automaticDownloads = $0 }))
+              Toggle("Automatically check and download updates", isOn: Binding(
+                get: { checks.updates.automaticUpdates },
+                set: { checks.updates.automaticUpdates = $0 }))
                 .toggleStyle(.switch)
             }
             Section {

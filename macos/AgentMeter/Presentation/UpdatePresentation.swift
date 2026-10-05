@@ -1,29 +1,28 @@
 import Foundation
 import Observation
+import Sparkle
 
 // UI state and session-only dismissals; Sparkle owns the persisted update setting.
 @MainActor @Observable final class UpdatePresentation {
   var canCheck = false
   var checking = false
-  var automaticDownloads = false {
-    didSet {
-      if automaticDownloads != oldValue { automaticDownloadsChanged(automaticDownloads) }
-    }
-  }
-  var automaticChecks = true {
-    didSet {
-      if automaticChecks != oldValue { automaticChecksChanged(automaticChecks) }
+  var automaticDownloads = false
+  var automaticChecks = true
+  var automaticUpdates: Bool {
+    get { automaticChecks && automaticDownloads }
+    set {
+      if newValue != automaticUpdates { automaticUpdatesChanged(newValue) }
     }
   }
   private(set) var availableVersion: String?
   var checkAction: () -> Void = {}
-  var automaticChecksChanged: (Bool) -> Void = { _ in }
-  var automaticDownloadsChanged: (Bool) -> Void = { _ in }
+  var automaticUpdatesChanged: (Bool) -> Void = { _ in }
   var dismissAction: () -> Void = {}
   private(set) var readyVersion: String?
   private(set) var readyNotesURL: URL?
   private(set) var completedUpdate: UpdateCompletionNotice?
   private(set) var promptVisible = false
+  private(set) var restartRequested = false
   var showPromptAction: () -> Void = {}
   var hidePromptAction: () -> Void = {}
   var restartAction: () -> Void = {}
@@ -51,13 +50,14 @@ import Observation
     // Sparkle may resume an old download without its new-item validation hook.
     // Invalid metadata never becomes a displayed version or an external URL.
     let validated = UpdateCompletionNotice.releaseNotesURL(version: version)
+    restartRequested = false
     readyVersion = validated == nil ? "" : version
     readyNotesURL = validated == notesURL ? validated : nil
     clearAvailableUpdate()
     showReadyPrompt()
   }
   func showReadyPrompt() {
-    guard readyVersion != nil, completedUpdate == nil else { return }
+    guard readyVersion != nil, completedUpdate == nil, !restartRequested else { return }
     promptVisible = true
     showPromptAction()
   }
@@ -75,12 +75,14 @@ import Observation
     hidePromptAction()
   }
   func clearPreparedUpdate() {
+    restartRequested = false
     readyVersion = nil
     readyNotesURL = nil
     if completedUpdate == nil { dismissPrompt() }
   }
   func restartPreparedUpdate() {
-    guard readyVersion != nil else { return }
+    guard readyVersion != nil, !restartRequested else { return }
+    restartRequested = true
     promptVisible = false
     hidePromptAction()
     restartAction()
@@ -95,4 +97,37 @@ enum AutomaticUpdatesMigration {
     enable()
     defaults.set(true, forKey: key)
   }
+}
+
+// Downloading is the legacy authority when adopting the combined control.
+// Checking-only users are never silently enrolled in automatic downloads.
+@MainActor protocol AutomaticUpdateSettings: AnyObject {
+  var automaticallyChecksForUpdates: Bool { get set }
+  var automaticallyDownloadsUpdates: Bool { get set }
+}
+@MainActor enum CombinedAutomaticUpdates {
+  static func adoptExistingPreference(_ settings: any AutomaticUpdateSettings) {
+    setEnabled(settings.automaticallyDownloadsUpdates, settings: settings)
+  }
+  static func setEnabled(_ enabled: Bool, settings: any AutomaticUpdateSettings) {
+    settings.automaticallyDownloadsUpdates = enabled
+    // If Sparkle's host policy disallows automatic downloading, stay manual.
+    settings.automaticallyChecksForUpdates = settings.automaticallyDownloadsUpdates
+  }
+}
+
+enum ManualUpdateAction: Equatable { case download, confirmRestart, standardReview }
+@MainActor enum ManualUpdateDownloadPolicy {
+  static func action(userInitiated: Bool, stage: SPUUserUpdateStage,
+    informationOnly: Bool, majorUpgrade: Bool, installationType: String,
+    signing: SPUAppcastSigningValidationStatus) -> ManualUpdateAction {
+    guard userInitiated, !informationOnly, !majorUpgrade,
+      installationType == "application", signing == .succeeded else { return .standardReview }
+    switch stage {
+    case .notDownloaded, .downloaded: return .download
+    case .installing: return .confirmRestart
+    @unknown default: return .standardReview
+    }
+  }
+
 }

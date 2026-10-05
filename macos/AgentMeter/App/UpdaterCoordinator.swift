@@ -5,6 +5,7 @@ import Sparkle
   private let presentation: UpdatePresentation
   private let defaults: UserDefaults
   private var started = false
+  private var startAttempted = false
   private var pendingForegroundProbe = false
   private var probing = false
   private var probeVersion: String?
@@ -15,8 +16,14 @@ import Sparkle
   private var installingItem: SUAppcastItem?
   private var restartPrepared: (() -> Void)?
   private let completion: UpdateCompletionTracker
-  private lazy var controller = SPUStandardUpdaterController(
-    startingUpdater: false, updaterDelegate: self, userDriverDelegate: self)
+  private lazy var userDriver: LlumiUpdateUserDriver = {
+    let driver = LlumiUpdateUserDriver(hostBundle: .main, delegate: self)
+    driver.downloadBegan = { [weak self] in self?.presentation.nativePresentationBegan() }
+    driver.ready = { [weak self] item, install in self?.prepareUpdate(item, install: install) }
+    return driver
+  }()
+  private lazy var updater = SPUUpdater(hostBundle: .main, applicationBundle: .main,
+    userDriver: userDriver, delegate: self)
 
   init(presentation: UpdatePresentation, defaults: UserDefaults = .standard) {
     self.presentation = presentation
@@ -26,28 +33,15 @@ import Sparkle
       currentBuild: Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "")
     super.init()
     presentation.checkAction = { [weak self] in self?.checkForUpdates() }
-    presentation.automaticChecksChanged = { [weak self] enabled in
-      guard let self, !self.synchronizing else { return }
-      self.controller.updater.automaticallyChecksForUpdates = enabled
-      if !enabled { self.controller.updater.automaticallyDownloadsUpdates = false }
-      if !enabled {
-        self.pendingForegroundProbe = false
-        self.presentation.clearAvailableUpdate()
-      }
-      self.synchronize()
+    presentation.automaticUpdatesChanged = { [weak self] enabled in
+      self?.setAutomaticUpdates(enabled)
     }
-    presentation.automaticDownloadsChanged = { [weak self] enabled in
-      guard let self, !self.synchronizing else { return }
-      let updater = self.controller.updater
-      if enabled { updater.automaticallyChecksForUpdates = true }
-      updater.automaticallyDownloadsUpdates = enabled
+    presentation.restartAction = { [weak self] in
+      guard let self, let install = self.restartPrepared else { return }
+      self.restartPrepared = nil
       self.synchronize()
-      if enabled {
-        self.lastForegroundProbe = nil
-        self.foregroundOpened()
-      }
+      install()
     }
-    presentation.restartAction = { [weak self] in self?.restartPrepared?() }
     presentation.acknowledgeCompletionAction = { [weak self] in
       guard let self else { return }
       self.completion.acknowledgeCompletion()
@@ -57,11 +51,15 @@ import Sparkle
   }
 
   func startIfReady(setupComplete: Bool) {
-    guard setupComplete, !started else { return }
-    let updater = controller.updater
+    guard setupComplete, !startAttempted else { return }
+    startAttempted = true
+    let updater = self.updater
     AutomaticUpdatesMigration.apply(defaults: defaults) {
       updater.automaticallyChecksForUpdates = true
     }
+    // The new combined switch uses the existing download choice, including
+    // fresh-install false, rather than turning a checks-only choice into downloads.
+    CombinedAutomaticUpdates.adoptExistingPreference(updater)
     observations = [
       updater.observe(\.canCheckForUpdates, options: [.new]) { [weak self] _, _ in
         MainActor.assumeIsolated { self?.synchronize() }
@@ -70,26 +68,38 @@ import Sparkle
         MainActor.assumeIsolated {
           guard let self else { return }
           self.synchronize()
-          if !self.controller.updater.sessionInProgress { self.schedulePendingProbe() }
+          if !self.updater.sessionInProgress { self.schedulePendingProbe() }
         }
       },
-      updater.observe(\.automaticallyChecksForUpdates, options: [.new]) { [weak self] _, _ in
-        MainActor.assumeIsolated { self?.synchronize() }
+      updater.observe(\.automaticallyChecksForUpdates, options: [.new]) { [weak self] updater, _ in
+        MainActor.assumeIsolated { self?.setAutomaticUpdates(updater.automaticallyChecksForUpdates) }
       },
-      updater.observe(\.automaticallyDownloadsUpdates, options: [.new]) { [weak self] _, _ in
-        MainActor.assumeIsolated { self?.synchronize() }
+      updater.observe(\.automaticallyDownloadsUpdates, options: [.new]) { [weak self] updater, _ in
+        MainActor.assumeIsolated { self?.setAutomaticUpdates(updater.automaticallyDownloadsUpdates) }
       },
     ]
-    started = true
-    controller.startUpdater()
+    do {
+      try updater.start()
+      started = true
+    }
+    catch {
+      Task { @MainActor in
+        let alert = NSAlert()
+        alert.messageText = "Unable to check for updates"
+        alert.informativeText = "Please try reopening Llumi."
+        alert.runModal()
+      }
+    }
     synchronize()
+    // Verified installation evidence remains available even if the update
+    // engine cannot start another check in this launch.
     if let notice = completion.completion {
       Task { @MainActor [weak self] in self?.presentation.showCompletion(notice) }
     }
   }
 
   func foregroundOpened() {
-    guard started, controller.updater.automaticallyChecksForUpdates else { return }
+    guard started, updater.automaticallyChecksForUpdates else { return }
     guard !probing, preparedItem == nil, completion.completion == nil else { return }
     guard lastForegroundProbe.map({ Date().timeIntervalSince($0) >= 900 }) ?? true else { return }
     pendingForegroundProbe = true
@@ -99,15 +109,15 @@ import Sparkle
   func checkForUpdates() {
     if let notice = completion.completion { presentation.showCompletion(notice); return }
     if preparedItem != nil { presentation.showReadyPrompt(); return }
-    guard started, controller.updater.canCheckForUpdates else { return }
+    guard started, updater.canCheckForUpdates else { return }
     pendingForegroundProbe = false
     presentation.nativePresentationBegan()
-    controller.updater.checkForUpdates()
+    updater.checkForUpdates()
     synchronize()
   }
 
   private func performPendingProbe() {
-    let updater = controller.updater
+    let updater = self.updater
     guard pendingForegroundProbe, started, updater.automaticallyChecksForUpdates,
       completion.completion == nil, !updater.sessionInProgress else { return }
     pendingForegroundProbe = false
@@ -122,12 +132,29 @@ import Sparkle
     synchronize()
   }
 
+  private func setAutomaticUpdates(_ enabled: Bool) {
+    guard !synchronizing else { return }
+    synchronizing = true
+    CombinedAutomaticUpdates.setEnabled(enabled, settings: updater)
+    synchronizing = false
+    if !updater.automaticallyChecksForUpdates {
+      pendingForegroundProbe = false
+      presentation.clearAvailableUpdate()
+    }
+    synchronize()
+    if enabled {
+      lastForegroundProbe = nil
+      foregroundOpened()
+    }
+  }
+
   private func synchronize() {
-    let updater = controller.updater
+    guard !synchronizing else { return }
+    let updater = self.updater
     synchronizing = true
     defer { synchronizing = false }
-    presentation.canCheck = started && completion.completion == nil && (preparedItem != nil || updater.canCheckForUpdates)
-    presentation.checking = preparedItem == nil && (probing || (updater.sessionInProgress && !updater.canCheckForUpdates))
+    presentation.canCheck = started && !presentation.restartRequested && completion.completion == nil && (preparedItem != nil || updater.canCheckForUpdates)
+    presentation.checking = presentation.restartRequested || (preparedItem == nil && (probing || (updater.sessionInProgress && !updater.canCheckForUpdates)))
     presentation.automaticChecks = updater.automaticallyChecksForUpdates
     presentation.automaticDownloads = updater.automaticallyDownloadsUpdates
   }
@@ -207,6 +234,12 @@ import Sparkle
   }
   func updater(_ updater: SPUUpdater, willInstallUpdateOnQuit item: SUAppcastItem,
     immediateInstallationBlock install: @escaping () -> Void) -> Bool {
+    prepareUpdate(item, install: install)
+    // Later keeps this process running. Sparkle retains the verified installer
+    // and installs on natural quit, as documented by its public delegate API.
+    return true
+  }
+  private func prepareUpdate(_ item: SUAppcastItem, install: @escaping () -> Void) {
     preparedItem = item
     restartPrepared = install
     _ = completion.markInstallationIntent(targetVersion: item.displayVersionString,
@@ -214,9 +247,6 @@ import Sparkle
     presentation.preparedUpdate(version: item.displayVersionString,
       notesURL: UpdateCompletionNotice.releaseNotesURL(version: item.displayVersionString))
     synchronize()
-    // Later keeps this process running. Sparkle retains the verified installer
-    // and installs on natural quit, as documented by its public delegate API.
-    return true
   }
   private func cancelPreparedReceipt() {
     if let item = preparedItem ?? installingItem {
@@ -231,7 +261,7 @@ import Sparkle
   var supportsGentleScheduledUpdateReminders: Bool { true }
   func standardUserDriverShouldHandleShowingScheduledUpdate(
     _ update: SUAppcastItem, andInImmediateFocus immediateFocus: Bool
-  ) -> Bool { controller.updater.automaticallyDownloadsUpdates }
+  ) -> Bool { updater.automaticallyDownloadsUpdates }
   func standardUserDriverWillHandleShowingUpdate(
     _ handleShowingUpdate: Bool, forUpdate update: SUAppcastItem, state: SPUUserUpdateState
   ) {
@@ -248,5 +278,47 @@ import Sparkle
   func standardUserDriverWillFinishUpdateSession() {
     presentation.clearAvailableUpdate()
     presentation.nativePresentationEnded()
+  }
+}
+
+extension SPUUpdater: AutomaticUpdateSettings {}
+
+// Preserve Sparkle's checking/progress/cancellation/error/installation UI. The
+// only automatic choice here starts an ordinary manual download; restarting
+// always goes through Llumi's explicit ready prompt.
+@MainActor final class LlumiUpdateUserDriver: SPUStandardUserDriver {
+  var downloadBegan: () -> Void = {}
+  var ready: (SUAppcastItem, @escaping () -> Void) -> Void = { _, _ in }
+  private var manualItem: SUAppcastItem?
+
+
+  override func showUpdateFound(with appcastItem: SUAppcastItem, state: SPUUserUpdateState,
+    reply: @escaping (SPUUserUpdateChoice) -> Void) {
+    let action = ManualUpdateDownloadPolicy.action(userInitiated: state.userInitiated, stage: state.stage,
+      informationOnly: appcastItem.isInformationOnlyUpdate, majorUpgrade: appcastItem.isMajorUpgrade,
+      installationType: appcastItem.installationType, signing: appcastItem.signingValidationStatus)
+    switch action {
+    case .download:
+      super.dismissUpdateInstallation()
+      manualItem = appcastItem
+      downloadBegan()
+      reply(.install)
+    case .confirmRestart:
+      super.dismissUpdateInstallation()
+      manualItem = appcastItem
+      ready(appcastItem) { reply(.install) }
+    case .standardReview:
+      manualItem = nil
+      super.showUpdateFound(with: appcastItem, state: state, reply: reply)
+    }
+  }
+  override func showReady(toInstallAndRelaunch reply: @escaping (SPUUserUpdateChoice) -> Void) {
+    guard let manualItem else { super.showReady(toInstallAndRelaunch: reply); return }
+    super.dismissUpdateInstallation()
+    ready(manualItem) { reply(.install) }
+  }
+  override func dismissUpdateInstallation() {
+    manualItem = nil
+    super.dismissUpdateInstallation()
   }
 }

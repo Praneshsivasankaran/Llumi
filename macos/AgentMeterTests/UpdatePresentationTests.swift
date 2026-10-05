@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import SwiftUI
+import Sparkle
 import XCTest
 
 @MainActor final class NativeUpdatePresentationTests: XCTestCase {
@@ -21,6 +22,13 @@ import XCTest
     updates.restartPreparedUpdate()
     XCTAssertEqual(restarts, 1)
     XCTAssertFalse(updates.promptVisible)
+    XCTAssertTrue(updates.restartRequested)
+    updates.showReadyPrompt()
+    updates.restartPreparedUpdate()
+    XCTAssertFalse(updates.promptVisible)
+    XCTAssertEqual(restarts, 1)
+    updates.clearPreparedUpdate()
+    XCTAssertFalse(updates.restartRequested)
   }
   func testOnlyCompletionDismissalAcknowledgesInstalledVersion() throws {
     let updates = UpdatePresentation()
@@ -48,16 +56,69 @@ import XCTest
     XCTAssertFalse(updates.promptVisible)
     XCTAssertEqual(restarts, 0)
   }
-  func testAutomaticDownloadsAreSeparateFromCheckingAndNotifyOnlyChanges() {
+  func testCombinedSwitchChangesBothPreferencesOnceAndDoesNotRestart() {
     let updates = UpdatePresentation()
-    XCTAssertTrue(updates.automaticChecks)
-    XCTAssertFalse(updates.automaticDownloads)
+    let settings = FakeAutomaticUpdateSettings(checks: true, downloads: false)
+    CombinedAutomaticUpdates.adoptExistingPreference(settings)
+    updates.automaticChecks = settings.automaticallyChecksForUpdates
+    updates.automaticDownloads = settings.automaticallyDownloadsUpdates
+    XCTAssertFalse(updates.automaticUpdates)
     var changes: [Bool] = []
-    updates.automaticDownloadsChanged = { changes.append($0) }
-    updates.automaticDownloads = true
-    updates.automaticDownloads = true
-    updates.automaticDownloads = false
+    var restarts = 0
+    updates.restartAction = { restarts += 1 }
+    updates.automaticUpdatesChanged = { enabled in
+      changes.append(enabled)
+      CombinedAutomaticUpdates.setEnabled(enabled, settings: settings)
+      updates.automaticChecks = settings.automaticallyChecksForUpdates
+      updates.automaticDownloads = settings.automaticallyDownloadsUpdates
+    }
+    updates.automaticUpdates = true
+    XCTAssertTrue(settings.automaticallyChecksForUpdates)
+    XCTAssertTrue(settings.automaticallyDownloadsUpdates)
+    updates.automaticUpdates = true
+    updates.automaticUpdates = false
+    XCTAssertFalse(settings.automaticallyChecksForUpdates)
+    XCTAssertFalse(settings.automaticallyDownloadsUpdates)
     XCTAssertEqual(changes, [true, false])
+    XCTAssertEqual(restarts, 0)
+  }
+  func testCombinedPreferencePreservesDownloadChoiceAcrossAllLegacyStates() {
+    for checks in [false, true] {
+      for downloads in [false, true] {
+        let settings = FakeAutomaticUpdateSettings(checks: checks, downloads: downloads)
+        CombinedAutomaticUpdates.adoptExistingPreference(settings)
+        XCTAssertEqual(settings.automaticallyChecksForUpdates, downloads)
+        XCTAssertEqual(settings.automaticallyDownloadsUpdates, downloads)
+        CombinedAutomaticUpdates.adoptExistingPreference(settings)
+        XCTAssertEqual(settings.automaticallyChecksForUpdates, downloads)
+      }
+    }
+  }
+  func testDisallowedAutomaticDownloadsKeepsManualMode() {
+    let settings = FakeAutomaticUpdateSettings(checks: false, downloads: false)
+    settings.downloadsAllowed = false
+    CombinedAutomaticUpdates.setEnabled(true, settings: settings)
+    XCTAssertFalse(settings.automaticallyChecksForUpdates)
+    XCTAssertFalse(settings.automaticallyDownloadsUpdates)
+  }
+  func testManualDownloadNeverBypassesRestartOrUnverifiedAndSpecialUpdates() {
+    func action(_ stage: SPUUserUpdateStage = .notDownloaded,
+      initiated: Bool = true, information: Bool = false, major: Bool = false,
+      type: String = "application", signing: SPUAppcastSigningValidationStatus = .succeeded) -> ManualUpdateAction {
+      ManualUpdateDownloadPolicy.action(userInitiated: initiated, stage: stage,
+        informationOnly: information, majorUpgrade: major, installationType: type, signing: signing)
+    }
+    XCTAssertEqual(action(), .download)
+    XCTAssertEqual(action(.downloaded), .download)
+    XCTAssertEqual(action(.installing), .confirmRestart)
+    XCTAssertEqual(action(SPUUserUpdateStage(rawValue: 999)!), .standardReview)
+    XCTAssertEqual(action(initiated: false), .standardReview)
+    XCTAssertEqual(action(information: true), .standardReview)
+    XCTAssertEqual(action(major: true), .standardReview)
+    XCTAssertEqual(action(type: "package"), .standardReview)
+    XCTAssertEqual(action(type: "future-format"), .standardReview)
+    XCTAssertEqual(action(signing: .failed), .standardReview)
+    XCTAssertEqual(action(signing: .skipped), .standardReview)
   }
   func testMalformedResumedMetadataCannotEnterNativeLabelsOrLinks() {
     let updates = UpdatePresentation()
@@ -112,5 +173,19 @@ import XCTest
     let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
     try png.write(to: directory.appendingPathComponent(name + ".png"), options: .atomic)
     window.orderOut(nil)
+  }
+}
+
+@MainActor private final class FakeAutomaticUpdateSettings: AutomaticUpdateSettings {
+  var automaticallyChecksForUpdates: Bool
+  private var downloads: Bool
+  var downloadsAllowed = true
+  var automaticallyDownloadsUpdates: Bool {
+    get { downloadsAllowed && downloads }
+    set { downloads = newValue }
+  }
+  init(checks: Bool, downloads: Bool) {
+    automaticallyChecksForUpdates = checks
+    self.downloads = downloads
   }
 }
