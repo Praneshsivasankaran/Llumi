@@ -66,11 +66,12 @@ struct AllowanceBar: View {
   }
 }
 enum UsageCopy {
-  static func duration(_ minutes: Int?) -> String? {
-    guard let m = minutes else { return nil }
-    if m % 1440 == 0 { return "\(m/1440) days" }
-    if m % 60 == 0 { return "\(m/60) hours" }
-    return "\(m) minutes"
+  private static func limitLabel(_ minutes: Int?) -> String {
+    guard let m = minutes else { return "Usage limit · Period not reported" }
+    if m == 10080 { return "Weekly limit" }
+    if m % 1440 == 0 { return "\(m/1440)-day limit" }
+    if m % 60 == 0 { return "\(m/60)-hour limit" }
+    return "\(m)-minute limit"
   }
   static func updated(_ date: Date?, now: Date) -> String {
     guard let date else { return "Not updated yet" }
@@ -78,7 +79,8 @@ enum UsageCopy {
     return m < 1 ? "Updated just now" : "Updated \(m)m ago"
   }
   static func windowLabel(_ window: UsageWindow) -> String {
-    window.scopeLabel + " · " + (duration(window.durationMinutes) ?? "Window not reported")
+    let label = limitLabel(window.durationMinutes)
+    return window.scope == .general ? label : window.scopeLabel + " · " + label
   }
   static func remaining(_ window: UsageWindow) -> String {
     window.remaining.map { UsageSnapshot.percent($0) + " remaining" } ?? "Remaining not reported"
@@ -112,11 +114,11 @@ enum UsageCopy {
   }
   private static func noGeneralMessage(_ snapshot: UsageSnapshot) -> String {
     let general = snapshot.consumerWindows.filter { $0.scope == .general }
-    if general.isEmpty { return "No general allowance reported." }
+    if general.isEmpty { return "Account usage limit not reported." }
     if general.contains(where: { $0.used != nil && $0.durationMinutes == nil }) {
-      return "General time window isn’t reported."
+      return "Limit period not reported."
     }
-    return "General remaining allowance isn’t reported."
+    return "Remaining allowance not reported."
   }
   static func staleObservation(_ snapshot: UsageSnapshot, now: Date) -> String? {
     guard snapshot.state == .stale, let date = snapshot.reading?.date else { return nil }

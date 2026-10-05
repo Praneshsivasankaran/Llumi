@@ -173,7 +173,8 @@ final class Release113AllowancePresentationTests: XCTestCase {
     XCTAssertEqual(snapshot.consumerWindows.map(\.id), ["five", "weekly", "extra"])
     let details = UsageCopy.detailSummary(snapshot, now: observed)
     XCTAssertEqual(details, ProviderGlance(snapshot: snapshot).accessibility(at: observed))
-    for expected in ["General · 5 hours", "General · 7 days", "Spark · 5 hours",
+    XCTAssertFalse(details.contains("General"))
+    for expected in ["5-hour limit", "Weekly limit", "Spark · 5-hour limit",
       "75% remaining", "87% remaining", "97% remaining", "Resets in 1h 0m", "Reset:",
       "Reset not reported"] { XCTAssertTrue(details.contains(expected), expected) }
     for hidden in ["private-fixture-label", "private-fixture-binding", "private-opaque-id"] {
@@ -187,9 +188,9 @@ final class Release113AllowancePresentationTests: XCTestCase {
     XCTAssertEqual(ProviderGlance(snapshot: snapshot).percentage, "63%")
     XCTAssertEqual(snapshot.detailWindows.map(\.id), ["seven_day"])
     let details = UsageCopy.detailSummary(snapshot, now: observed)
-    XCTAssertTrue(details.contains("General · 7 days"))
+    XCTAssertTrue(details.contains("Weekly limit"))
     XCTAssertTrue(details.contains("63% remaining"))
-    XCTAssertFalse(details.contains("No general allowance"))
+    XCTAssertFalse(details.contains("Account usage limit not reported"))
   }
   func testModelOnlyNeverSubstitutesCompactAndOpaqueNamesStayHidden() throws {
     let model = try window("seven_day_sonnet", provider: .claude, minutes: 10080,
@@ -199,8 +200,8 @@ final class Release113AllowancePresentationTests: XCTestCase {
     XCTAssertEqual(snapshot.state, .live)
     XCTAssertEqual(ProviderGlance(snapshot: snapshot).percentage, "--")
     let details = UsageCopy.detailSummary(snapshot, now: observed)
-    XCTAssertTrue(details.contains("No general allowance reported."))
-    XCTAssertTrue(details.contains("Sonnet · 7 days"))
+    XCTAssertTrue(details.contains("Account usage limit not reported."))
+    XCTAssertTrue(details.contains("Sonnet · Weekly limit"))
     XCTAssertTrue(details.contains("95% remaining"))
     XCTAssertFalse(details.contains("private-opaque-id"))
   }
@@ -227,8 +228,9 @@ final class Release113AllowancePresentationTests: XCTestCase {
     XCTAssertNil(snapshot.primary)
     XCTAssertEqual(ProviderGlance(snapshot: snapshot).percentage, "--")
     let details = UsageCopy.detailSummary(snapshot, now: observed)
-    XCTAssertTrue(details.contains("General time window isn’t reported."))
-    XCTAssertTrue(details.contains("General · Window not reported"))
+    XCTAssertTrue(details.contains("Limit period not reported."))
+    XCTAssertTrue(details.contains("Usage limit · Period not reported"))
+    XCTAssertFalse(details.contains("General"))
     XCTAssertTrue(details.contains("75% remaining"))
   }
   func testStaleDetailsShowObservationAgeAndAllResetInstants() throws {
@@ -240,8 +242,8 @@ final class Release113AllowancePresentationTests: XCTestCase {
     XCTAssertEqual(ProviderGlance(snapshot: snapshot).percentage, "75%")
     let details = UsageCopy.detailSummary(snapshot, now: now)
     XCTAssertTrue(details.contains("Stale · Observed 3m ago"))
-    XCTAssertTrue(details.contains("General · 5 hours"))
-    XCTAssertTrue(details.contains("General · 7 days"))
+    XCTAssertTrue(details.contains("5-hour limit"))
+    XCTAssertTrue(details.contains("Weekly limit"))
     XCTAssertTrue(details.contains("Reset:"))
     XCTAssertEqual(details, ProviderGlance(snapshot: snapshot).accessibility(at: now))
   }
@@ -268,6 +270,6 @@ final class Release113AllowancePresentationTests: XCTestCase {
     XCTAssertEqual(NotchDetailLayout.height(rows: many, availableHeight: 800), 420)
     XCTAssertEqual(NotchDetailLayout.height(rows: many, availableHeight: 160), 160)
     let details = many[0].accessibility(at: observed)
-    for i in 0..<12 { XCTAssertTrue(details.contains("Model \(i) · 7 days")) }
+    for i in 0..<12 { XCTAssertTrue(details.contains("Model \(i) · Weekly limit")) }
   }
 }
