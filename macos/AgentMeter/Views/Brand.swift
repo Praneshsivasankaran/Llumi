@@ -77,14 +77,71 @@ enum UsageCopy {
     let m = max(0, Int(now.timeIntervalSince(date) / 60))
     return m < 1 ? "Updated just now" : "Updated \(m)m ago"
   }
+  static func windowLabel(_ window: UsageWindow) -> String {
+    window.scopeLabel + " · " + (duration(window.durationMinutes) ?? "Window not reported")
+  }
+  static func remaining(_ window: UsageWindow) -> String {
+    window.remaining.map { UsageSnapshot.percent($0) + " remaining" } ?? "Remaining not reported"
+  }
+  static func resetLines(_ window: UsageWindow, now: Date) -> [String] {
+    guard window.reset != nil else { return ["Reset not reported"] }
+    var lines = [window.resetText(at: now)]
+    if let reset = window.reset {
+      lines.append("Reset: " + reset.formatted(.dateTime.month(.abbreviated).day().hour().minute()))
+    }
+    return lines
+  }
+  static func observation(_ date: Date, now: Date) -> String {
+    let minutes = max(0, Int(now.timeIntervalSince(date) / 60))
+    if minutes < 1 { return "Observed just now" }
+    if minutes < 60 { return "Observed \(minutes)m ago" }
+    if minutes < 1440 { return "Observed \(minutes / 60)h \(minutes % 60)m ago" }
+    return "Observed \(minutes / 1440)d \((minutes % 1440) / 60)h ago"
+  }
+  static func stateMessage(_ snapshot: UsageSnapshot) -> String {
+    switch snapshot.state {
+    case .loading: "Checking allowance…"
+    case .notInstalled: "Install the command-line provider to view allowance."
+    case .signedOut: "Sign in through the command-line provider."
+    case .notReported: "No remaining time allowance was reported."
+    case .unsupportedBilling: "Llumi can’t monitor this billing mode."
+    case .unsupportedAllowance: "Llumi can’t read this allowance format."
+    case .unavailable: "Couldn’t retrieve allowance. Retry to check."
+    case .live, .stale: noGeneralMessage(snapshot)
+    }
+  }
+  private static func noGeneralMessage(_ snapshot: UsageSnapshot) -> String {
+    let general = snapshot.consumerWindows.filter { $0.scope == .general }
+    if general.isEmpty { return "No general allowance reported." }
+    if general.contains(where: { $0.used != nil && $0.durationMinutes == nil }) {
+      return "General time window isn’t reported."
+    }
+    return "General remaining allowance isn’t reported."
+  }
+  static func staleObservation(_ snapshot: UsageSnapshot, now: Date) -> String? {
+    guard snapshot.state == .stale, let date = snapshot.reading?.date else { return nil }
+    return "Stale · " + observation(date, now: now)
+  }
+  static func detailSummary(_ snapshot: UsageSnapshot, now: Date) -> String {
+    let headline = snapshot.primary.map(remaining) ?? stateMessage(snapshot)
+    var parts = [snapshot.provider.title + ", " + headline, snapshot.state.rawValue]
+    for window in snapshot.detailWindows {
+      parts.append(windowLabel(window))
+      parts.append(remaining(window))
+      parts.append(contentsOf: resetLines(window, now: now))
+    }
+    if let observation = staleObservation(snapshot, now: now) { parts.append(observation) }
+    return parts.joined(separator: ". ")
+  }
 }
 
 // Official provider artwork, bundled locally; no runtime network loading.
 struct NotchProviderMark: View {
   let provider: ProviderID
   var size: CGFloat = 22
+  var assetBundle: Bundle? = nil
   var body: some View {
-    Image(provider == .codex ? "CodexLogo" : "ClaudeLogo")
+    Image(provider == .codex ? "CodexLogo" : "ClaudeLogo", bundle: assetBundle)
       .renderingMode(.template)
       .resizable()
       .scaledToFit()

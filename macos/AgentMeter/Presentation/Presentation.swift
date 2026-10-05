@@ -22,7 +22,7 @@ enum Destination: String, CaseIterable, Identifiable {
     setupCheckRequest += 1
   }
   var manuallyRefreshing = false
-  let preferences = Preferences()
+  let preferences: Preferences
   let updates = UpdatePresentation()
   let loginItem = LoginItem()
   var usage = Dictionary(
@@ -31,6 +31,9 @@ enum Destination: String, CaseIterable, Identifiable {
   var installations: [ProviderID: Installation] = [:]
   var refreshAction: () -> Void = {}
   var resetNotchPositionAction: () -> Void = {}
+  init(defaults: UserDefaults = .standard) {
+    preferences = Preferences(defaults: defaults)
+  }
   var compact: String {
     activity.providers.map { usage[$0]?.compact ?? $0.title }.joined(separator: "  |  ")
   }

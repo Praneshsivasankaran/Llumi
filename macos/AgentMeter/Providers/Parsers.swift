@@ -31,6 +31,7 @@ enum Parsers {
     let a = j["account"]
     if a == .null { throw Failure.signedOut }
     let type = try text(a["type"])
+    if type == "apiKey" { throw Failure.unsupportedBilling }
     guard ["chatgpt", "chatgptAuthTokens"].contains(type) else { throw Failure.incompatible }
     return try .init(
       email: email(a["email"]), organization: "", organizationName: "",
@@ -43,6 +44,9 @@ enum Parsers {
       throw Failure.signedOut
     }
     guard status == 0 else { throw Failure.malformed }
+    if j["authMethod"].string == "api_key" || ["bedrock", "vertex", "foundry"].contains(j["apiProvider"].string ?? "") {
+      throw Failure.unsupportedBilling
+    }
     guard j["authMethod"].string == "claude.ai", j["apiProvider"].string == "firstParty",
       let plan = j["subscriptionType"].string, ["pro", "max", "team", "enterprise"].contains(plan)
     else { throw Failure.incompatible }
@@ -113,84 +117,160 @@ enum Parsers {
     return date
   }
   static func codex(_ j: J) throws -> [UsageWindow] {
-    guard let root = j.object else { throw Failure.malformed }
-    let buckets: [String: J]
-    if root.keys.contains("rateLimitsByLimitId"), j["rateLimitsByLimitId"] != .null {
-      guard let map = j["rateLimitsByLimitId"].object else { throw Failure.malformed }
+    try codexAllowance(j).windows
+  }
+  private static func duration(_ j: J) throws -> Int? {
+    if j == .null { return nil }
+    guard let n = j.number, n.rounded() == n, n > 0, n < 5_256_000 else { throw Failure.malformed }
+    return Int(n)
+  }
+  private static func optionalField<T>(_ parse: () throws -> T?, malformed: inout Bool) -> T? {
+    do { return try parse() } catch { malformed = true; return nil }
+  }
+  private static func hasMetadata(_ value: J) -> Bool {
+    switch value {
+    case .null: false
+    case .object(let object): !object.isEmpty
+    case .array(let array): !array.isEmpty
+    default: true
+    }
+  }
+  // Escape transport separators injectively while retaining familiar IDs for ordinary bucket names.
+  private static func identityBucket(_ bucket: String) -> String {
+    bucket.replacingOccurrences(of: "%", with: "%25").replacingOccurrences(of: ":", with: "%3A")
+  }
+  // Slot names are transport identifiers. Known duration and scope identify equivalent windows.
+  private static func merge(_ window: UsageWindow, into result: inout [UsageWindow], codexMirror: Bool = false) throws {
+    func sameTransportSlot(_ old: UsageWindow) -> Bool {
+      old.id.hasPrefix(identityBucket(old.bucket) + ":") && window.id.hasPrefix(identityBucket(window.bucket) + ":")
+        && old.id.split(separator: ":").last == window.id.split(separator: ":").last
+    }
+    let candidates = result.indices.filter { i in
+      let old = result[i]
+      return old.bucket == window.bucket && old.scope == window.scope
+        && (!codexMirror || !old.id.hasPrefix(identityBucket(old.bucket) + ":legacy:"))
+        && ((old.durationMinutes != nil && old.durationMinutes == window.durationMinutes)
+          || ((old.id == window.id || sameTransportSlot(old)) && (old.durationMinutes == nil || window.durationMinutes == nil)))
+    }
+    let match = candidates.count > 1 && codexMirror
+      ? candidates.first(where: { sameTransportSlot(result[$0]) }) : candidates.first
+    if codexMirror && candidates.count > 1 && match == nil { throw Failure.incompatible }
+    if let i = match {
+      let old = result[i]
+      guard old.used == nil || window.used == nil || old.used == window.used,
+        old.reset == nil || window.reset == nil || old.reset == window.reset
+      else { throw Failure.incompatible }
+      result[i] = try .init(id: old.id, bucket: old.bucket, label: old.label,
+        durationMinutes: old.durationMinutes ?? window.durationMinutes, used: old.used ?? window.used,
+        reset: old.reset ?? window.reset, scope: old.scope)
+    } else { result.append(window) }
+  }
+  static func codexAllowance(_ j: J) throws -> NormalizedUsage {
+    guard j.object != nil else { throw Failure.incompatible }
+    var buckets: [String: J] = [:]
+    if j["rateLimitsByLimitId"] != .null {
+      guard let map = j["rateLimitsByLimitId"].object else { throw Failure.incompatible }
       buckets = map
-    } else {
-      guard j["rateLimits"].object != nil else { throw Failure.incompatible }
-      buckets = [j["rateLimits"]["limitId"].string ?? "codex": j["rateLimits"]]
     }
     guard buckets.count <= 32 else { throw Failure.outputLimit }
+    var legacy: (String, J)?
+    if j["rateLimits"] != .null {
+      guard j["rateLimits"].object != nil else { throw Failure.incompatible }
+      let id = j["rateLimits"]["limitId"] == .null ? "codex" : try text(j["rateLimits"]["limitId"], max: 120)
+      legacy = (id, j["rateLimits"])
+    }
     var result: [UsageWindow] = []
-    for key in buckets.keys.sorted() {
+    var malformed = false
+    var unsupported = hasMetadata(j["credits"]) || hasMetadata(j["spend"])
+    func parseBucket(_ key: String, _ bucket: J, legacyIDs: Bool) throws {
       _ = try text(.string(key), max: 120)
-      let bucket = buckets[key]!
-      guard bucket.object != nil else { throw Failure.malformed }
-      if bucket["limitId"] != .null && bucket["limitId"].string != key { throw Failure.malformed }
-      let label = key == "codex" ? "Main" : (try? text(bucket["limitName"], max: 100)) ?? key
+      guard bucket.object != nil,
+        bucket["limitId"] == .null || bucket["limitId"].string == key
+      else { throw Failure.incompatible }
+      let mapName = try? text(buckets[key]?["limitName"] ?? .null, max: 100)
+      let legacyName = legacy?.0 == key ? try? text(legacy!.1["limitName"], max: 100) : nil
+      if let mapName, let legacyName, mapName != legacyName { throw Failure.incompatible }
+      let label = key == "codex" ? "General" : mapName ?? legacyName ?? "Additional"
+      let scope: UsageScope = key == "codex" ? .general : .additional(label)
+      unsupported = unsupported || hasMetadata(bucket["credits"]) || hasMetadata(bucket["spend"])
       for slot in ["primary", "secondary"] {
         let w = bucket[slot]
         if w == .null { continue }
-        guard w.object != nil else { throw Failure.malformed }
-        let minutes: Int?
-        if w["windowDurationMins"] == .null {
-          minutes = nil
-        } else {
-          guard let n = w["windowDurationMins"].number, n.rounded() == n, n > 0, n < 5_256_000
-          else { throw Failure.malformed }
-          minutes = Int(n)
+        guard let object = w.object else { malformed = true; continue }
+        if !object.isEmpty && !["windowDurationMins", "usedPercent", "resetsAt"].contains(where: { object.keys.contains($0) }) {
+          unsupported = true; continue
         }
-        result.append(
-          try .init(
-            id: key + ":" + slot, bucket: key, label: label, durationMinutes: minutes,
-            used: percent(w["usedPercent"]), reset: unix(w["resetsAt"])))
+        let minutes = optionalField({ try duration(w["windowDurationMins"]) }, malformed: &malformed)
+        let used = optionalField({ try percent(w["usedPercent"]) }, malformed: &malformed)
+        let reset = optionalField({ try unix(w["resetsAt"]) }, malformed: &malformed)
+        let window = try UsageWindow(id: identityBucket(key) + (legacyIDs ? ":legacy:" : ":") + slot, bucket: key, label: label,
+          durationMinutes: minutes, used: used, reset: reset, scope: scope)
+        if legacyIDs { try merge(window, into: &result, codexMirror: true) }
+        else { result.append(window) }
       }
     }
-    guard !result.isEmpty else { throw Failure.incompatible }
-    return result
+    for key in buckets.keys.sorted() { try parseBucket(key, buckets[key]!, legacyIDs: false) }
+    if let legacy { try parseBucket(legacy.0, legacy.1, legacyIDs: !buckets.isEmpty) }
+    if malformed && !result.contains(where: { $0.used != nil }) { throw Failure.malformed }
+    return .init(windows: result, unsupportedAllowance: unsupported)
   }
   static func claude(_ j: J, plan: String) throws -> [UsageWindow] {
-    guard j.object != nil, j["rate_limits_available"].bool == true,
-      j.object?.keys.contains("behaviors") == true, j["behaviors"] == .null,
-      let limits = j["rate_limits"].object
-    else { throw Failure.incompatible }
+    try claudeAllowance(j, plan: plan).windows
+  }
+  static func claudeAllowance(_ j: J, plan: String) throws -> NormalizedUsage {
+    guard j.object != nil, let available = j["rate_limits_available"].bool,
+      j.object?.keys.contains("behaviors") == true, j["behaviors"] == .null else { throw Failure.incompatible }
     guard j["subscription_type"].string == plan else { throw Failure.accountChanged }
     guard j["session"]["total_cost_usd"].number == 0,
       j["session"]["total_api_duration_ms"].number == 0,
       j["session"]["model_usage"].object?.isEmpty == true
     else { throw Failure.incompatible }
+    guard available, j["rate_limits"] != .null else { return .init(windows: []) }
+    guard let limits = j["rate_limits"].object else { throw Failure.incompatible }
     guard limits.count <= 64 else { throw Failure.outputLimit }
     var result: [UsageWindow] = []
+    var malformed = false
+    var unsupported = hasMetadata(limits["extra_usage"] ?? .null)
     for key in limits.keys.sorted() where key != "model_scoped" && key != "extra_usage" {
       let w = limits[key]!
       if w == .null { continue }
-      guard let object = w.object,
-        object.keys.contains("utilization") || object.keys.contains("resets_at")
-      else { continue }
-      let minutes = key == "five_hour" ? 300 : (key.hasPrefix("seven_day") ? 10080 : nil)
-      result.append(
-        try .init(
-          id: key, bucket: "claude",
-          label: try text(.string(key), max: 100).replacingOccurrences(of: "_", with: " "),
-          durationMinutes: minutes, used: percent(w["utilization"]), reset: iso(w["resets_at"])))
+      let known = ["five_hour", "seven_day", "seven_day_sonnet", "seven_day_opus"].contains(key)
+      guard let object = w.object else {
+        if known { malformed = true } else { unsupported = true }
+        continue
+      }
+      if !known && !object.keys.contains("utilization") && !object.keys.contains("resets_at") {
+        unsupported = true; continue
+      }
+      let scope: UsageScope
+      let minutes: Int?
+      switch key {
+      case "five_hour": scope = .general; minutes = 300
+      case "seven_day": scope = .general; minutes = 10080
+      case "seven_day_sonnet": scope = .model("Sonnet"); minutes = 10080
+      case "seven_day_opus": scope = .model("Opus"); minutes = 10080
+      default: scope = .unknown; minutes = nil
+      }
+      var fieldMalformed = false
+      let used = optionalField({ try percent(w["utilization"]) }, malformed: &fieldMalformed)
+      let reset = optionalField({ try iso(w["resets_at"]) }, malformed: &fieldMalformed)
+      malformed = malformed || (scope != .unknown && fieldMalformed)
+      guard (try? text(.string(key), max: 100)) != nil else { unsupported = true; continue }
+      let label = scope == .unknown ? "" : key.replacingOccurrences(of: "_", with: " ")
+      try merge(.init(id: key, bucket: "claude", label: label,
+        durationMinutes: minutes, used: used, reset: reset, scope: scope), into: &result)
     }
     if let scoped = limits["model_scoped"], scoped != .null {
-      guard let a = scoped.array, a.count <= 32 else { throw Failure.malformed }
-      var seen = Set<String>()
+      guard let a = scoped.array, a.count <= 32 else { throw Failure.incompatible }
       for w in a {
-        let name = try text(w["display_name"], max: 100)
-        guard seen.insert(name).inserted else { throw Failure.malformed }
-        result.append(
-          try .init(
-            id: "model:" + name, bucket: "claude", label: name, durationMinutes: nil,
-            used: percent(w["utilization"]), reset: iso(w["resets_at"])))
+        guard let name = try? text(w["display_name"], max: 100), w.object != nil else { malformed = true; continue }
+        let used = optionalField({ try percent(w["utilization"]) }, malformed: &malformed)
+        let reset = optionalField({ try iso(w["resets_at"]) }, malformed: &malformed)
+        try merge(.init(id: "model:" + name, bucket: "claude", label: name, durationMinutes: 10080,
+          used: used, reset: reset, scope: .model(name)), into: &result)
       }
     }
-    guard result.contains(where: { $0.used != nil || $0.reset != nil }) else {
-      throw Failure.incompatible
-    }
-    return result
+    if malformed && !result.contains(where: { $0.isSupported && $0.used != nil }) { throw Failure.malformed }
+    return .init(windows: result, unsupportedAllowance: unsupported)
   }
 }

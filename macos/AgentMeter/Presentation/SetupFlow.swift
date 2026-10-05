@@ -44,7 +44,8 @@ enum SetupStatus: String {
     case .notInstalled: self = .notInstalled
     case .signedOut: self = .signedOut
     case .loading: self = .checking
-    case .stale, .unavailable: self = .unavailable
+    case .stale, .unavailable, .notReported, .unsupportedBilling, .unsupportedAllowance:
+      self = .unavailable
     }
   }
 }
@@ -104,6 +105,12 @@ struct SetupDiagnostic {
     switch snapshot.state {
     case .live where snapshot.reading != nil:
       detected = "yes"; authentication = "verified"; usage = "available"; result = "success"
+    case .notReported where snapshot.reading != nil:
+      detected = "yes"; authentication = "verified"; usage = "not-reported"; result = "success"
+    case .unsupportedAllowance where snapshot.reading != nil:
+      detected = "yes"; authentication = "verified"; usage = "unsupported"; result = "success"
+    case .unsupportedBilling:
+      detected = "yes"; authentication = "unsupported"; usage = "unsupported"; result = "failure"
     case .notInstalled:
       detected = "no"; authentication = "unknown"; usage = "unavailable"; result = "failure"
     case .signedOut:

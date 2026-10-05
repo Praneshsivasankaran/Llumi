@@ -1,4 +1,5 @@
 # Provider semantics
+The macOS 1.1.3 allowance correction follows [the approved allowance requirements](allowance-113.md). These supersede the earlier Mac primary/weekly rules below; Windows is parked at its current behavior.
 A normalized reading carries provider, window identity, duration where known, remaining percentage, reset instant, observed instant, freshness and provider status. Identity continuity is verified in memory; account or plan changes invalidate incompatible observations. No account identifiers belong in presentation or logs.
 
 Codex allowance comes from structured provider-owned rate-limit retrieval. Main/core and additional buckets remain separate. A missing main window cannot be synthesized or replaced by Spark. Never assume a five-hour window exists.

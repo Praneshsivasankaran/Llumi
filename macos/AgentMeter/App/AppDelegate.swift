@@ -116,6 +116,9 @@ import SwiftUI
     let open = NSMenuItem(title: "Open Llumi", action: #selector(openMain), keyEquivalent: "0")
     open.target = self
     windowMenu.addItem(open)
+    let details = NSMenuItem(title: "Allowance Details", action: #selector(openMain), keyEquivalent: "1")
+    details.target = self
+    windowMenu.addItem(details)
     windowMenu.addItem(
       NSMenuItem(title: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
     windowMenu.addItem(

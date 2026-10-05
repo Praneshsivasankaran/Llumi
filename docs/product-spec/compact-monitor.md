@@ -1,4 +1,5 @@
 # Compact monitor
+The macOS 1.1.3 allowance correction uses [the approved allowance selection and full-details rules](allowance-113.md). These supersede the earlier Mac hover/weekly rules below, while completed dragging and activity behavior stay intact. Windows remains parked.
 macOS 1.1.3 permits dragging anywhere across connected displays after a five-point movement threshold. A click still opens Llumi. Dragging suspends hover transitions without stealing keyboard focus. Persist display identity and a normalized center/top anchor, retain it through resizing and relaunch, clamp to usable bounds, and fall back to the main display if the saved display disappears. Settings exposes Reset Position. Disabled providers never enter the monitor. Windows behavior is unchanged.
 
 The compact monitor is contextual and optional. Its content is the same across platforms: provider logo plus primary percentage; one or both providers according to activity. Full names remain available to accessibility. Unknown is a dash; stale values have an explicit indicator and a stale detail state.

@@ -82,7 +82,7 @@ private struct ProviderSection: View {
         Spacer(minLength: 4)
         Text(snapshot.state.rawValue).font(.caption).foregroundStyle(.secondary)
       }
-      if let reading = snapshot.reading {
+      if snapshot.reading != nil {
         let primary = snapshot.primary
         if let primary {
           HStack(alignment: .firstTextBaseline, spacing: 5) {
@@ -92,40 +92,27 @@ private struct ProviderSection: View {
             Text("remaining").font(.callout).foregroundStyle(.secondary)
           }
           AllowanceBar(remaining: primary.remaining, color: snapshot.provider.accent)
+        } else {
+          Text(UsageCopy.stateMessage(snapshot)).font(.callout).foregroundStyle(.secondary)
+            .fixedSize(horizontal: false, vertical: true)
         }
         VStack(alignment: .leading, spacing: 16) {
-          ForEach(snapshot.consumerWindows.sorted { a, b in a.id == primary?.id && b.id != primary?.id }) {
-            window in
+          ForEach(snapshot.consumerWindows) { window in
             VStack(alignment: .leading, spacing: 5) {
-              HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(label(window)).font(
-                  .callout.weight(window.id == primary?.id ? .medium : .regular))
-                Spacer(minLength: 4)
-                if window.id != primary?.id {
-                  Text(window.remaining.map(UsageSnapshot.percent) ?? "--").font(
-                    .callout.weight(.medium)
-                  ).monospacedDigit()
-                }
+              Text(UsageCopy.windowLabel(window)).font(
+                .callout.weight(window.id == primary?.id ? .medium : .regular))
+              Text(UsageCopy.remaining(window)).font(.callout.weight(.medium)).monospacedDigit()
+              ForEach(UsageCopy.resetLines(window, now: now), id: \.self) { line in
+                Text(line).font(.caption).foregroundStyle(.secondary)
               }
-              Text(window.resetText(at: now)).font(.caption).foregroundStyle(.secondary)
-              if let reset = window.reset, reset > now {
-                Text(reset, format: .dateTime.month(.abbreviated).day().hour().minute()).font(
-                  .caption2
-                ).foregroundStyle(.secondary)
-              }
-            }
+            }.fixedSize(horizontal: false, vertical: true)
           }
         }
-        if snapshot.consumerWindows.isEmpty {
-          Text(unavailable).font(.callout).foregroundStyle(.secondary)
-        }
-        if snapshot.state == .stale {
-          Text(UsageCopy.updated(reading.date, now: now) + " · last verified allowance").font(
-            .caption
-          ).foregroundStyle(.secondary)
+        if let observation = UsageCopy.staleObservation(snapshot, now: now) {
+          Text(observation).font(.caption).foregroundStyle(.secondary)
         }
       } else {
-        Text(snapshot.state == .loading ? "Checking allowance…" : unavailable).font(.callout)
+        Text(UsageCopy.stateMessage(snapshot)).font(.callout)
           .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true).padding(
             .vertical, 5)
       }
@@ -138,17 +125,8 @@ private struct ProviderSection: View {
       .frame(minHeight: minimumHeight, alignment: .topLeading)
       .background(.background.opacity(0.65), in: RoundedRectangle(cornerRadius: 13))
       .overlay(RoundedRectangle(cornerRadius: 13).stroke(.primary.opacity(0.07), lineWidth: 1))
-  }
-  private var unavailable: String {
-    switch snapshot.state {
-    case .notInstalled: "Install the command-line provider to view allowance."
-    case .signedOut: "Sign in through the command-line provider."
-    default: "Verified allowance is temporarily unavailable."
-    }
-  }
-  private func label(_ window: UsageWindow) -> String {
-    let duration = UsageCopy.duration(window.durationMinutes)
-    if snapshot.provider == .codex { return window.label + (duration.map { " · \($0)" } ?? "") }
-    return window.claudeDisplayLabel ?? ""
+      .focusable()
+      .accessibilityElement(children: .ignore)
+      .accessibilityLabel(UsageCopy.detailSummary(snapshot, now: now))
   }
 }

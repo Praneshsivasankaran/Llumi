@@ -9,6 +9,7 @@ private final class MonitorPanel: NSPanel {
 }
 final class TrackingSurface: NSView {
   var appearanceChanged: () -> Void = {}
+  var allowanceAccessibility: () -> String = { "" }
   override func viewDidChangeEffectiveAppearance() {
     super.viewDidChangeEffectiveAppearance()
     appearanceChanged()
@@ -22,6 +23,7 @@ final class TrackingSurface: NSView {
   var released: (Bool) -> Void = { _ in }
   private var gesture: MonitorDragGesture?
   private var tracking: NSTrackingArea?
+  private var forwardingScroll = false
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
     if let tracking { removeTrackingArea(tracking) }
@@ -31,6 +33,17 @@ final class TrackingSurface: NSView {
   }
   override func hitTest(_ point: NSPoint) -> NSView? {
     bounds.contains(convert(point, from: superview)) ? self : nil
+  }
+  override func scrollWheel(with event: NSEvent) {
+    guard !forwardingScroll else { super.scrollWheel(with: event); return }
+    let point = convert(event.locationInWindow, from: nil)
+    if let target = super.hitTest(point), target !== self {
+      forwardingScroll = true
+      defer { forwardingScroll = false }
+      target.scrollWheel(with: event)
+    } else {
+      super.scrollWheel(with: event)
+    }
   }
   override func mouseEntered(with event: NSEvent) { hover(true) }
   override func mouseExited(with event: NSEvent) { hover(false) }
@@ -63,6 +76,7 @@ final class TrackingSurface: NSView {
     clicked()
     return true
   }
+  override func accessibilityLabel() -> String? { allowanceAccessibility() }
 }
 @MainActor final class NotchController {
   private let panel = MonitorPanel(
@@ -111,6 +125,11 @@ final class TrackingSurface: NSView {
     surface.layer?.masksToBounds = true
     surface.setAccessibilityElement(true)
     surface.setAccessibilityRole(.button)
+    surface.allowanceAccessibility = { [weak self] in
+      guard let self else { return "Allowance details" }
+      return self.presentation.rows.map(\.accessibility).joined(separator: ". ")
+        + ". Open allowance details"
+    }
     surface.clicked = { [weak self] in self?.openFromClick() }
     surface.hover = { [weak self] inside in self?.scheduleHover(inside) }
     surface.pressed = { [weak self] point in self?.press(at: point) }
@@ -211,8 +230,6 @@ final class TrackingSurface: NSView {
     presentation.rows = presentation.state.providers.map {
       ProviderGlance(snapshot: model.usage[$0] ?? UsageSnapshot(provider: $0))
     }
-    surface.setAccessibilityLabel(
-      presentation.rows.map(\.accessibility).joined(separator: ", ") + ". Open Llumi")
     if old != presentation.state {
       transition(immediate: !model.preferences.notchEnabled)
     } else if presentation.state.phase != .hidden {
@@ -265,16 +282,18 @@ final class TrackingSurface: NSView {
     let expanded = presentation.state.phase == .expanded
     let measured = presentation.rows.reduce(CGFloat(0)) { total, row in
       total
-        + (row.percentage as NSString).size(withAttributes: [
+        + (row.compactText as NSString).size(withAttributes: [
           .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)
         ]).width + 26 + (row.snapshot.state == .stale ? 11 : 0)
     }
     let width = min(
       screen.visibleFrame.width,
       expanded
-        ? (presentation.rows.count > 1 ? 390 : 228)
+        ? (presentation.rows.count > 1 ? 540 : 292)
         : max(112, measured + 40 + CGFloat(max(0, presentation.rows.count - 1)) * 25))
-    let height: CGFloat = expanded ? (presentation.state.providers.contains(.claude) ? 174 : 144) : 34
+    let height: CGFloat = expanded
+      ? NotchDetailLayout.height(rows: presentation.rows, availableHeight: screen.visibleFrame.height)
+      : 34
     if let anchor {
       return MonitorGeometry.frame(
         size: CGSize(width: width, height: height), anchor: anchor, visible: screen.visibleFrame)
