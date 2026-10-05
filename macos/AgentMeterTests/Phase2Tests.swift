@@ -1,6 +1,7 @@
 import AppKit
 import Foundation
 import XCTest
+import SwiftUI
 
 @MainActor final class SetupTests: XCTestCase {
   private func suite(_ body: (UserDefaults) -> Void) {
@@ -72,24 +73,154 @@ import XCTest
       for step in expected.reversed() { XCTAssertEqual(flow.step, step); flow.back() }
     }
   }
-  func testStatusRequiresCurrentVerifiedReading() throws {
+  func testSignInReadinessDoesNotRequireAnAllowance() throws {
     var s = UsageSnapshot(provider: .codex)
-    XCTAssertEqual(SetupStatus(snapshot: s), .checking)
+    XCTAssertEqual(SetupStatus(snapshot: s), .notChecked)
     s.apply(.fail(.notInstalled)); XCTAssertEqual(SetupStatus(snapshot: s), .notInstalled)
     s.apply(.fail(.signedOut)); XCTAssertEqual(SetupStatus(snapshot: s), .signedOut)
     s.apply(.fail(.incompatible)); XCTAssertEqual(SetupStatus(snapshot: s), .unavailable)
     s.apply(.success(.init(binding: "synthetic", windows: [], date: Date())))
-    XCTAssertEqual(SetupStatus(snapshot: s), .unavailable)
+    XCTAssertEqual(SetupStatus(snapshot: s), .ready)
+    XCTAssertEqual(SetupMonitoring.text(s), "Allowances not reported")
     let window = try UsageWindow(id: "codex:primary", bucket: "codex", label: "Main",
       durationMinutes: 300, used: 0, reset: nil)
     s.apply(.success(.init(binding: "synthetic", windows: [window], date: Date())))
     XCTAssertEqual(SetupStatus(snapshot: s), .ready)
     s.apply(.success(.init(binding: "synthetic", windows: [], date: Date())))
-    XCTAssertEqual(SetupStatus(snapshot: s), .unavailable)
+    XCTAssertEqual(SetupStatus(snapshot: s), .ready)
     s.apply(.fail(.timeout, binding: "synthetic"))
-    XCTAssertEqual(SetupStatus(snapshot: s), .unavailable)
+    XCTAssertEqual(SetupStatus(snapshot: s), .ready)
+    XCTAssertEqual(SetupMonitoring.text(s), "Allowances unavailable")
+    s.apply(.fail(.timeout))
     s.state = .live; s.reading = nil
     XCTAssertEqual(SetupStatus(snapshot: s), .unavailable)
+  }
+  func testUnsupportedAllowanceAndKnownBillingModeRemainDistinctFromAuthentication() {
+    for provider in ProviderID.allCases {
+      var snapshot = UsageSnapshot(provider: provider)
+      snapshot.apply(.success(.init(binding: "fixture", windows: [], date: Date(),
+        availability: .unsupportedAllowance)))
+      XCTAssertEqual(SetupStatus(snapshot: snapshot), .ready)
+      XCTAssertEqual(SetupMonitoring.text(snapshot), "Allowance format not supported")
+      XCTAssertEqual(SetupDiagnostic(snapshot).authentication, "verified")
+      snapshot.apply(.fail(.unsupportedBilling))
+      XCTAssertEqual(SetupStatus(snapshot: snapshot), .unsupportedBilling)
+      XCTAssertEqual(SetupMonitoring.text(snapshot), "This billing mode can’t be monitored")
+      XCTAssertEqual(SetupDiagnostic(snapshot).authentication, "mode-detected")
+      XCTAssertFalse(snapshot.authenticationVerified)
+    }
+  }
+  func testVerifiedRetrievalFailureRetainsReadinessOnlyAndUnverifiedFailureClearsIt() throws {
+    let window = try UsageWindow(id: "codex:primary", bucket: "codex", label: "", durationMinutes: 300,
+      used: 20, reset: nil)
+    for failure in [Failure.timeout, .rateLimited, .malformed, .unavailable] {
+      var snapshot = UsageSnapshot(provider: .codex)
+      snapshot.apply(.success(.init(binding: "fixture", windows: [window], date: Date())))
+      snapshot.apply(.fail(failure, binding: "fixture"))
+      XCTAssertEqual(snapshot.state, .stale)
+      XCTAssertEqual(SetupStatus(snapshot: snapshot), .ready)
+      XCTAssertEqual(SetupMonitoring.text(snapshot), "Last known allowances — stale")
+      XCTAssertEqual(SetupDiagnostic(snapshot).authentication, "verified")
+      snapshot.apply(.fail(failure))
+      XCTAssertEqual(SetupStatus(snapshot: snapshot), .unavailable)
+      XCTAssertEqual(SetupDiagnostic(snapshot).authentication, "unknown")
+      XCTAssertNil(snapshot.reading)
+    }
+    for failure in [Failure.signedOut, .notInstalled, .accountChanged] {
+      var snapshot = UsageSnapshot(provider: .codex)
+      snapshot.apply(.success(.init(binding: "fixture", windows: [window], date: Date())))
+      snapshot.apply(.fail(failure, binding: "fixture"))
+      XCTAssertFalse(snapshot.authenticationVerified)
+      XCTAssertNil(snapshot.reading)
+    }
+  }
+  func testReadinessDoesNotInferAuthenticationFromAbsentOrOldReading() throws {
+    var snapshot = UsageSnapshot(provider: .codex)
+    snapshot.apply(.success(.init(binding: "", windows: [], date: Date())))
+    XCTAssertFalse(snapshot.authenticationVerified)
+    XCTAssertEqual(SetupStatus(snapshot: snapshot), .unavailable)
+    snapshot.apply(.fail(.timeout, binding: "new-verified-account"))
+    XCTAssertEqual(SetupStatus(snapshot: snapshot), .ready)
+    XCTAssertNil(snapshot.reading)
+    snapshot.refreshStatus = .init(checking: true)
+    XCTAssertEqual(SetupStatus(snapshot: snapshot), .checking)
+    XCTAssertEqual(SetupMonitoring.text(snapshot), "Checking allowances…")
+  }
+  func testRetryPresentationExplainsCooldownWithoutClaimingAQueryRan() {
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    var snapshot = UsageSnapshot(provider: .codex)
+    snapshot.refreshStatus = .init(retryAt: now.addingTimeInterval(900), retryReason: .cooldown)
+    XCTAssertTrue(SetupRetryPresentation.canRetry(snapshot, at: now))
+    XCTAssertEqual(SetupRetryPresentation.message(snapshot, at: now),
+      "Automatic retry in 15m. Retry checks now.")
+    snapshot.refreshStatus = .init(retryAt: now.addingTimeInterval(60), retryReason: .rateLimited)
+    XCTAssertEqual(SetupStatus(snapshot: snapshot), .notChecked)
+    XCTAssertFalse(SetupRetryPresentation.canRetry(snapshot, at: now))
+    XCTAssertEqual(SetupRetryPresentation.message(snapshot, at: now), "Rate limited. Retry in 1m.")
+    XCTAssertEqual(SetupRetryPresentation.message(snapshot, at: now.addingTimeInterval(51)),
+      "Rate limited. Retry in 9s.")
+    XCTAssertTrue(SetupRetryPresentation.canRetry(snapshot, at: now.addingTimeInterval(60)))
+    XCTAssertNil(SetupRetryPresentation.message(snapshot, at: now.addingTimeInterval(60)))
+    XCTAssertFalse(SetupRetryPresentation.canRetry(snapshot, at: now.addingTimeInterval(-3600)))
+    XCTAssertTrue(SetupRetryPresentation.message(snapshot, at: now.addingTimeInterval(-3600))?
+      .hasPrefix("Rate limited. Retry after ") == true)
+    snapshot.refreshStatus = .init(retryAt: now.addingTimeInterval(10), retryReason: .manualCooldown)
+    XCTAssertFalse(SetupRetryPresentation.canRetry(snapshot, at: now))
+    XCTAssertEqual(SetupRetryPresentation.message(snapshot, at: now), "Retry in 10s.")
+    snapshot.refreshStatus = .init(checking: true)
+    XCTAssertFalse(SetupRetryPresentation.canRetry(snapshot, at: now))
+    XCTAssertEqual(SetupRetryPresentation.message(snapshot, at: now), "Checking…")
+  }
+  func testSetupDiagnosticsExcludeRetryDeadlinesAndAccountBindings() {
+    var snapshot = UsageSnapshot(provider: .codex)
+    snapshot.apply(.fail(.rateLimited, binding: "private-secret-account"))
+    snapshot.refreshStatus = .init(retryAt: Date(timeIntervalSince1970: 2_000_000_000), retryReason: .rateLimited)
+    let report = SetupDiagnostics.report([.codex: snapshot], version: "1.1.3", build: "3")
+    XCTAssertTrue(report.contains("Authentication: verified"))
+    XCTAssertTrue(report.contains("Usage: unavailable"))
+    for secret in ["private-secret-account", "2000000000", "retryAt"] { XCTAssertFalse(report.contains(secret)) }
+  }
+  func testIsolatedSetupStatusScreens() async throws {
+    let directory = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
+      .appendingPathComponent("Llumi113Review/SetupRetryFix/Screens", isDirectory: true)
+    guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("capture-request").path)
+    else { throw XCTSkip("Setup status fixture renders require local review opt-in.") }
+    let name = "Llumi-setup-review-" + UUID().uuidString
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: name))
+    defer { defaults.removePersistentDomain(forName: name) }
+    let model = Presentation(defaults: defaults)
+    var codex = UsageSnapshot(provider: .codex), claude = UsageSnapshot(provider: .claude)
+    codex.apply(.success(.init(binding: "fixture-a", windows: [], date: Date(), availability: .notReported)))
+    claude.apply(.fail(.unsupportedBilling))
+    model.usage = [.codex: codex, .claude: claude]
+    try await renderSetup(model, directory: directory, name: "missing-and-unsupported")
+    codex.apply(.fail(.rateLimited, binding: "fixture-a"))
+    codex.refreshStatus = .init(retryAt: Date().addingTimeInterval(60), retryReason: .rateLimited)
+    claude.apply(.fail(.signedOut))
+    claude.refreshStatus = .init(retryAt: Date().addingTimeInterval(600), retryReason: .cooldown)
+    model.usage = [.codex: codex, .claude: claude]
+    try await renderSetup(model, directory: directory, name: "retry-waiting")
+  }
+  private func renderSetup(_ model: Presentation, directory: URL, name: String) async throws {
+    _ = NSApplication.shared
+    let view = CheckSetupView(model: model).frame(width: 540)
+      .background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(.light)
+    let host = NSHostingView(rootView: view)
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 380),
+      styleMask: [.titled], backing: .buffered, defer: false)
+    window.appearance = NSAppearance(named: .aqua)
+    window.isReleasedWhenClosed = false
+    window.contentView = host
+    host.frame = NSRect(x: 0, y: 0, width: 540, height: 380)
+    defer { window.close() }
+    window.layoutIfNeeded(); host.layoutSubtreeIfNeeded()
+    try await Task.sleep(for: .milliseconds(250))
+    host.layoutSubtreeIfNeeded()
+    let bitmap = try XCTUnwrap(host.bitmapImageRepForCachingDisplay(in: host.bounds))
+    host.cacheDisplay(in: host.bounds, to: bitmap)
+    let png = try XCTUnwrap(bitmap.representation(using: .png, properties: [:]))
+    try png.write(to: directory.appendingPathComponent(name + ".png"), options: .atomic)
+    window.orderOut(nil)
   }
   func testOnboardingSettingsUseExistingPreferencesAndDoNotCompleteEarly() {
     suite { d in
@@ -685,5 +816,215 @@ private actor Scheduler113Source: UsageSource {
     XCTAssertEqual(snapshot[.codex]?.failure, .timeout)
     XCTAssertNil(snapshot[.codex]?.reading)
     await store.stop(); await waitForTimers(timers, count: 0)
+  }
+  func testExplicitRetryFindsInstallationOrLoginDuringMaximumBackgroundBackoff() async throws {
+    for failure in [Failure.notInstalled, .signedOut] {
+      let clock = Scheduler113Clock(), timers = Scheduler113Timers(), source = Scheduler113Source()
+      let store = UsageStore(sources: [.codex: source], now: { clock.now() },
+        timerSleep: { try await timers.sleep($0) }) { _ in }
+      for attempt in 0..<6 {
+        await source.append(.fail(failure))
+        await store.refresh(.codex); await store.waitForIdle()
+        let snapshot = await store.snapshot()
+        let deadline = try XCTUnwrap(snapshot[.codex]?.refreshStatus.retryAt)
+        if attempt < 5 { clock.advance(deadline.timeIntervalSince(clock.now())) }
+      }
+      let before = await store.snapshot()
+      XCTAssertEqual(before[.codex]?.refreshStatus.retryReason, .cooldown)
+      XCTAssertEqual(before[.codex]?.refreshStatus.retryAt, clock.now().addingTimeInterval(900))
+      await source.append(try reading("new-login", at: clock.now()))
+      await store.refresh(.codex, intent: .userInitiated); await store.waitForIdle()
+      let after = await store.snapshot(), calls = await source.calls
+      XCTAssertEqual(calls, 7)
+      XCTAssertEqual(after[.codex]?.state, .live)
+      XCTAssertEqual(after[.codex]?.reading?.binding, "new-login")
+      XCTAssertEqual(after[.codex]?.refreshStatus.retryReason, .manualCooldown)
+      await waitForTimers(timers, count: 0)
+      clock.advance(900); await timers.fire(); await store.waitForIdle()
+      let noObsoleteRetry = await source.calls
+      XCTAssertEqual(noObsoleteRetry, 7)
+      await store.stop()
+    }
+  }
+  func testExplicitRetryCoalescesAndUsesIndependentTenSecondClickCadence() async throws {
+    let clock = Scheduler113Clock(), timers = Scheduler113Timers(), source = Scheduler113Source()
+    await source.append(try reading("A", at: clock.now()), delay: 0.01)
+    await source.append(try reading("B", at: clock.now()))
+    let store = UsageStore(sources: [.codex: source], now: { clock.now() },
+      timerSleep: { try await timers.sleep($0) }) { _ in }
+    await store.refresh(.codex, intent: .userInitiated)
+    let checking = await store.snapshot()
+    XCTAssertTrue(checking[.codex]?.refreshStatus.checking == true)
+    for _ in 0..<20 { await store.refresh(.codex, intent: .userInitiated) }
+    await store.waitForIdle()
+    for _ in 0..<20 { await store.refresh(.codex, intent: .userInitiated) }
+    let limited = await store.snapshot(), firstCalls = await source.calls
+    XCTAssertEqual(firstCalls, 1)
+    XCTAssertFalse(limited[.codex]?.refreshStatus.checking == true)
+    XCTAssertEqual(limited[.codex]?.refreshStatus.retryReason, .manualCooldown)
+    XCTAssertEqual(limited[.codex]?.refreshStatus.retryAt, clock.now().addingTimeInterval(10))
+    clock.advance(9); await store.refresh(.codex, intent: .userInitiated)
+    let beforeDeadline = await source.calls
+    XCTAssertEqual(beforeDeadline, 1)
+    clock.advance(1); await store.refresh(.codex, intent: .userInitiated)
+    await store.waitForIdle()
+    let calls = await source.calls, maximum = await source.maximumActive
+    XCTAssertEqual(calls, 2); XCTAssertEqual(maximum, 1)
+    let fresh = await store.snapshot()
+    XCTAssertEqual(fresh[.codex]?.reading?.binding, "B")
+    await store.stop(); await waitForTimers(timers, count: 0)
+  }
+  func testHardRateLimitDeadlineSurvivesGenericFailuresAndSuccessUntilExpired() throws {
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    var policy = UsageRefreshPolicy()
+    policy.record(.fail(.rateLimited), at: now)
+    let hardDeadline = now.addingTimeInterval(60)
+    policy.record(.fail(.notInstalled), at: now.addingTimeInterval(1))
+    XCTAssertEqual(policy.rateLimitAfter, hardDeadline)
+    policy.record(try reading("A", at: now.addingTimeInterval(2)), at: now.addingTimeInterval(2))
+    XCTAssertNil(policy.retryAfter)
+    XCTAssertEqual(policy.rateLimitAfter, hardDeadline)
+    XCTAssertEqual(policy.blockedStatus(at: now.addingTimeInterval(59), intent: .userInitiated),
+      UsageRefreshStatus(retryAt: hardDeadline, retryReason: .rateLimited))
+    XCTAssertFalse(policy.allowsRefresh(at: now.addingTimeInterval(59)))
+    XCTAssertEqual(policy.automaticRetryAt(at: now), hardDeadline)
+    XCTAssertTrue(policy.allowsRefresh(at: hardDeadline, intent: .userInitiated))
+    policy.record(try reading("A", at: hardDeadline), at: hardDeadline)
+    XCTAssertNil(policy.rateLimitAfter)
+  }
+  func testBackgroundCooldownCannotHideTheActiveExplicitRetryClickCadence() async throws {
+    let clock = Scheduler113Clock(), timers = Scheduler113Timers(), source = Scheduler113Source()
+    await source.append(.fail(.unavailable))
+    await source.append(try reading("A", at: clock.now()))
+    let store = UsageStore(sources: [.codex: source], now: { clock.now() },
+      timerSleep: { try await timers.sleep($0) }) { _ in }
+    await store.refresh(.codex, intent: .userInitiated); await store.waitForIdle()
+    await store.refresh(.codex)
+    let initiallyBlocked = await store.snapshot()
+    XCTAssertEqual(initiallyBlocked[.codex]?.refreshStatus.retryReason, .manualCooldown)
+    XCTAssertEqual(initiallyBlocked[.codex]?.refreshStatus.retryAt, clock.now().addingTimeInterval(10))
+    clock.advance(9); await store.refresh(.codex)
+    let stillBlocked = await store.snapshot()
+    XCTAssertEqual(stillBlocked[.codex]?.refreshStatus.retryReason, .manualCooldown)
+    let firstCalls = await source.calls
+    XCTAssertEqual(firstCalls, 1)
+    clock.advance(1); await store.refresh(.codex)
+    let backgroundWaiting = await store.snapshot()
+    XCTAssertEqual(backgroundWaiting[.codex]?.refreshStatus.retryReason, .cooldown)
+    await store.refresh(.codex, intent: .userInitiated); await store.waitForIdle()
+    let finalCalls = await source.calls
+    XCTAssertEqual(finalCalls, 2)
+    await store.stop(); await waitForTimers(timers, count: 0)
+  }
+  func testExplicitRetryHonorsRateLimitAcrossProviderToggleAndSleepWithoutBlockingOtherProvider() async throws {
+    let clock = Scheduler113Clock(), timers = Scheduler113Timers()
+    let codex = Scheduler113Source(), claude = Scheduler113Source()
+    await codex.append(.fail(.rateLimited))
+    await codex.append(try reading("new-account", at: clock.now()))
+    await claude.append(try reading("independent", at: clock.now()))
+    let store = UsageStore(sources: [.codex: codex, .claude: claude], now: { clock.now() },
+      timerSleep: { try await timers.sleep($0) }) { _ in }
+    await store.refresh(.codex); await store.waitForIdle()
+    await store.refresh(intent: .userInitiated); await store.waitForIdle()
+    let waiting = await store.snapshot()
+    XCTAssertEqual(waiting[.codex]?.refreshStatus.retryReason, .rateLimited)
+    XCTAssertEqual(waiting[.codex]?.refreshStatus.retryAt, clock.now().addingTimeInterval(60))
+    let codexCalls = await codex.calls, claudeCalls = await claude.calls
+    XCTAssertEqual(codexCalls, 1); XCTAssertEqual(claudeCalls, 1)
+    await store.setEnabledProviders([.claude])
+    let disabled = await store.snapshot()
+    XCTAssertNil(disabled[.codex]?.reading)
+    XCTAssertEqual(disabled[.codex]?.refreshStatus, UsageRefreshStatus())
+    await store.setEnabledProviders([.codex, .claude])
+    for _ in 0..<20 { await store.refresh(.codex, intent: .userInitiated) }
+    await store.suspend(); await waitForTimers(timers, count: 0)
+    await store.resume(); await store.waitForIdle()
+    await store.refresh(.codex, intent: .userInitiated)
+    let preserved = await store.snapshot(), beforeDeadline = await codex.calls
+    XCTAssertEqual(beforeDeadline, 1)
+    XCTAssertEqual(preserved[.codex]?.refreshStatus.retryReason, .rateLimited)
+    clock.advance(60)
+    await store.refresh(.codex, intent: .userInitiated); await store.waitForIdle()
+    let after = await store.snapshot(), finalCalls = await codex.calls
+    XCTAssertEqual(finalCalls, 2)
+    XCTAssertEqual(after[.codex]?.reading?.binding, "new-account")
+    await store.stop(); await waitForTimers(timers, count: 0)
+  }
+  func testExplicitRetryAndExpiredErrorTimerCannotStartConcurrentQueries() async throws {
+    let clock = Scheduler113Clock(), timers = Scheduler113Timers(), source = Scheduler113Source()
+    await source.append(.fail(.unavailable))
+    await source.append(try reading("A", at: clock.now()), delay: 0.01)
+    let store = UsageStore(sources: [.codex: source], now: { clock.now() },
+      timerSleep: { try await timers.sleep($0) }) { _ in }
+    await store.refresh(); await store.waitForIdle(); await waitForTimers(timers, count: 1)
+    clock.advance(30)
+    await store.refresh(.codex, intent: .userInitiated)
+    await timers.fire()
+    for _ in 0..<20 { await store.refresh(.codex, intent: .userInitiated) }
+    await store.waitForIdle(); await waitForTimers(timers, count: 0)
+    let calls = await source.calls, maximum = await source.maximumActive
+    XCTAssertEqual(calls, 2); XCTAssertEqual(maximum, 1)
+    await store.stop()
+  }
+  func testExplicitRetryKeepsOneFollowUpWhenReportedResetPassesDuringItsQuery() async throws {
+    let clock = Scheduler113Clock(), timers = Scheduler113Timers(), source = Scheduler113Source()
+    let reset = clock.now().addingTimeInterval(10)
+    await source.append(try reading("A", at: clock.now(), reset: reset))
+    await source.append(try reading("A", at: clock.now(), reset: reset), delay: 0.01)
+    await source.append(try reading("A", at: reset.addingTimeInterval(1), reset: reset))
+    let store = UsageStore(sources: [.codex: source], now: { clock.now() },
+      timerSleep: { try await timers.sleep($0) }) { _ in }
+    await store.refresh(); await store.waitForIdle(); await waitForTimers(timers, count: 1)
+    await store.refresh(.codex, intent: .userInitiated)
+    await waitForCalls(source, count: 2)
+    clock.advance(11); await timers.fire()
+    await store.waitForIdle()
+    let calls = await source.calls, maximum = await source.maximumActive
+    XCTAssertEqual(calls, 3); XCTAssertEqual(maximum, 1)
+    await store.stop(); await waitForTimers(timers, count: 0)
+  }
+  func testToggleAndWakeCannotBypassManualMinimumAndDeferOnlyAnActualRequest() async throws {
+    for wake in [false, true] {
+      let clock = Scheduler113Clock(), timers = Scheduler113Timers(), source = Scheduler113Source()
+      await source.append(try reading("A", at: clock.now()))
+      await source.append(try reading("B", at: clock.now()))
+      let store = UsageStore(sources: [.codex: source], now: { clock.now() },
+        timerSleep: { try await timers.sleep($0) }) { _ in }
+      await store.refresh(.codex, intent: .userInitiated); await store.waitForIdle()
+      // A successful explicit check alone must not create a follow-up timer.
+      await waitForTimers(timers, count: 0)
+      await store.refresh(.codex, onlyIfOlderThan: 15)
+      await waitForTimers(timers, count: 0)
+      if wake {
+        await store.suspend(); await store.resume()
+      } else {
+        await store.setEnabledProviders([])
+        await store.setEnabledProviders([.codex])
+      }
+      await store.waitForIdle()
+      let blocked = await store.snapshot(), initialCalls = await source.calls
+      XCTAssertEqual(initialCalls, 1)
+      XCTAssertEqual(blocked[.codex]?.refreshStatus.retryReason, .manualCooldown)
+      XCTAssertEqual(blocked[.codex]?.refreshStatus.retryAt, clock.now().addingTimeInterval(10))
+      for _ in 0..<20 {
+        await store.refresh(.codex)
+        await store.refresh(.codex, intent: .userInitiated)
+      }
+      await waitForTimers(timers, count: 1)
+      clock.advance(9); await timers.fire()
+      await waitForTimers(timers, count: 1)
+      let beforeDeadline = await source.calls
+      XCTAssertEqual(beforeDeadline, 1)
+      clock.advance(1); await timers.fire(); await waitForCalls(source, count: 2)
+      await store.waitForIdle(); await waitForTimers(timers, count: 0)
+      let final = await store.snapshot(), calls = await source.calls
+      let maximum = await source.maximumActive
+      XCTAssertEqual(calls, 2); XCTAssertEqual(maximum, 1)
+      XCTAssertEqual(final[.codex]?.reading?.binding, "B")
+      clock.advance(900); await timers.fire(); await store.waitForIdle()
+      let noRepeatedRefresh = await source.calls
+      XCTAssertEqual(noRepeatedRefresh, 2)
+      await store.stop()
+    }
   }
 }

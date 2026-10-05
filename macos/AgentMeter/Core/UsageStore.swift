@@ -1,14 +1,26 @@
 import Foundation
 
-// Each provider has its own bounded retry deadline. Every refresh entry point
-// observes it, including activity, manual requests and reported reset timers.
+enum UsageRefreshIntent: Sendable, Equatable { case automatic, userInitiated }
+enum UsageRetryReason: Sendable, Equatable { case rateLimited, cooldown, manualCooldown }
+struct UsageRefreshStatus: Sendable, Equatable {
+  var checking = false
+  var retryAt: Date?
+  var retryReason: UsageRetryReason?
+}
+
+// Explicit checks can recover after installation or login without waiting for
+// background error backoff. Provider rate limits and a separate click cadence
+// remain mandatory across every entry point and provider toggle.
 struct UsageRefreshPolicy: Sendable {
   private(set) var failureCount = 0
   private(set) var retryAfter: Date?
+  private(set) var rateLimitAfter: Date?
+  private(set) var manualRetryAfter: Date?
   private(set) var lastResetRefreshed: Date?
   private(set) var resetRefreshAfter: Date?
 
   mutating func record(_ result: QueryResult, at now: Date) {
+    if let rateLimitAfter, rateLimitAfter <= now { self.rateLimitAfter = nil }
     if result.reading != nil {
       failureCount = 0
       retryAfter = nil
@@ -17,9 +29,48 @@ struct UsageRefreshPolicy: Sendable {
       let initial: Double = failure == .rateLimited ? 60 : 30
       let delay = min(900, initial * pow(2, Double(failureCount - 1)))
       retryAfter = now.addingTimeInterval(delay)
+      if failure == .rateLimited {
+        rateLimitAfter = max(rateLimitAfter ?? now, now.addingTimeInterval(delay))
+      }
     }
   }
-  func allowsRefresh(at now: Date) -> Bool { retryAfter.map { $0 <= now } ?? true }
+  func blockedStatus(at now: Date, intent: UsageRefreshIntent) -> UsageRefreshStatus? {
+    if let rateLimitAfter, rateLimitAfter > now {
+      return .init(retryAt: rateLimitAfter, retryReason: .rateLimited)
+    }
+    // User controls that trigger an automatic path (toggle or wake) must not
+    // circumvent the cadence established by a just-started explicit check.
+    if let manualRetryAfter, manualRetryAfter > now {
+      return .init(retryAt: manualRetryAfter, retryReason: .manualCooldown)
+    }
+    guard intent == .automatic else { return nil }
+    let deadline = retryAfter
+    guard let deadline, deadline > now else { return nil }
+    return .init(retryAt: deadline, retryReason: .cooldown)
+  }
+  func allowsRefresh(at now: Date, intent: UsageRefreshIntent = .automatic) -> Bool {
+    blockedStatus(at: now, intent: intent) == nil
+  }
+  func status(at now: Date) -> UsageRefreshStatus {
+    if let rateLimitAfter, rateLimitAfter > now {
+      return .init(retryAt: rateLimitAfter, retryReason: .rateLimited)
+    }
+    if let manualRetryAfter, manualRetryAfter > now {
+      return .init(retryAt: manualRetryAfter, retryReason: .manualCooldown)
+    }
+    return blockedStatus(at: now, intent: .automatic) ?? .init()
+  }
+  mutating func didBeginRefresh(at now: Date, intent: UsageRefreshIntent) {
+    if intent == .userInitiated {
+      manualRetryAfter = now.addingTimeInterval(10)
+      // Retire the old generic retry timer; completion establishes the new
+      // automatic cadence if this explicit attempt also fails.
+      retryAfter = nil
+    }
+  }
+  func automaticRetryAt(at now: Date) -> Date? {
+    [retryAfter, rateLimitAfter].compactMap { $0 }.filter { $0 > now }.max()
+  }
   mutating func didRefreshReset(_ reset: Date, at now: Date) {
     lastResetRefreshed = reset
     recordResetAttempt(at: now)
@@ -27,7 +78,7 @@ struct UsageRefreshPolicy: Sendable {
   mutating func recordResetAttempt(at now: Date) { resetRefreshAfter = now.addingTimeInterval(30) }
   mutating func clearResetHistory() { lastResetRefreshed = nil }
   func resetDeadline(for reset: Date, at now: Date) -> Date {
-    max(max(reset.addingTimeInterval(1), retryAfter ?? now), resetRefreshAfter ?? now)
+    max(max(reset.addingTimeInterval(1), automaticRetryAt(at: now) ?? now), resetRefreshAfter ?? now)
   }
   func nextReset(in snapshot: UsageSnapshot, at now: Date) -> Date? {
     snapshot.consumerWindows.compactMap { window in
@@ -59,6 +110,7 @@ actor UsageStore {
   private var scheduledResets: [ProviderID: Date] = [:]
   private var timerRevisions: [ProviderID: Int] = [:]
   private var resetRefreshPending: Set<ProviderID> = []
+  private var deferredRefresh: Set<ProviderID> = []
   private let publish: @Sendable ([ProviderID: UsageSnapshot]) -> Void
   init(
     sources: [ProviderID: any UsageSource], timeout: Double = 20,
@@ -89,23 +141,46 @@ actor UsageStore {
       // disable/re-enable must not bypass a provider's rate-limit backoff.
       policies[provider]?.clearResetHistory()
       resetRefreshPending.remove(provider)
+      deferredRefresh.remove(provider)
       states[provider] = UsageSnapshot(provider: provider)
+    }
+    for provider in added {
+      states[provider]?.refreshStatus = policies[provider]?.status(at: now()) ?? .init()
     }
     publish(states)
     for provider in added { refresh(provider) }
   }
-  func refresh(_ provider: ProviderID? = nil, onlyIfOlderThan age: Double? = nil) {
+  func refresh(_ provider: ProviderID? = nil, onlyIfOlderThan age: Double? = nil,
+    intent: UsageRefreshIntent = .automatic) {
     guard !stopped && !suspended else { return }
     for p in provider.map({ [$0] }) ?? ProviderID.allCases {
       guard enabledProviders.contains(p), flights[p] == nil, let source = sources[p] else { continue }
-      guard policies[p]?.allowsRefresh(at: now()) ?? true else { schedule(p); continue }
+      let current = now()
       if let age, let reading = states[p]?.reading, states[p]?.state == .live,
-        now().timeIntervalSince(reading.date) < age
-      {
+        current.timeIntervalSince(reading.date) < age {
+        // Activity that would skip a fresh reading is not a deferred request.
+        continue
+      }
+      if let blocked = policies[p]?.blockedStatus(at: current, intent: intent) {
+        // Present the effective explicit-retry restriction, even when this
+        // request came from a background timer with a longer error cooldown.
+        states[p]?.refreshStatus = policies[p]?.status(at: current) ?? .init()
+        if intent == .automatic, blocked.retryReason == .manualCooldown,
+          policies[p]?.automaticRetryAt(at: current) == nil {
+          // Remember a real deferred request, rather than scheduling an extra
+          // query after every successful manual check.
+          deferredRefresh.insert(p)
+        }
+        publish(states)
+        schedule(p)
         continue
       }
       let timeout = self.timeout
       let revision = revisions[p, default: 0]
+      deferredRefresh.remove(p)
+      policies[p, default: UsageRefreshPolicy()].didBeginRefresh(at: current, intent: intent)
+      states[p]?.refreshStatus = .init(checking: true)
+      publish(states)
       flights[p] = Task {
         let result = await withTaskGroup(of: QueryResult.self, returning: QueryResult.self) {
           group in
@@ -122,6 +197,9 @@ actor UsageStore {
         }
         complete(p, result: result, revision: revision)
       }
+      // Recompute after an explicit retry retires the old error deadline,
+      // while retaining any reset timer needed during an in-flight query.
+      schedule(p)
     }
   }
   private func complete(_ p: ProviderID, result: QueryResult, revision: Int) {
@@ -130,7 +208,12 @@ actor UsageStore {
     // A disabled/re-enabled provider waits for cancellation cleanup before its next
     // query, preserving subprocess isolation without accepting the previous result.
     guard revision == revisions[p, default: 0] else { refresh(p); return }
-    guard result.failure != .cancelled else { return }
+    guard result.failure != .cancelled else {
+      states[p]?.refreshStatus = policies[p]?.status(at: now()) ?? .init()
+      publish(states)
+      schedule(p)
+      return
+    }
     let oldBinding = states[p]?.reading?.binding
     states[p]?.apply(result)
     var policy = policies[p] ?? UsageRefreshPolicy()
@@ -139,6 +222,7 @@ actor UsageStore {
     let refreshAfterReset = resetRefreshPending.remove(p) != nil
     if refreshAfterReset { policy.recordResetAttempt(at: now()) }
     policies[p] = policy
+    states[p]?.refreshStatus = policy.status(at: now())
     publish(states)
     schedule(p)
     if refreshAfterReset { refresh(p) }
@@ -159,8 +243,10 @@ actor UsageStore {
     // A moving near-future reset cannot drive continuous successful queries.
     // Both reset cadence and retrieval backoff can delay the reported instant.
     let resetDeadline = reset.map { policy.resetDeadline(for: $0, at: current) }
-    let retryDeadline = policy.retryAfter.flatMap { $0 > current ? $0 : nil }
-    guard let deadline = [resetDeadline, retryDeadline].compactMap({ $0 }).min() else {
+    let retryDeadline = policy.automaticRetryAt(at: current)
+    let deferredDeadline = deferredRefresh.contains(provider)
+      ? policy.manualRetryAfter.flatMap { $0 > current ? $0 : nil } : nil
+    guard let deadline = [resetDeadline, retryDeadline, deferredDeadline].compactMap({ $0 }).min() else {
       cancelSchedule(provider)
       return
     }
@@ -207,8 +293,13 @@ actor UsageStore {
   func suspend() async {
     suspended = true
     resetRefreshPending.removeAll()
+    deferredRefresh.removeAll()
     for provider in ProviderID.allCases { cancelSchedule(provider) }
     for provider in flights.keys { revisions[provider, default: 0] += 1 }
+    for provider in enabledProviders {
+      states[provider]?.refreshStatus = policies[provider]?.status(at: now()) ?? .init()
+    }
+    publish(states)
     let work = Array(flights.values)
     for t in work { t.cancel() }
     for t in work { await t.value }

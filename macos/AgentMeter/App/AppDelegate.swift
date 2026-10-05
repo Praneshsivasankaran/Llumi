@@ -58,6 +58,7 @@ import SwiftUI
       }
     }
     model.refreshAction = { [weak self] in self?.manualRefresh() }
+    model.setupRetryAction = { [weak self] provider in self?.performManualRefresh(provider) }
     notch = NotchController(open: { [weak self] in self?.openMain() })
     model.resetNotchPositionAction = { [weak self] in self?.notch.resetPosition() }
     model.preferences.changed = { [weak self] in self?.applyPreferences() }
@@ -268,10 +269,13 @@ import SwiftUI
     model.destination = .settings
   }
   @objc func manualRefresh() {
+    performManualRefresh(nil)
+  }
+  private func performManualRefresh(_ provider: ProviderID?) {
     guard !quitting, !model.manuallyRefreshing else { return }
     model.manuallyRefreshing = true
     Task {
-      await store.refresh()
+      await store.refresh(provider, intent: .userInitiated)
       await store.waitForIdle()
       model.manuallyRefreshing = false
     }

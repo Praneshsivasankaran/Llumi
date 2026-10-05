@@ -122,6 +122,10 @@ struct UsageSnapshot: Sendable {
   var state: ProviderState = .loading
   var reading: Reading?
   var failure: Failure?
+  // Current query evidence only. A failed account check must not inherit a
+  // previous account's readiness; allowance retrieval can fail independently.
+  var authenticationVerified = false
+  var refreshStatus = UsageRefreshStatus()
   var primary: UsageWindow? {
     consumerWindows.filter(\.isUsableGeneral).sorted(by: Self.windowOrder).first
   }
@@ -159,6 +163,9 @@ struct UsageSnapshot: Sendable {
   static func percent(_ n: Double) -> String { String(format: "%.0f%%", floor(n)) }
   mutating func apply(_ result: QueryResult) {
     failure = result.failure
+    authenticationVerified = result.verifiedBinding.map { !$0.isEmpty } == true
+      && ![Failure.notInstalled, .signedOut, .accountChanged, .unsupportedBilling, .cancelled]
+        .contains(result.failure ?? .unavailable)
     if let r = result.reading {
       reading = r
       switch r.availability {

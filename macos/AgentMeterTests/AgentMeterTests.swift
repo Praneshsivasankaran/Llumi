@@ -13,6 +13,32 @@ private func window(
 private func reading(_ binding: String = "A") throws -> Reading {
   try .init(binding: binding, windows: [window()], date: Date())
 }
+final class ProviderClientMetadataTests: XCTestCase {
+  func testCodexClientUsesRuntimeMarketingVersion() {
+    let info = ProviderAdapter.codexClientInfo(info: [
+      "LlumiReleaseVersion": "1.1.3", "CFBundleShortVersionString": "1.1.2",
+      "CFBundleVersion": "3",
+    ])
+    XCTAssertEqual(info["name"].string, "llumi")
+    XCTAssertEqual(info["version"].string, "1.1.3")
+    XCTAssertEqual(ProviderAdapter.codexClientInfo(info: [
+      "CFBundleShortVersionString": "2.0.1", "CFBundleVersion": "4",
+    ])["version"].string, "2.0.1")
+  }
+  func testCodexClientRejectsUnusableMetadataAndUsesCandidateFallback() {
+    let values: [Any] = ["", "1.1", "1.1.3\n", "01.1.3", "１.１.３", "1.1.3-private",
+      String(repeating: "1", count: 33) + ".1.3", 113, true]
+    for value in values {
+      XCTAssertEqual(ProviderAdapter.codexClientInfo(info: [
+        "LlumiReleaseVersion": value, "CFBundleShortVersionString": "2.0.1",
+      ])["version"].string, "2.0.1")
+      XCTAssertEqual(ProviderAdapter.codexClientInfo(info: [
+        "LlumiReleaseVersion": value,
+      ])["version"].string, "1.1.3")
+    }
+    XCTAssertEqual(ProviderAdapter.codexClientInfo(info: nil)["version"].string, "1.1.3")
+  }
+}
 @MainActor final class ParserTests: XCTestCase {
   func testClaudeAnalyticsDisabledTrueAccepted() throws {
     XCTAssertNoThrow(try Parsers.claudeAccount(json(Self.auth), status: 0))

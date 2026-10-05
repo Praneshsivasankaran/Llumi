@@ -104,10 +104,7 @@ struct SetupView: View {
     }.padding(.vertical, 8)
   }
   private var checkAgain: some View {
-    HStack {
-      Button("Retry") { model.refreshAction() }.disabled(model.manuallyRefreshing)
-      if model.manuallyRefreshing { ProgressView().controlSize(.small) }
-    }
+    SetupRetryView(model: model)
   }
   private func providerInstructions(_ provider: ProviderID) -> some View {
     VStack(alignment: .leading, spacing: 22) {
@@ -120,7 +117,7 @@ struct SetupView: View {
       CommandBlock(title: "2. Sign in",
         command: ProviderSetup.login(provider))
       HStack {
-        checkAgain
+        SetupRetryView(model: model, provider: provider)
         Spacer()
         Link("Official setup guide ↗", destination: ProviderSetup.documentation(provider))
       }
@@ -181,14 +178,13 @@ struct CheckSetupView: View {
           ProviderSwitchRow(provider: provider, preferences: model.preferences,
             detail: model.preferences.isEnabled(provider) ? SetupStatus(snapshot: snapshot).rawValue : "Monitoring off")
           if model.preferences.isEnabled(provider) {
-            Text(SetupDiagnostic(snapshot).summary).font(.caption).foregroundStyle(.secondary)
+            Text("Monitoring: \(SetupMonitoring.text(snapshot))").font(.caption).foregroundStyle(.secondary)
               .fixedSize(horizontal: false, vertical: true)
           }
         }
       }
-      HStack {
-        Button("Retry") { copied = false; model.refreshAction() }.disabled(model.manuallyRefreshing)
-        if model.manuallyRefreshing { ProgressView().controlSize(.small) }
+      HStack(alignment: .top) {
+        SetupRetryView(model: model, onRetry: { copied = false })
         Spacer()
         Button(copied ? "Copied" : "Copy Diagnostics") {
           let report = SetupDiagnostics.report(model.usage,
@@ -199,5 +195,36 @@ struct CheckSetupView: View {
         }
       }
     }.padding(20)
+  }
+}
+
+// Uses the existing collector's progress/deadlines, not a second polling path.
+// A generic cooldown permits explicit retry; rate-limit/manual deadlines do not.
+struct SetupRetryView: View {
+  @Bindable var model: Presentation
+  var provider: ProviderID? = nil
+  var onRetry: () -> Void = {}
+  var body: some View {
+    TimelineView(.periodic(from: .now, by: 1)) { context in
+      let providers = (provider.map { [$0] } ?? ProviderID.allCases)
+        .filter { model.preferences.isEnabled($0) }
+      VStack(alignment: .leading, spacing: 6) {
+        HStack {
+          Button("Retry") { onRetry(); model.setupRetryAction(provider) }
+            .disabled(model.manuallyRefreshing || !providers.contains {
+              SetupRetryPresentation.canRetry(model.usage[$0] ?? UsageSnapshot(provider: $0), at: context.date)
+            })
+          if model.manuallyRefreshing { ProgressView().controlSize(.small) }
+        }
+        ForEach(providers, id: \.self) { item in
+          if let message = SetupRetryPresentation.message(
+            model.usage[item] ?? UsageSnapshot(provider: item), at: context.date) {
+            Text(provider == nil ? "\(item.title): \(message)" : message)
+              .font(.caption).foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
+        }
+      }
+    }
   }
 }

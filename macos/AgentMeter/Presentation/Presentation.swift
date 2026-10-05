@@ -30,6 +30,7 @@ enum Destination: String, CaseIterable, Identifiable {
   var activity = ActivitySnapshot()
   var installations: [ProviderID: Installation] = [:]
   var refreshAction: () -> Void = {}
+  var setupRetryAction: (ProviderID?) -> Void = { _ in }
   var resetNotchPositionAction: () -> Void = {}
   init(defaults: UserDefaults = .standard) {
     preferences = Preferences(defaults: defaults)

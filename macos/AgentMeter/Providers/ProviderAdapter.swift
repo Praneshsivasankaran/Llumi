@@ -36,6 +36,21 @@ struct ProviderAdapter: UsageSource {
       error["message"].string != nil else { return .incompatible }
     return code == 429 || code == -32001 ? .rateLimited : .unavailable
   }
+  static func codexClientInfo(info: [String: Any]? = Bundle.main.infoDictionary) -> J {
+    // Use the app's marketing version, including future releases. Hostless tests
+    // and library contexts have no Llumi bundle metadata; their fallback matches
+    // the current local candidate rather than the frozen 1.1.1 launch release.
+    let version = [info?["LlumiReleaseVersion"], info?["CFBundleShortVersionString"]]
+      .compactMap { $0 as? String }.first { value in
+        guard value.utf8.count <= 32 else { return false }
+        let parts = value.split(separator: ".", omittingEmptySubsequences: false)
+        return parts.count == 3 && parts.allSatisfy { part in
+          !part.isEmpty && (part.count == 1 || part.first != "0")
+            && part.utf8.allSatisfy { (48...57).contains($0) }
+        }
+      } ?? "1.1.3"
+    return .object(["name": .string("llumi"), "version": .string(version)])
+  }
   private func response(_ p: Subprocess) async throws -> J {
     do { return try await p.next() }
     catch Failure.malformed { throw Failure.incompatible }
@@ -65,7 +80,7 @@ struct ProviderAdapter: UsageSource {
       _ = try await rpc(
         p, id: 1, method: "initialize",
         params: .object([
-          "clientInfo": .object(["name": .string("llumi"), "version": .string("1.1.1")])
+          "clientInfo": Self.codexClientInfo()
         ]))
       try await p.send(.object(["method": .string("initialized")]))
       let before = try Parsers.codexAccount(
