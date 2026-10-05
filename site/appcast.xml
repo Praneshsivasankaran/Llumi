@@ -4,23 +4,43 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>Llumi</title>
         <item>
-            <title>1.1.2</title>
-            <pubDate>Sat, 03 Oct 2026 20:16:42 +0530</pubDate>
+            <title>1.1.3</title>
+            <pubDate>Mon, 05 Oct 2026 21:02:40 +0530</pubDate>
             <sparkle:minimumUpdateVersion>2</sparkle:minimumUpdateVersion>
-            <sparkle:version>2</sparkle:version>
-            <sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>1.1.3</sparkle:shortVersionString>
             <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-            <description sparkle:format="plain-text"><![CDATA[Llumi 1.1.2
+            <description sparkle:format="plain-text"><![CDATA[Llumi 1.1.3 (build 3)
 
-- Adds in-app update support for future macOS releases.
-- Prevents internal Claude usage bucket names from appearing in the Usage interface.
+Simpler setup, more complete allowance details and a monitor you can move.
 
-Existing Llumi 1.1.1 users need to install 1.1.2 manually once. Future compatible macOS updates can then be installed directly from Llumi.
+Setup and monitoring
+
+- A lighter welcome screen, simpler setup steps and slower installation illustrations.
+- Turn Codex and Claude Code monitoring on or off during setup and in Settings.
+- Check Setup separates sign-in readiness from monitoring availability. Retry shows when another check can run while respecting rate limits.
+
+Usage and the monitor
+
+- See the supported limits your account reports, remaining percentages and reset times when available. The compact monitor prioritizes the five-hour limit, then weekly, then another supported time window.
+- Clearer missing, unsupported, unavailable and stale states, with saved readings cleared when an account changes or cannot be verified.
+- Equal-sized usage cards, clearer light-mode boundaries, consistent provider artwork and expanded allowance details.
+- Drag the monitor to a saved position within your display. Command-1 opens the complete Usage view.
+
+Updates
+
+- One switch checks and downloads updates automatically; with it off, updates remain manual. Check for Updates checks and downloads an available application update without changing that choice.
+- Choose Restart and update or Later when a downloaded update is ready. Later keeps Llumi running; the prepared update can install when you quit.
+- After a verified update, a one-time confirmation links to the installed version’s release notes.
+
+Your first update from 1.1.2 uses its existing updater. The new completion popup stays quiet unless installation can be verified.
+
+Full patch notes: https://tryllumi.com/releases/macos/1.1.3/
 ]]></description>
-            <enclosure url="https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-1.1.2/Llumi-1.1.2-macos.dmg" length="2529034" type="application/octet-stream" sparkle:edSignature="a23q5/T8BMscFrl+c0L97HsNKMYv2cHxykpMdDhXNTtMJKRhQ73zreyLeuz3V3kIUKLXVcM0WCb62hW9UjvsCA=="></enclosure>
+            <enclosure url="https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-1.1.3/Llumi-1.1.3-macos.dmg" length="4283549" type="application/octet-stream" sparkle:edSignature="461lnIuAyBTtRvi68pkxhCsuOCuS43XJkDcts2RUhiW/k5vlBMbObNGZsE8USu+LNEiIXnlm4SiDjRWHeZM0AQ=="></enclosure>
         </item>
     </channel>
 </rss><!-- sparkle-signatures:
-edSignature: WwMF5Xsy30ijUDXGghBRuFyYWwWivVQQjcFI1cdk1QL+D0K8RO0cx+VtKAHHbFeVjaGOAzUmOEMFNAAGGwhPDw==
-length: 1509
+edSignature: AEdpRV27gZnXPaDOyNr6I52vy6WX38pBWBOeQitUCyIkqKD5h7V/bKV1qbgrOgRh672yU2AA63vUSBvWEEdRCg==
+length: 2873
 -->
