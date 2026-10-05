@@ -6,6 +6,10 @@ const path = require("path");
 const assert = require("node:assert/strict");
 const root = path.resolve(__dirname, "../..");
 const config = JSON.parse(fs.readFileSync(path.join(root, "site/config.json"), "utf8"));
+const releases = JSON.parse(fs.readFileSync(path.join(root, "site/releases.json"), "utf8"));
+const releaseRoutes = releases.releases
+  .filter((release) => release.status === "published")
+  .map((release) => `releases/${release.platform}/${release.version}/`);
 const output = path.join(root, ".review");
 fs.mkdirSync(output, { recursive: true });
 const results = [];
@@ -23,7 +27,7 @@ const results = [];
     "privacy/index.html",
     "support/index.html",
     "releases/index.html",
-    "releases/macos/1.1.2/index.html",
+    ...releaseRoutes.map((route) => route + "index.html"),
   ]) {
     const result = await validator.validateFile(
       path.join(root, "_site", route),
@@ -206,7 +210,7 @@ const results = [];
       true,
     );
     await page.locator(".hero .notch-toggle").click();
-    for (const route of ["privacy/", "support/", "releases/", "releases/macos/1.1.2/"]) {
+    for (const route of ["privacy/", "support/", "releases/", ...releaseRoutes]) {
       await page.goto("http://127.0.0.1:4173/" + route);
       const scan = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21aa"])

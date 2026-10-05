@@ -108,14 +108,15 @@ struct SetupView: View {
   }
   private func providerInstructions(_ provider: ProviderID) -> some View {
     VStack(alignment: .leading, spacing: 22) {
-      heading(provider == .codex ? "Set up Codex" : "Set up Claude Code",
-        "Llumi uses the locally installed command-line tool. Install it and sign in to get started.")
+      Text(provider == .codex ? "Set up Codex" : "Set up Claude Code")
+        .font(.title.bold())
       Text("Open Terminal, paste each command, then press Return.")
         .font(.callout).foregroundStyle(.secondary)
       CommandBlock(title: "1. Install \(provider == .codex ? "Codex" : "Claude Code")",
         command: ProviderSetup.install(provider))
       CommandBlock(title: "2. Sign in",
-        command: ProviderSetup.login(provider))
+        command: ProviderSetup.login(provider),
+        instruction: provider == .claude ? "Open a new Terminal window, then paste this command." : nil)
       HStack {
         SetupRetryView(model: model, provider: provider)
         Spacer()
@@ -150,10 +151,14 @@ struct ProviderSwitchRow: View {
 private struct CommandBlock: View {
   let title: String
   let command: String
+  var instruction: String? = nil
   @State private var copied = false
   var body: some View {
     VStack(alignment: .leading, spacing: 10) {
       Text(title).font(.headline)
+      if let instruction {
+        Text(instruction).font(.callout).foregroundStyle(.secondary)
+      }
       HStack(spacing: 12) {
         Text(command).font(.system(.callout, design: .monospaced)).textSelection(.enabled)
           .frame(maxWidth: .infinity, alignment: .leading)

@@ -133,6 +133,8 @@ class SiteTests(unittest.TestCase):
 
     def test_release_metadata_rejects_invalid_identity_and_release_claims(self):
         original = json.loads((ROOT / "site/releases.json").read_text())
+        # Keep malformed-preview coverage after all actual release entries ship.
+        original["releases"][0].update(status="preview", published_at=None)
         for patch_key, patch_value in (("version", "../../oops"), ("build", True), ("status", "latest"), ("published_at", "2026-10-05")):
             metadata = json.loads(json.dumps(original))
             preview = next(item for item in metadata["releases"] if item["status"] == "preview")

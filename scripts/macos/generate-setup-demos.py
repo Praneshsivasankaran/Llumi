@@ -37,6 +37,8 @@ def frame(provider, install, login, index):
     stage = 0 if index < 30 else 1 if index < 60 else 2 if index < 80 else 3
     labels = ["Copy install command", "Paste into Terminal and press Return",
               "Run sign-in command", "Finish signing in"]
+    if provider == "Claude Code":
+        labels[2] = "Open a new Terminal, then sign in"
     text(draw, (64, 40), provider, 39)
     text(draw, (64, 104), labels[stage], 30)
     for step in range(4):

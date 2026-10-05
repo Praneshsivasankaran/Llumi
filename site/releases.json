@@ -15,7 +15,8 @@
           "items": [
             "A lighter welcome screen with the Llumi app icon.",
             "Turn Codex and Claude Code monitoring on or off during setup and in Settings.",
-            "Simpler setup steps with slower, ten-second installation illustrations."
+            "Simpler setup steps with slower installation illustrations.",
+            "Check Setup separates sign-in readiness from monitoring availability. Retry explains when another check can run while respecting provider rate limits."
           ]
         },
         {
@@ -37,17 +38,20 @@
         {
           "title": "Updates",
           "items": [
-            "A dedicated Settings section shows update status and offers Check for Updates.",
-            "Llumi checks signed update information when opened and shows a banner when an update is available.",
-            "Opt in to background downloads, then choose Restart and update or Later when the update is ready.",
-            "After a verified update, Llumi shows a one-time confirmation with a link to that version’s release notes."
+            "One Settings switch enables automatic checking and downloading. With it off, updates remain manual.",
+            "Check for Updates checks and downloads an available application update without changing your automatic-update choice.",
+            "When a downloaded update is ready, choose Restart and update or Later. Later keeps Llumi running; the prepared update can install when you quit.",
+            "After a verified update, Llumi shows a one-time confirmation with a link to that version’s release notes.",
+            "Your first update from 1.1.2 uses its existing updater. The new completion popup stays quiet unless installation can be verified."
           ]
         }
       ],
       "notice": "Unreleased local preview. No public download is available for 1.1.3.",
       "source_documents": [
         "docs/releases/2026-10-macos-1.1.3-preview.md",
-        "docs/releases/2026-10-macos-1.1.3-allowance-review.md"
+        "docs/releases/2026-10-macos-1.1.3-allowance-review.md",
+        "docs/releases/2026-10-macos-1.1.3-setup-retry-review.md",
+        "docs/macos/UPDATES.md"
       ]
     },
     {
