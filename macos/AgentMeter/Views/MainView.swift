@@ -13,6 +13,7 @@ struct MainView: View {
           Label(destination.title, systemImage: destination.symbol).tag(destination)
         }.listStyle(.sidebar)
       }.navigationSplitViewColumnWidth(min: 150, ideal: 166, max: 190)
+        .toolbar(removing: .sidebarToggle)
     } detail: {
       VStack(spacing: 0) {
         if let version = model.updates.availableVersion {
