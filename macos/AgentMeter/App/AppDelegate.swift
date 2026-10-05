@@ -296,6 +296,10 @@ import SwiftUI
     return true
   }
   @objc private func reopenMain() {
+    if model.updates.promptVisible {
+      showUpdatePrompt()
+      return
+    }
     let alreadyVisible = window?.isVisible == true
     openMain()
     if alreadyVisible { updates.foregroundOpened() }
