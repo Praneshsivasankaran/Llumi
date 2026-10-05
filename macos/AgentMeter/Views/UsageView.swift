@@ -79,17 +79,8 @@ private struct ProviderSection: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       HStack(spacing: 10) {
-        if snapshot.provider == .claude {
-          Image("ClaudeCodeMascot", bundle: assetBundle)
-            .renderingMode(.original)
-            .resizable()
-            .scaledToFit()
-            .frame(width: 25, height: 25)
-            .accessibilityHidden(true)
-        } else {
-          ProviderMark(provider: snapshot.provider, size: 25).foregroundStyle(
-            snapshot.provider.accent)
-        }
+        ProviderMark(provider: snapshot.provider, size: 25, assetBundle: assetBundle)
+          .foregroundStyle(snapshot.provider.accent)
         Text(snapshot.provider.title).font(.headline)
         Spacer(minLength: 4)
         Text(snapshot.state.rawValue).font(.caption).foregroundStyle(.secondary)

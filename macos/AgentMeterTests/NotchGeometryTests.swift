@@ -65,7 +65,7 @@ import AppKit
     // sibling build's images for this render process without modifying a bundle.
     let products = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let app = try XCTUnwrap(Bundle(url: products.appendingPathComponent("Llumi.app")))
-    for name in ["CodexLogo", "ClaudeLogo", "ClaudeCodeMascot"] {
+    for name in ["CodexLogo", "ClaudeCodeMascot"] {
       XCTAssertNotNil(app.image(forResource: name))
     }
     let suite = "Llumi-Allowance-Render-" + UUID().uuidString
@@ -124,9 +124,21 @@ import AppKit
       notch.rows = [ProviderGlance(snapshot: codex), ProviderGlance(snapshot: claude)]
       try await capture(NotchView(model: notch, assetBundle: app).background(Color(nsColor: .windowBackgroundColor)),
         name: name + "-compact", size: CGSize(width: 300, height: 40), directory: directory)
+      if name == "both-window" {
+        try await capture(NotchView(model: notch, assetBundle: app)
+          .background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(.dark),
+          name: name + "-compact-dark", size: CGSize(width: 300, height: 40),
+          directory: directory, appearance: .darkAqua)
+      }
       notch.state.hover(true)
       try await capture(NotchView(model: notch, assetBundle: app).background(Color(nsColor: .windowBackgroundColor)),
         name: name + "-hover", size: CGSize(width: 600, height: 430), directory: directory)
+      if name == "both-window" {
+        try await capture(NotchView(model: notch, assetBundle: app)
+          .background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(.dark),
+          name: name + "-hover-dark", size: CGSize(width: 600, height: 430),
+          directory: directory, appearance: .darkAqua)
+      }
     }
     XCTAssertNotNil(defaults.object(forKey: Preferences.lightMigrationKey))
   }

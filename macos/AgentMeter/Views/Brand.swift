@@ -17,10 +17,11 @@ struct MeterMark: View {
     }.frame(width: dimension, height: dimension).accessibilityHidden(true)
   }
 }
-// Bundled vector development marks. No network images or embedded provider app assets.
+// Provider marks are local assets; Claude shares the same vendor mascot everywhere.
 struct ProviderMark: View {
   let provider: ProviderID
   var size: CGFloat = 22
+  var assetBundle: Bundle? = nil
   var body: some View {
     Group {
       if provider == .codex {
@@ -28,14 +29,21 @@ struct ProviderMark: View {
           .system(size: size * 0.66, weight: .semibold)
         ).frame(width: size, height: size)
       } else {
-        ZStack {
-          ForEach(0..<12) { i in
-            Capsule().frame(width: size * 0.085, height: size * 0.36).offset(y: -size * 0.29)
-              .rotationEffect(.degrees(Double(i) * 30))
-          }
-        }.frame(width: size, height: size)
+        ClaudeCodeMark(size: size, assetBundle: assetBundle)
       }
     }.accessibilityHidden(true)
+  }
+}
+private struct ClaudeCodeMark: View {
+  let size: CGFloat
+  var assetBundle: Bundle? = nil
+  var body: some View {
+    Image("ClaudeCodeMascot", bundle: assetBundle)
+      .renderingMode(.original)
+      .resizable()
+      .scaledToFit()
+      .frame(width: size, height: size)
+      .accessibilityHidden(true)
   }
 }
 extension ProviderID {
@@ -143,12 +151,16 @@ struct NotchProviderMark: View {
   var size: CGFloat = 22
   var assetBundle: Bundle? = nil
   var body: some View {
-    Image(provider == .codex ? "CodexLogo" : "ClaudeLogo", bundle: assetBundle)
-      .renderingMode(.template)
-      .resizable()
-      .scaledToFit()
-      .frame(width: size, height: size)
-      .foregroundStyle(.primary)
-      .accessibilityHidden(true)
+    if provider == .claude {
+      ClaudeCodeMark(size: size, assetBundle: assetBundle)
+    } else {
+      Image("CodexLogo", bundle: assetBundle)
+        .renderingMode(.template)
+        .resizable()
+        .scaledToFit()
+        .frame(width: size, height: size)
+        .foregroundStyle(.primary)
+        .accessibilityHidden(true)
+    }
   }
 }

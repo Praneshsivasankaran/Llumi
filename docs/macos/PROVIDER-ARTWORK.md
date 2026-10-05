@@ -1,6 +1,6 @@
 # Provider artwork
 
-The macOS Claude Usage card uses the exact `extension/resources/clawd.svg` from Anthropic's Claude Code for VS Code extension, version 2.1.289. The visible provider name remains Claude. This is the pixel mascot, distinct from Claude's sunburst. Codex, onboarding and notch artwork are unchanged by this refinement.
+All macOS Claude provider displays use the exact `extension/resources/clawd.svg` from Anthropic's Claude Code for VS Code extension, version 2.1.289: Usage, compact/expanded notch, onboarding provider rows and Settings checks. They share one image component, retaining the original color and shape. Existing provider names remain beside it wherever names already appear. This is the pixel mascot, distinct from Claude's sunburst. Codex artwork, layouts and behavior are unchanged.
 
 Source: [official Marketplace listing](https://marketplace.visualstudio.com/items?itemName=anthropic.claude-code), linked from [Claude Code's product page](https://claude.com/product/claude-code), and its [vendor-hosted extension package](https://anthropic.gallerycdn.vsassets.io/extensions/anthropic/claude-code/2.1.289/1791068913543/Microsoft.VisualStudio.Services.VSIXPackage).
 
