@@ -17,7 +17,7 @@ struct MeterMark: View {
     }.frame(width: dimension, height: dimension).accessibilityHidden(true)
   }
 }
-// Provider marks are local assets; Claude shares the same vendor mascot everywhere.
+// All provider displays share the same locally bundled vendor artwork.
 struct ProviderMark: View {
   let provider: ProviderID
   var size: CGFloat = 22
@@ -25,13 +25,24 @@ struct ProviderMark: View {
   var body: some View {
     Group {
       if provider == .codex {
-        Image(systemName: "chevron.left.forwardslash.chevron.right").font(
-          .system(size: size * 0.66, weight: .semibold)
-        ).frame(width: size, height: size)
+        CodexMark(size: size, assetBundle: assetBundle)
       } else {
         ClaudeCodeMark(size: size, assetBundle: assetBundle)
       }
     }.accessibilityHidden(true)
+  }
+}
+private struct CodexMark: View {
+  let size: CGFloat
+  var assetBundle: Bundle? = nil
+  var body: some View {
+    Image("CodexLogo", bundle: assetBundle)
+      .renderingMode(.template)
+      .resizable()
+      .scaledToFit()
+      .frame(width: size, height: size)
+      .foregroundStyle(Color.primary)
+      .accessibilityHidden(true)
   }
 }
 private struct ClaudeCodeMark: View {
@@ -151,16 +162,6 @@ struct NotchProviderMark: View {
   var size: CGFloat = 22
   var assetBundle: Bundle? = nil
   var body: some View {
-    if provider == .claude {
-      ClaudeCodeMark(size: size, assetBundle: assetBundle)
-    } else {
-      Image("CodexLogo", bundle: assetBundle)
-        .renderingMode(.template)
-        .resizable()
-        .scaledToFit()
-        .frame(width: size, height: size)
-        .foregroundStyle(.primary)
-        .accessibilityHidden(true)
-    }
+    ProviderMark(provider: provider, size: size, assetBundle: assetBundle)
   }
 }
