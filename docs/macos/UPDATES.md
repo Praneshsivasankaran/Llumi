@@ -1,12 +1,20 @@
-# macOS 1.1.2 updates
+# macOS updates
 
-macOS 1.1.2/build 2 was published on 3 October 2026. The signed production feed and website download are live, and the final public app was installed and physically verified on the owner's Mac. See the [publication receipt](../releases/2026-10-macos-1.1.2.md). Historical 1.1.1/build 1, its tag and DMG remain frozen. `macos/release-candidate.json` records 1.1.2/build 2; future candidates must advance version and build and match bundle metadata. This file is separate from the immutable launch baseline.
+## Local 1.1.3 candidate
+
+Version 1.1.3/build 3 adds Updates in Settings, a signed-feed information probe on foreground launch/reopen, and an available-update banner. New and existing users enable automatic checking once in this version; subsequent changes use Sparkle's persisted setting directly. Setup gates updater startup. Login launch stays quiet. Probes do not show no-update/network-error UI; manual checks and installation use Sparkle's standard UI. Scheduled checks redirect to signed information probes and surface the same banner without retaining an installation session after Later. Silent installation and system profiling remain disabled.
+
+The candidate remains local until the owner reviews it and approves publication. The installed public 1.1.2 must stay recoverable. A private Mac-only test can temporarily override the host's `SUFeedURL` through its user defaults to a loopback server with a signed feed/archive. This is Sparkle's supported testing override; preserve and restore the previous default, retain all verification flags, and never deploy that feed publicly or modify the installed host's signed bundle. Complete the private 1.1.2 → 1.1.3 install/relaunch acceptance before seeking public release approval. Notarization and publication receipts are separate from a local Developer ID signed build.
+
+## Published 1.1.2 baseline
+
+macOS 1.1.2/build 2 was published on 3 October 2026. The signed production feed and website download are live, and the final public app was installed and physically verified on the owner's Mac. See the [publication receipt](../releases/2026-10-macos-1.1.2.md). Historical 1.1.1/build 1, its tag and DMG remain frozen. `macos/release-candidate.json` now records the local 1.1.3/build 3 candidate; each candidate must advance version and build and match bundle metadata. This file is separate from the immutable launch baseline.
 
 Existing 1.1.1 users must install 1.1.2 manually once; compatible later macOS updates can then be delivered in-app. Windows Store 2.0.2 is unchanged. The Claude presentation fix remains its own cross-platform commit, `c9a77c5`; Windows native UI regression execution is required before another Windows package.
 
 ## Integration and behavior
 
-Sparkle 2.10.0 is pinned exactly through Swift Package Manager, with its resolved commit and upstream binary checksum recorded. The standard `SPUStandardUpdaterController` targets the main app bundle. Application menu → Check for Updates… uses its standard UI and menu validation. Startup waits for guided setup completion. Automatic checks use Sparkle's standard second-launch consent; silent automatic downloading/installing is disabled. No custom install UI or version comparator is introduced.
+Sparkle 2.10.0 is pinned exactly through Swift Package Manager, with its resolved commit and upstream binary checksum recorded. The standard `SPUStandardUpdaterController` targets the main app bundle. Application menu and Settings → Check for Updates… use its standard UI and availability validation. Startup waits for guided setup completion. Version 1.1.3 enables automatic checks once and exposes the persisted choice in Settings; silent automatic downloading/installing is disabled. No custom install UI or version comparator is introduced.
 
 Production feed: `https://tryllumi.com/appcast.xml`. The final signed 1.1.2 feed is deployed and verified against the published DMG. Feed and release notes require Sparkle signatures; signature failure expiration is disabled. Downloaded archives are verified before extraction. System profiling is disabled, and the updater delegate returns no allowed profile keys even if an inherited Sparkle preference enables profile submission. No Llumi/provider data is attached to update requests.
 

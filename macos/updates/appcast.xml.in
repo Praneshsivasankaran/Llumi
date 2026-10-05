@@ -3,11 +3,11 @@
      generate_appcast produces the real enclosure/signatures from the final notarized DMG. -->
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
  <channel><title>Llumi macOS Updates</title>
-  <item><title>Llumi 1.1.2</title><pubDate>RELEASE_DATE_PENDING</pubDate>
-   <sparkle:version>2</sparkle:version><sparkle:shortVersionString>1.1.2</sparkle:shortVersionString>
+  <item><title>Llumi 1.1.3</title><pubDate>RELEASE_DATE_PENDING</pubDate>
+   <sparkle:version>3</sparkle:version><sparkle:shortVersionString>1.1.3</sparkle:shortVersionString>
    <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
    <sparkle:minimumUpdateVersion>2</sparkle:minimumUpdateVersion>
-   <description sparkle:format="plain-text">Adds in-app update support for future macOS releases. Prevents internal Claude usage bucket identifiers from appearing in the normal UI. Existing 1.1.1 users must install 1.1.2 manually once.</description>
+   <description sparkle:format="plain-text">Simpler setup, light appearance, provider switches, a draggable monitor and update controls in Settings.</description>
    <enclosure url="ARTIFACT_HTTPS_URL_PENDING" length="ARTIFACT_LENGTH_PENDING" type="application/octet-stream" sparkle:edSignature="OFFICIAL_TOOL_SIGNATURE_PENDING"/>
   </item>
  </channel>

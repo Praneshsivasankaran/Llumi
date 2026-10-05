@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct MeterMark: View {
+  var dimension: CGFloat = 22
   var body: some View {
     Canvas { context, size in
       var arc = Path()
@@ -8,7 +9,7 @@ struct MeterMark: View {
       arc.addCurve(to: CGPoint(x: size.width * 0.88, y: size.height * 0.72),
         control1: CGPoint(x: size.width * 0.12, y: size.height * 0.1),
         control2: CGPoint(x: size.width * 0.88, y: size.height * 0.1))
-      context.stroke(arc, with: .foreground, style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
+      context.stroke(arc, with: .foreground, style: StrokeStyle(lineWidth: size.width * 2.5 / 22, lineCap: .round))
       var needle = Path()
       needle.move(to: CGPoint(x: size.width * 0.47, y: size.height * 0.64))
       needle.addLine(to: CGPoint(x: size.width * 0.75, y: size.height * 0.35))
@@ -17,7 +18,7 @@ struct MeterMark: View {
       context.fill(needle, with: .foreground)
       context.fill(Path(ellipseIn: CGRect(x: size.width * 0.43, y: size.height * 0.63,
         width: size.width * 0.16, height: size.height * 0.16)), with: .foreground)
-    }.frame(width: 22, height: 22).accessibilityHidden(true)
+    }.frame(width: dimension, height: dimension).accessibilityHidden(true)
   }
 }
 // Bundled vector development marks. No network images or embedded provider app assets.

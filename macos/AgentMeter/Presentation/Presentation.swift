@@ -23,12 +23,14 @@ enum Destination: String, CaseIterable, Identifiable {
   }
   var manuallyRefreshing = false
   let preferences = Preferences()
+  let updates = UpdatePresentation()
   let loginItem = LoginItem()
   var usage = Dictionary(
     uniqueKeysWithValues: ProviderID.allCases.map { ($0, UsageSnapshot(provider: $0)) })
   var activity = ActivitySnapshot()
   var installations: [ProviderID: Installation] = [:]
   var refreshAction: () -> Void = {}
+  var resetNotchPositionAction: () -> Void = {}
   var compact: String {
     activity.providers.map { usage[$0]?.compact ?? $0.title }.joined(separator: "  |  ")
   }

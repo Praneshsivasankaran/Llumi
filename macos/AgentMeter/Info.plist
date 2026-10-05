@@ -44,5 +44,7 @@
 	<string>xLp/Wg9dAo3HWfBMc4LWEmz1LDbQJOUq9IuX4+h93C4=</string>
 	<key>SUEnableSystemProfiling</key>
 	<false/>
+	<key>SUEnableAutomaticChecks</key>
+	<true/>
 </dict>
 </plist>

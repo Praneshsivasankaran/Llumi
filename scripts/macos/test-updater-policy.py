@@ -32,7 +32,7 @@ class UpdaterPolicyTests(unittest.TestCase):
         info['CFBundleVersion']=candidate['build']='1'
         with self.assertRaises(AssertionError): self.check(info,candidate)
     def test_wrong_bundle_or_incoherent_version_rejected(self):
-        for key,value in [('CFBundleIdentifier','example.other'),('LlumiReleaseVersion','1.1.1'),('CFBundleVersion','3')]:
+        for key,value in [('CFBundleIdentifier','example.other'),('LlumiReleaseVersion','1.1.1'),('CFBundleVersion',str(int(self.candidate['build'])+1))]:
             with self.subTest(key=key):
                 info=copy.deepcopy(self.info);info[key]=value
                 with self.assertRaises(AssertionError):self.check(info)
@@ -48,9 +48,10 @@ class UpdaterPolicyTests(unittest.TestCase):
         for key in ['SUSendProfileInfo','SUEnableSystemProfiling','SUAutomaticallyUpdate','SUAllowsAutomaticUpdates']:
             info=copy.deepcopy(self.info);info[key]=True
             with self.assertRaises(AssertionError):self.check(info)
-    def test_normal_auto_check_consent_preserved(self):
-        info=copy.deepcopy(self.info);info['SUEnableAutomaticChecks']=True
-        with self.assertRaises(AssertionError):self.check(info)
+    def test_auto_checks_default_enabled_and_missing_default_rejected(self):
+        for value in [False, None]:
+            info=copy.deepcopy(self.info);info['SUEnableAutomaticChecks']=value
+            with self.assertRaises(AssertionError):self.check(info)
     def test_expected_publisher_and_team_pass(self):self.publisher(self.signed)
     def test_other_valid_developer_id_or_prefix_match_rejected(self):
         for name in ['Developer ID Application: Other Publisher (K38622WCYD)',self.candidate['developer_id_identity']+' extra']:

@@ -6,35 +6,46 @@ struct SetupView: View {
   @Bindable var flow: SetupFlow
   let finished: () -> Void
   var body: some View {
-    VStack(alignment: .leading, spacing: 22) {
-      HStack(spacing: 10) {
-        MeterMark()
-        Text("Llumi").font(.headline)
-        Spacer()
-        Text("Setup").foregroundStyle(.secondary)
-      }
-      Divider()
-      ScrollView {
-        VStack(alignment: .leading, spacing: 20) { content }
-          .frame(maxWidth: .infinity, alignment: .leading)
-      }
-      Divider()
-      HStack {
-        if flow.step != .welcome { Button("Back") { flow.back() } }
-        Spacer()
-        Button(nextTitle) {
-          if flow.step == .done { flow.complete(); finished() }
-          else {
-            flow.next()
-            if flow.step == .verify { model.refreshAction() }
+    Group {
+      if flow.step == .welcome {
+        VStack(spacing: 28) {
+          MeterMark(dimension: 74.8).frame(width: 84, height: 84)
+          Text("Llumi").font(.system(size: 36, weight: .semibold, design: .rounded))
+          Button("Get Started") { flow.next() }
+            .buttonStyle(.borderedProminent).controlSize(.large)
+            .keyboardShortcut(.defaultAction)
+            .padding(.top, 8)
+        }.frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else {
+        VStack(alignment: .leading, spacing: 22) {
+          HStack(spacing: 10) {
+            MeterMark()
+            Text("Llumi").font(.headline)
+            Spacer()
           }
-        }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+          ScrollView {
+            VStack(alignment: .leading, spacing: 20) { content }
+              .frame(maxWidth: .infinity, alignment: .leading)
+          }
+          Divider()
+          HStack {
+            Button("Back") { flow.back() }
+            Spacer()
+            Button(nextTitle) {
+              if flow.step == .done { flow.complete(); finished() }
+              else {
+                flow.next()
+                if flow.step == .verify { model.refreshAction() }
+              }
+            }.buttonStyle(.borderedProminent).keyboardShortcut(.defaultAction)
+          }
+        }
       }
     }.padding(28).frame(minWidth: 540, idealWidth: 580, minHeight: 510, idealHeight: 580)
       .background(Color(nsColor: .windowBackgroundColor))
+      .preferredColorScheme(.light)
   }
   private var nextTitle: String {
-    if flow.step == .welcome { return "Set Up Llumi" }
     if flow.step == .done { return "Start Llumi" }
     if flow.step == .verify && !flow.selected.contains(where: { status($0) == .ready }) {
       return "Finish Anyway"
@@ -47,30 +58,18 @@ struct SetupView: View {
   @ViewBuilder private var content: some View {
     switch flow.step {
     case .welcome:
-      Text("Track your AI coding usage.").font(.largeTitle.bold())
-      Text("Llumi monitors usage from your locally installed Codex and Claude Code tools.")
-      Text("Use Codex, Claude Code, or both. You only need the provider you use.").foregroundStyle(.secondary)
-      Label("Your sign-in stays with your provider.", systemImage: "lock")
+      EmptyView()
     case .providers:
       heading("Choose your providers", "Select either or both. You can also set them up later.")
       ForEach(ProviderID.allCases, id: \.self) { provider in
-        Toggle(isOn: Binding(get: { flow.selected.contains(provider) }, set: {
-          if $0 { flow.selected.insert(provider) } else { flow.selected.remove(provider) }
-        })) {
-          HStack {
-            ProviderMark(provider: provider)
-            Text(provider == .claude ? "Claude Code" : "Codex").font(.headline)
-            Spacer()
-            Text(model.installations[provider] == nil ? "Not detected" : "Installed")
-              .font(.callout).foregroundStyle(.secondary)
-          }
-        }.toggleStyle(.checkbox).padding(.vertical, 10)
+        ProviderSwitchRow(provider: provider, preferences: model.preferences,
+          detail: model.installations[provider] == nil ? "Not detected" : "Installed")
+          .padding(.vertical, 10)
       }
       checkAgain
     case .codex: providerInstructions(.codex)
     case .claude: providerInstructions(.claude)
     case .verify:
-      heading("Check your setup", "One ready provider is enough. You can finish and return to setup anytime.")
       CheckSetupView(model: model)
     case .preferences:
       Text("Make it yours").font(.title.bold())
@@ -97,7 +96,8 @@ struct SetupView: View {
           ProviderMark(provider: provider)
           Text(provider == .claude ? "Claude Code" : "Codex")
           Spacer()
-          Label(status(provider).rawValue, systemImage: status(provider) == .ready ? "checkmark.circle" : "circle.dotted")
+          Label(model.preferences.isEnabled(provider) ? status(provider).rawValue : "Monitoring off",
+            systemImage: model.preferences.isEnabled(provider) && status(provider) == .ready ? "checkmark.circle" : "circle.dotted")
             .foregroundStyle(.secondary)
         }
       }
@@ -105,15 +105,14 @@ struct SetupView: View {
   }
   private var checkAgain: some View {
     HStack {
-      Button("Check Again") { model.refreshAction() }.disabled(model.manuallyRefreshing)
+      Button("Retry") { model.refreshAction() }.disabled(model.manuallyRefreshing)
       if model.manuallyRefreshing { ProgressView().controlSize(.small) }
     }
   }
   private func providerInstructions(_ provider: ProviderID) -> some View {
     VStack(alignment: .leading, spacing: 16) {
       heading(provider == .codex ? "Set up Codex" : "Set up Claude Code",
-        "Llumi uses the locally installed command-line tool and its existing authentication. Your credentials stay with the provider.")
-      Text(status(provider).rawValue).font(.callout.weight(.medium))
+        "Llumi uses the locally installed command-line tool. Install it and sign in to get started.")
       Text("Open Terminal from Applications → Utilities. Copy each command, paste it into Terminal, then press Return.")
         .font(.callout).foregroundStyle(.secondary)
       CommandBlock(title: "1. Install \(provider == .codex ? "Codex" : "Claude Code")",
@@ -132,8 +131,28 @@ struct SetupView: View {
         Spacer()
         Link("Official setup guide ↗", destination: ProviderSetup.documentation(provider))
       }
-      Text("Llumi never runs these commands for you. After signing in, choose Check Again. No prompts or coding tasks are needed.")
-        .font(.caption).foregroundStyle(.secondary)
+      SetupDemoView(provider: provider)
+    }
+  }
+}
+
+struct ProviderSwitchRow: View {
+  let provider: ProviderID
+  @Bindable var preferences: Preferences
+  let detail: String
+  private var title: String { provider == .claude ? "Claude Code" : "Codex" }
+  var body: some View {
+    HStack(spacing: 12) {
+      ProviderMark(provider: provider, size: 25).foregroundStyle(provider.accent)
+      VStack(alignment: .leading, spacing: 4) {
+        Text(title).font(.headline)
+        Text(detail).font(.callout).foregroundStyle(.secondary)
+      }
+      Spacer(minLength: 12)
+      Toggle("Monitor \(title)", isOn: Binding(
+        get: { preferences.isEnabled(provider) },
+        set: { preferences.setEnabled(provider, $0) }))
+        .toggleStyle(.switch).labelsHidden().accessibilityLabel("Monitor \(title)")
     }
   }
 }
@@ -165,18 +184,19 @@ struct CheckSetupView: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 16) {
       Text("Check Setup").font(.title2.bold())
-      Text("Checks use the same provider refresh as Usage. Unknown means this check could not verify that step.")
-        .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
       ForEach(ProviderID.allCases, id: \.self) { provider in
         let snapshot = model.usage[provider] ?? UsageSnapshot(provider: provider)
         VStack(alignment: .leading, spacing: 6) {
-          Text(provider == .claude ? "Claude Code" : "Codex").font(.headline)
-          Text(SetupStatus(snapshot: snapshot).rawValue)
-          Text(SetupDiagnostic(snapshot).summary).font(.caption).foregroundStyle(.secondary)
+          ProviderSwitchRow(provider: provider, preferences: model.preferences,
+            detail: model.preferences.isEnabled(provider) ? SetupStatus(snapshot: snapshot).rawValue : "Monitoring off")
+          if model.preferences.isEnabled(provider) {
+            Text(SetupDiagnostic(snapshot).summary).font(.caption).foregroundStyle(.secondary)
+              .fixedSize(horizontal: false, vertical: true)
+          }
         }
       }
       HStack {
-        Button("Check Again") { copied = false; model.refreshAction() }.disabled(model.manuallyRefreshing)
+        Button("Retry") { copied = false; model.refreshAction() }.disabled(model.manuallyRefreshing)
         if model.manuallyRefreshing { ProgressView().controlSize(.small) }
         Spacer()
         Button(copied ? "Copied" : "Copy Diagnostics") {
@@ -187,8 +207,6 @@ struct CheckSetupView: View {
           copied = NSPasteboard.general.setString(report, forType: .string)
         }
       }
-      Text("Copies only app/OS versions, architecture and provider status categories. Nothing is uploaded.")
-        .font(.caption).foregroundStyle(.secondary)
     }.padding(20)
   }
 }

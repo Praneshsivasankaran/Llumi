@@ -1,4 +1,14 @@
 # Settings and lifecycle
+## macOS 1.1.3
+
+Welcome shows only the Llumi mark, name and Get Started action. Setup always uses Light; fresh installs default to Light and existing installs migrate to Light once, preserving subsequent choices. Provider selection uses native switches shared with Settings. Both providers default on; off means no discovery/query/activity monitoring, no Usage card or notch entry. Both off is supported. Re-enabling checks immediately. Pending disabled-provider results must not publish.
+
+Provider guides retain copy-only install/sign-in commands and prerequisites, with a bundled five-second illustrative Setup demo, Pause/Replay and a static Reduce Motion frame. Retry replaces Check Again. Instruction copy is brief; redundant privacy, diagnostic and background-availability explanations leave normal UI. Diagnostic export remains restricted.
+
+Settings includes Updates with version, Check for Updates and Automatically check for updates. New and existing installations enable automatic checks once in 1.1.3; later user choices persist in Sparkle's own preferences. After setup, foreground launches/reopens probe the signed feed without no-update/error popups. An available-update banner offers Update and Later; standard Sparkle UI performs user-approved installation. Coalesce sessions and hide the banner when standard update UI is shown. Login launch stays quiet. No silent installation, no profile data, and no independent update networking.
+
+These are macOS changes; Windows remains on its current native setup and Store updates. Version/build is 1.1.3/3. Candidate review and a private loopback-feed test precede separate owner approval for every GitHub/website/public feed publication.
+
 Keep settings limited to launch at login/startup, compact monitor, background menu/tray icon and Appearance: System, Light, Dark. Preferences persist without credentials, account data or usage history. Show authoritative startup registration state; failed persistence must not claim success.
 
 Normal launch opens Usage. Login/startup launch stays quiet when the background control surface is enabled. Close continues monitoring; Open restores/focuses one window. If the background icon is hidden, retain a discoverable native application entry so closing cannot strand the app. Quit cancels refreshes, removes background and compact surfaces, stops activity monitoring and terminates owned helpers.

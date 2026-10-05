@@ -29,6 +29,7 @@ enum SetupCompletion {
 
 enum SetupStep: Equatable {
   case welcome, providers, codex, claude, verify, preferences, done
+  static let ordered: [SetupStep] = [.welcome, .providers, .codex, .claude, .verify, .preferences, .done]
 }
 
 enum SetupStatus: String {
@@ -36,7 +37,7 @@ enum SetupStatus: String {
   case notInstalled = "Not installed"
   case signedOut = "Installed — sign in required"
   case ready = "Ready"
-  case unavailable = "Unable to verify — check again"
+  case unavailable = "Unable to verify — retry"
   init(snapshot: UsageSnapshot) {
     switch snapshot.state {
     case .live: self = snapshot.reading == nil ? .unavailable : .ready
@@ -50,22 +51,31 @@ enum SetupStatus: String {
 
 @MainActor @Observable final class SetupFlow {
   private let defaults: UserDefaults
+  let preferences: Preferences
   private(set) var step: SetupStep = .welcome
-  var selected: Set<ProviderID> = Set(ProviderID.allCases)
+  var selected: Set<ProviderID> {
+    get { preferences.enabledProviders }
+    set { preferences.enabledProviders = newValue }
+  }
   var needsAutomaticSetup: Bool { !SetupCompletion.isComplete(defaults) }
   var steps: [SetupStep] {
     [.welcome, .providers] + (selected.contains(.codex) ? [.codex] : [])
       + (selected.contains(.claude) ? [.claude] : []) + [.verify, .preferences, .done]
   }
-  init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+  init(defaults: UserDefaults = .standard, preferences: Preferences? = nil) {
+    self.defaults = defaults
+    self.preferences = preferences ?? Preferences(defaults: defaults)
+  }
   func reopen() { step = .welcome }
   func next() {
-    guard let index = steps.firstIndex(of: step), index + 1 < steps.count else { return }
-    step = steps[index + 1]
+    guard let index = SetupStep.ordered.firstIndex(of: step),
+      let next = SetupStep.ordered.dropFirst(index + 1).first(where: steps.contains) else { return }
+    step = next
   }
   func back() {
-    guard let index = steps.firstIndex(of: step), index > 0 else { return }
-    step = steps[index - 1]
+    guard let index = SetupStep.ordered.firstIndex(of: step),
+      let previous = SetupStep.ordered.prefix(index).last(where: steps.contains) else { return }
+    step = previous
   }
   func complete() { defaults.set(true, forKey: SetupCompletion.key) }
 }

@@ -2,17 +2,20 @@ import SwiftUI
 
 struct UsageView: View {
   let model: Presentation
+  @State private var cardHeights: [ProviderID: CGFloat] = [:]
+  private var enabledProviders: [ProviderID] {
+    ProviderID.allCases.filter { model.preferences.isEnabled($0) }
+  }
+  private var uniformCardHeight: CGFloat {
+    enabledProviders.compactMap { cardHeights[$0] }.max() ?? 0
+  }
   var body: some View {
     GeometryReader { geometry in
       ScrollView {
         TimelineView(.periodic(from: .now, by: 30)) { context in
           VStack(alignment: .leading, spacing: 24) {
             HStack(alignment: .top, spacing: 12) {
-              VStack(alignment: .leading, spacing: 5) {
-                Text("Usage").font(.title2.bold())
-                Text("Your AI coding allowance at a glance.").font(.callout).foregroundStyle(
-                  .secondary)
-              }
+              Text("Usage").font(.title2.bold())
               Spacer(minLength: 8)
               VStack(alignment: .trailing, spacing: 3) {
                 Button {
@@ -29,33 +32,47 @@ struct UsageView: View {
                   model.manuallyRefreshing)
                 Text(
                   UsageCopy.updated(
-                    model.usage.values.compactMap { $0.reading?.date }.min(), now: context.date)
+                    enabledProviders.compactMap { model.usage[$0]?.reading?.date }.min(), now: context.date)
                 ).font(.caption2).foregroundStyle(.secondary)
               }
             }
-            let columns =
-              geometry.size.width >= 560
-              ? [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)]
-              : [GridItem(.flexible())]
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
-              ForEach(ProviderID.allCases, id: \.self) { p in
-                ProviderSection(
-                  snapshot: model.usage[p] ?? UsageSnapshot(provider: p), now: context.date)
+            if enabledProviders.isEmpty {
+              VStack(spacing: 16) {
+                Image(systemName: "slider.horizontal.3").font(.system(size: 28)).foregroundStyle(.secondary)
+                Text("Choose a provider in Settings to start monitoring.")
+                  .font(.callout).multilineTextAlignment(.center)
+                Button("Open Settings") { model.destination = .settings }
+                  .buttonStyle(.borderedProminent)
+              }.frame(maxWidth: .infinity).padding(.vertical, 50)
+            } else {
+              let columns = geometry.size.width >= 560 && enabledProviders.count > 1
+                ? [GridItem(.flexible(), alignment: .top), GridItem(.flexible(), alignment: .top)]
+                : [GridItem(.flexible())]
+              LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
+                ForEach(enabledProviders, id: \.self) { p in
+                  ProviderSection(snapshot: model.usage[p] ?? UsageSnapshot(provider: p),
+                    now: context.date, minimumHeight: uniformCardHeight)
+                }
+              }.onPreferenceChange(ProviderCardHeightKey.self) { heights in
+                if cardHeights != heights { cardHeights = heights }
               }
             }
-            Text(
-              "Allowance comes from your signed-in command-line providers. Use the same subscription account across your clients."
-            ).font(.caption).foregroundStyle(.secondary).fixedSize(
-              horizontal: false, vertical: true)
           }.padding(24)
         }
       }
     }
   }
 }
+private struct ProviderCardHeightKey: PreferenceKey {
+  static let defaultValue: [ProviderID: CGFloat] = [:]
+  static func reduce(value: inout [ProviderID: CGFloat], nextValue: () -> [ProviderID: CGFloat]) {
+    value.merge(nextValue(), uniquingKeysWith: max)
+  }
+}
 private struct ProviderSection: View {
   let snapshot: UsageSnapshot
   let now: Date
+  let minimumHeight: CGFloat
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       HStack(spacing: 10) {
@@ -113,6 +130,12 @@ private struct ProviderSection: View {
             .vertical, 5)
       }
     }.padding(18).frame(maxWidth: .infinity, alignment: .topLeading)
+      .fixedSize(horizontal: false, vertical: true)
+      .background(GeometryReader { geometry in
+        Color.clear.preference(key: ProviderCardHeightKey.self,
+          value: [snapshot.provider: geometry.size.height])
+      })
+      .frame(minHeight: minimumHeight, alignment: .topLeading)
       .background(.background.opacity(0.65), in: RoundedRectangle(cornerRadius: 13))
       .overlay(RoundedRectangle(cornerRadius: 13).stroke(.primary.opacity(0.07), lineWidth: 1))
   }

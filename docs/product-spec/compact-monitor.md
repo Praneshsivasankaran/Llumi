@@ -1,4 +1,6 @@
 # Compact monitor
+macOS 1.1.3 permits dragging anywhere across connected displays after a five-point movement threshold. A click still opens Llumi. Dragging suspends hover transitions without stealing keyboard focus. Persist display identity and a normalized center/top anchor, retain it through resizing and relaunch, clamp to usable bounds, and fall back to the main display if the saved display disappears. Settings exposes Reset Position. Disabled providers never enter the monitor. Windows behavior is unchanged.
+
 The compact monitor is contextual and optional. Its content is the same across platforms: provider logo plus primary percentage; one or both providers according to activity. Full names remain available to accessibility. Unknown is a dash; stale values have an explicit indicator and a stale detail state.
 
 Hover expands a small surface containing provider identity, primary percentage, slim progress, primary reset and status when needed. Claude shows both five-hour and weekly percentages/resets in expanded details; compact always uses five-hour with no weekly fallback. Other usage windows stay in Usage. Click opens/focuses the single existing main window. No duplicate main windows or monitors.

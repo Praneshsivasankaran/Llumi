@@ -147,7 +147,7 @@ import Darwin
         "appearance": "unknown"], to: d)
       let p = Preferences(defaults: d)
       XCTAssertTrue(p.notchEnabled); XCTAssertTrue(p.menuEnabled)
-      XCTAssertEqual(p.appearance, .system)
+      XCTAssertEqual(p.appearance, .light)
     }
   }
   func testProductionValuesWinAndMigrationRunsOnce() {
@@ -165,7 +165,8 @@ import Darwin
     for value in ["system", "light", "dark"] {
       suite { d in
         BetaPreferences.migrate(from: ["appearance": value], to: d)
-        XCTAssertEqual(Preferences(defaults: d).appearance.rawValue, value)
+        XCTAssertEqual(d.string(forKey: "appearance"), value)
+        XCTAssertEqual(Preferences(defaults: d).appearance, .light)
       }
     }
     suite { d in
@@ -292,7 +293,7 @@ import Darwin
     let prefs = Preferences(defaults: defaults)
     XCTAssertTrue(prefs.notchEnabled)
     XCTAssertTrue(prefs.menuEnabled)
-    XCTAssertEqual(prefs.appearance, .system)
+    XCTAssertEqual(prefs.appearance, .light)
     var changes = 0
     prefs.changed = { changes += 1 }
     prefs.notchEnabled = false
@@ -303,7 +304,9 @@ import Darwin
     XCTAssertFalse(restored.menuEnabled)
     XCTAssertEqual(restored.appearance, .dark)
     XCTAssertEqual(changes, 3)
-    XCTAssertEqual(defaults.persistentDomain(forName: name)?.count, 3)
+    XCTAssertEqual(Set(defaults.persistentDomain(forName: name)?.keys.map { $0 } ?? []),
+      ["notchEnabled", "menuEnabled", "appearance", SetupCompletion.key,
+       Preferences.lightMigrationKey])
   }
   func testAppearanceSystemAndOverrides() {
     XCTAssertNil(AppAppearance.system.native)
@@ -396,7 +399,7 @@ import Darwin
       d.set("true",forKey:SetupCompletion.key)
       BetaPreferences.migrate(sources:[["setupCompleted":1,"notchEnabled":1]],to:d)
       XCTAssertFalse(SetupCompletion.isComplete(d))
-      XCTAssertEqual(Preferences(defaults:d).appearance,.system)
+      XCTAssertEqual(Preferences(defaults:d).appearance,.light)
     }
   }
   func testLegacyAndLlumiLeasesExcludeBothDirectionsAndReleaseOnFailure() throws {

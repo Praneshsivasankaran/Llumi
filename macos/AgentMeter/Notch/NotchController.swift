@@ -16,6 +16,11 @@ final class TrackingSurface: NSView {
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
   var hover: (Bool) -> Void = { _ in }
   var clicked: () -> Void = {}
+  var pressed: (CGPoint) -> Void = { _ in }
+  var dragStarted: () -> Void = {}
+  var dragged: (CGPoint) -> Void = { _ in }
+  var released: (Bool) -> Void = { _ in }
+  private var gesture: MonitorDragGesture?
   private var tracking: NSTrackingArea?
   override func updateTrackingAreas() {
     super.updateTrackingAreas()
@@ -29,7 +34,31 @@ final class TrackingSurface: NSView {
   }
   override func mouseEntered(with event: NSEvent) { hover(true) }
   override func mouseExited(with event: NSEvent) { hover(false) }
-  override func mouseDown(with event: NSEvent) { clicked() }
+  private func screenPoint(_ event: NSEvent) -> CGPoint {
+    window?.convertPoint(toScreen: event.locationInWindow) ?? NSEvent.mouseLocation
+  }
+  override func mouseDown(with event: NSEvent) {
+    let point = screenPoint(event)
+    gesture = MonitorDragGesture(origin: point)
+    pressed(point)
+  }
+  override func mouseDragged(with event: NSEvent) { movePointer(to: screenPoint(event)) }
+  private func movePointer(to point: CGPoint) {
+    guard var gesture else { return }
+    let wasDragging = gesture.isDragging
+    gesture.move(to: point)
+    self.gesture = gesture
+    if !wasDragging && gesture.isDragging { dragStarted() }
+    if gesture.isDragging { dragged(point) }
+  }
+  override func mouseUp(with event: NSEvent) {
+    guard gesture != nil else { return }
+    movePointer(to: screenPoint(event))
+    let wasDragging = gesture?.isDragging ?? false
+    gesture = nil
+    released(wasDragging)
+    if !wasDragging { clicked() }
+  }
   override func accessibilityPerformPress() -> Bool {
     clicked()
     return true
@@ -47,6 +76,12 @@ final class TrackingSurface: NSView {
   private var hoverWork: DispatchWorkItem?
   private var generation = 0
   private var click: () -> Void = {}
+  private let defaults: UserDefaults
+  private var anchor: MonitorAnchor?
+  private var pressLocation: CGPoint?
+  private var dragStartFrame: CGRect?
+  private var dragging = false
+  private var dragFrontmost: pid_t?
   private(set) var focusPreserved = true
   var text: String {
     presentation.rows.map { $0.id.title + " " + $0.percentage }.joined(separator: " | ")
@@ -61,7 +96,9 @@ final class TrackingSurface: NSView {
     panel.appearance = appearance.native
     updateMaterial()
   }
-  init(open: @escaping () -> Void = {}) {
+  init(defaults: UserDefaults = .standard, open: @escaping () -> Void = {}) {
+    self.defaults = defaults
+    anchor = MonitorAnchor.load(from: defaults)
     click = open
     panel.isOpaque = false
     panel.backgroundColor = .clear
@@ -76,6 +113,10 @@ final class TrackingSurface: NSView {
     surface.setAccessibilityRole(.button)
     surface.clicked = { [weak self] in self?.openFromClick() }
     surface.hover = { [weak self] inside in self?.scheduleHover(inside) }
+    surface.pressed = { [weak self] point in self?.press(at: point) }
+    surface.dragStarted = { [weak self] in self?.startDrag() }
+    surface.dragged = { [weak self] point in self?.drag(to: point) }
+    surface.released = { [weak self] didDrag in self?.release(didDrag: didDrag) }
     material.material = .hudWindow
     material.blendingMode = .behindWindow
     material.state = .active
@@ -104,6 +145,50 @@ final class TrackingSurface: NSView {
     Diagnostics.shared.record("notch-click")
     click()
   }
+  private func press(at point: CGPoint) {
+    hoverWork?.cancel()
+    pressLocation = point
+    generation += 1
+    // Replace active AppKit animations before direct pointer movement.
+    let current = panel.frame
+    NSAnimationContext.runAnimationGroup { context in
+      context.duration = 0
+      panel.animator().setFrame(current, display: true)
+      panel.animator().alphaValue = 1
+    }
+    dragStartFrame = current
+    dragFrontmost = NSWorkspace.shared.frontmostApplication?.processIdentifier
+  }
+  private func startDrag() {
+    dragging = true
+    hoverWork?.cancel()
+  }
+  private func drag(to point: CGPoint) {
+    guard dragging, let start = dragStartFrame, let press = pressLocation,
+      let display = MonitorGeometry.display(at: point, among: displays)
+    else { return }
+    let frame = MonitorGeometry.draggedFrame(
+      start: start, pressed: press, current: point, visible: display.visible)
+    panel.setFrame(frame, display: true)
+    anchor = MonitorGeometry.anchor(frame: frame, on: display)
+    focusPreserved = focusPreserved
+      && dragFrontmost == NSWorkspace.shared.frontmostApplication?.processIdentifier
+      && !panel.isKeyWindow && !panel.isMainWindow
+  }
+  private func release(didDrag: Bool) {
+    if didDrag { anchor?.save(to: defaults) }
+    pressLocation = nil
+    dragStartFrame = nil
+    dragging = false
+    dragFrontmost = nil
+    transition(immediate: true)
+    scheduleHover(panel.frame.contains(NSEvent.mouseLocation))
+  }
+  func resetPosition() {
+    anchor = nil
+    defaults.removeObject(forKey: MonitorAnchor.defaultsKey)
+    place()
+  }
   private func updateMaterial() {
     let opaque = NSWorkspace.shared.accessibilityDisplayShouldReduceTransparency
     material.isHidden = opaque
@@ -119,7 +204,10 @@ final class TrackingSurface: NSView {
     applyAppearance(model.preferences.appearance)
     let front = NSWorkspace.shared.frontmostApplication?.processIdentifier
     let old = presentation.state
-    presentation.state.reconcile(activity: model.activity, enabled: model.preferences.notchEnabled)
+    var activity = model.activity
+    if !model.preferences.enabledProviders.contains(.codex) { activity.codex = SurfaceActivity() }
+    if !model.preferences.enabledProviders.contains(.claude) { activity.claude = SurfaceActivity() }
+    presentation.state.reconcile(activity: activity, enabled: model.preferences.notchEnabled)
     presentation.rows = presentation.state.providers.map {
       ProviderGlance(snapshot: model.usage[$0] ?? UsageSnapshot(provider: $0))
     }
@@ -136,8 +224,9 @@ final class TrackingSurface: NSView {
   }
   private func scheduleHover(_ inside: Bool) {
     hoverWork?.cancel()
+    guard pressLocation == nil else { return }
     let work = DispatchWorkItem { [weak self] in
-      guard let self, self.presentation.state.phase != .hidden else { return }
+      guard let self, self.pressLocation == nil, self.presentation.state.phase != .hidden else { return }
       if !inside && self.panel.frame.contains(NSEvent.mouseLocation) { return }
       self.setHover(inside)
     }
@@ -145,9 +234,18 @@ final class TrackingSurface: NSView {
     DispatchQueue.main.asyncAfter(deadline: .now() + (inside ? 0.12 : 0.10), execute: work)
   }
   func setHover(_ inside: Bool) {
+    guard pressLocation == nil else { return }
     let old = presentation.state
     presentation.state.hover(inside)
     if old != presentation.state { transition() }
+  }
+  private func displayID(_ screen: NSScreen) -> UInt32 {
+    (screen.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32) ?? 0
+  }
+  private var displays: [MonitorDisplay] {
+    NSScreen.screens.map {
+      MonitorDisplay(id: displayID($0), frame: $0.frame, visible: $0.visibleFrame)
+    }
   }
   private func targetFrame() -> NSRect? {
     let screens = NSScreen.screens
@@ -155,7 +253,15 @@ final class TrackingSurface: NSView {
       CGDisplayIsBuiltin(
         ($0.deviceDescription[NSDeviceDescriptionKey("NSScreenNumber")] as? UInt32) ?? 0) != 0
     }
-    guard let screen = builtIn ?? NSScreen.main ?? screens.first else { return nil }
+    let selected: NSScreen?
+    if let anchor,
+      let display = MonitorGeometry.display(
+        for: anchor, among: displays, fallbackID: NSScreen.main.map(displayID)) {
+      selected = screens.first { displayID($0) == display.id }
+    } else {
+      selected = builtIn ?? NSScreen.main ?? screens.first
+    }
+    guard let screen = selected else { return nil }
     let expanded = presentation.state.phase == .expanded
     let measured = presentation.rows.reduce(CGFloat(0)) { total, row in
       total
@@ -169,18 +275,23 @@ final class TrackingSurface: NSView {
         ? (presentation.rows.count > 1 ? 390 : 228)
         : max(112, measured + 40 + CGFloat(max(0, presentation.rows.count - 1)) * 25))
     let height: CGFloat = expanded ? (presentation.state.providers.contains(.claude) ? 174 : 144) : 34
+    if let anchor {
+      return MonitorGeometry.frame(
+        size: CGSize(width: width, height: height), anchor: anchor, visible: screen.visibleFrame)
+    }
     // Preserve Phase 1's screen/visible-area anchor. Presentation alone changes size.
     let anchor = MonitorGeometry.frame(
       screen: screen.frame, visible: screen.visibleFrame, safeTop: screen.safeAreaInsets.top,
       contentWidth: width)
     let top = anchor.maxY + 2
-    return NSRect(
+    return MonitorGeometry.clamped(NSRect(
       x: min(
         max(screen.frame.midX - width / 2, screen.visibleFrame.minX),
         screen.visibleFrame.maxX - width), y: max(screen.visibleFrame.minY, top - height),
-      width: width, height: height)
+      width: width, height: height), to: screen.visibleFrame)
   }
   private func transition(immediate: Bool = false) {
+    guard pressLocation == nil else { return }
     Diagnostics.shared.record("notch", code: presentation.state.phase.rawValue)
     generation += 1
     let current = generation
@@ -229,6 +340,7 @@ final class TrackingSurface: NSView {
     }
   }
   func place() {
+    guard pressLocation == nil else { return }
     if presentation.state.phase != .hidden, let frame = targetFrame() {
       panel.setFrame(frame, display: true)
     }

@@ -27,4 +27,4 @@ This creates a local ad-hoc build, not Developer ID signing or notarization. Bui
 
 For an unsigned DMG rehearsal and the future signing/notarization steps, see [Distribution](DISTRIBUTION.md).
 
-The active candidate is 1.1.2/build 2 with pinned Sparkle 2.10.0. Xcode resolves the official binary dependency and embeds its framework; no signing occurs in unsigned source builds. See [updater candidate and remaining gates](UPDATES.md).
+The active local candidate is 1.1.3/build 3 with pinned Sparkle 2.10.0. Xcode resolves the official binary dependency and embeds its framework; no signing occurs in unsigned source builds. See [updater candidate and remaining gates](UPDATES.md). Public distribution remains on 1.1.2 until separately approved.

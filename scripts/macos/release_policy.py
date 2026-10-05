@@ -17,7 +17,7 @@ def validate_metadata(info, candidate, frozen):
     assert key == candidate['public_ed_key'] and len(base64.b64decode(key, validate=True)) == 32, 'Invalid public key'
     assert info.get('SUVerifyUpdateBeforeExtraction') is True and info.get('SURequireSignedFeed') is True, 'Update signature verification required'
     assert info.get('SUSignedFeedFailureExpirationInterval') == 0, 'Signed feed failures must not expire'
-    assert 'SUEnableAutomaticChecks' not in info, 'Preserve standard consent behavior'
+    assert info.get('SUEnableAutomaticChecks') is True, '1.1.3 enables automatic checks; later user preferences persist'
     for field in ['SUAutomaticallyUpdate', 'SUAllowsAutomaticUpdates', 'SUSendProfileInfo', 'SUEnableSystemProfiling']:
         assert info.get(field) is False, f'{field} must be disabled'
 

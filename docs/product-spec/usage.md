@@ -1,4 +1,6 @@
 # Usage
+macOS 1.1.3 shows only enabled providers in equal-width, equal-height cards aligned at headings, primary values and bars. Reserve whitespace for differing window counts rather than inventing data. Both providers off shows a Settings action. Remove the introductory allowance subtitle and signed-in-provider footer; retain observation age and refresh. Windows presentation is unchanged.
+
 Llumi is one product with native platform implementations. Its primary destinations are Usage and Settings. Provider names are Codex and Claude Code. The Raspberry semicircular gauge identifies Llumi; system status surfaces use its monochrome variant.
 
 Usage presents each provider's status, primary remaining percentage, slim progress, meaningful windows, reset information and observation age. Remaining means 100 minus verified used percentage. Unknown is a dash, never zero or full. Codex primary is the longest reported main/core window; extra/Spark buckets never substitute.

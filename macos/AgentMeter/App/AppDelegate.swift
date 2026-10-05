@@ -1,26 +1,24 @@
 import AppKit
 import SwiftUI
-import Sparkle
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, SPUUpdaterDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
   let model = Presentation()
   private var store: UsageStore!
   private var activity: ActivityMonitor!
   private var notch: NotchController!
   private var window: NSWindow!
   private var setupWindow: NSWindow?
-  private let setup = SetupFlow()
+  private lazy var setup = SetupFlow(preferences: model.preferences)
   private var status: NSStatusItem!
   private var schedule: Task<Void, Never>?
   private var wake: Task<Void, Never>?
   private var observers: [NSObjectProtocol] = []
   private var quitting = false
-  private var updaterStarted = false
-  private lazy var updaterController = SPUStandardUpdaterController(
-    startingUpdater: false, updaterDelegate: self, userDriverDelegate: nil)
+  private lazy var updates = UpdaterCoordinator(presentation: model.updates)
+  private var appliedProviders: Set<ProviderID>?
   func applicationDidFinishLaunching(_ notification: Notification) {
     DistributedNotificationCenter.default().addObserver(
-      self, selector: #selector(openMain), name: InstanceLease.reopen, object: nil)
+      self, selector: #selector(reopenMain), name: InstanceLease.reopen, object: nil)
     Diagnostics.shared.record("launch")
     createApplicationMenu()
     startUpdaterIfReady()
@@ -40,7 +38,7 @@ import Sparkle
     }
     let discovered: @Sendable (ProviderID, Installation) -> Void = { [weak self] p, install in
       Task { @MainActor in
-        guard let self, !self.quitting else { return }
+        guard let self, !self.quitting, self.model.preferences.isEnabled(p) else { return }
         self.model.installations[p] = install
         self.activity.update(p, install)
       }
@@ -48,7 +46,7 @@ import Sparkle
     store = UsageStore(sources: [
       .codex: ProviderAdapter(provider: .codex, discovery: discovery, discovered: discovered),
       .claude: ProviderAdapter(provider: .claude, discovery: discovery, discovered: discovered),
-    ]) { [weak self] snapshot in
+    ], enabledProviders: model.preferences.enabledProviders) { [weak self] snapshot in
       Task { @MainActor in
         guard let self, !self.quitting else { return }
         self.model.usage = snapshot
@@ -58,6 +56,7 @@ import Sparkle
     }
     model.refreshAction = { [weak self] in self?.manualRefresh() }
     notch = NotchController(open: { [weak self] in self?.openMain() })
+    model.resetNotchPositionAction = { [weak self] in self?.notch.resetPosition() }
     model.preferences.changed = { [weak self] in self?.applyPreferences() }
     applyPreferences()
     let event = NSAppleEventManager.shared().currentAppleEvent
@@ -88,19 +87,19 @@ import Sparkle
   }
   func applicationDidBecomeActive(_ notification: Notification) { model.loginItem.synchronize() }
   private func startUpdaterIfReady() {
-    guard !updaterStarted, !setup.needsAutomaticSetup else { return }
-    updaterStarted = true
-    updaterController.startUpdater()
+    updates.startIfReady(setupComplete: !setup.needsAutomaticSetup)
   }
-  // Even an inherited Sparkle preference must not add system-profile fields.
-  func allowedSystemProfileKeys(for updater: SPUUpdater) -> [String]? { [] }
+  @objc private func checkForUpdates() { updates.checkForUpdates() }
+  func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    menuItem.action != #selector(checkForUpdates) || model.updates.canCheck
+  }
   private func createApplicationMenu() {
     let main = NSMenu()
     let appItem = NSMenuItem(title: "Llumi", action: nil, keyEquivalent: "")
     let appMenu = NSMenu(title: "Llumi")
     let update = NSMenuItem(title: "Check for Updates…",
-      action: #selector(SPUStandardUpdaterController.checkForUpdates(_:)), keyEquivalent: "")
-    update.target = updaterController
+      action: #selector(checkForUpdates), keyEquivalent: "")
+    update.target = self
     appMenu.addItem(update)
     appMenu.addItem(.separator())
     for (title, action, key) in [
@@ -177,6 +176,7 @@ import Sparkle
   }
   @objc func openMain() {
     guard !quitting else { return }
+    let newlyVisible = window?.isVisible != true
     if window == nil {
       window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 850, height: 560),
@@ -194,6 +194,7 @@ import Sparkle
     window.deminiaturize(nil)
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
+    if newlyVisible { updates.foregroundOpened() }
     Diagnostics.shared.record("window-open")
   }
   private func applyPreferences() {
@@ -205,6 +206,12 @@ import Sparkle
       self.status = nil
     }
     notch?.update(model)
+    let enabled = model.preferences.enabledProviders
+    if appliedProviders != enabled {
+      appliedProviders = enabled
+      activity?.setEnabledProviders(enabled)
+      Task { [weak self] in await self?.store?.setEnabledProviders(enabled) }
+    }
   }
   @objc func openSetup() {
     guard !quitting else { return }
@@ -212,12 +219,13 @@ import Sparkle
       let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 610),
         styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
       w.title = "Setup Llumi"
+      w.appearance = NSAppearance(named: .aqua)
       w.isReleasedWhenClosed = false
       w.delegate = self
       w.contentView = NSHostingView(rootView: SetupView(model: model, flow: setup) { [weak self] in
         self?.setupWindow?.orderOut(nil)
-        self?.openMain()
         self?.startUpdaterIfReady()
+        self?.openMain()
       })
       w.center()
       setupWindow = w
@@ -254,8 +262,13 @@ import Sparkle
   func windowWillClose(_ notification: Notification) { Diagnostics.shared.record("window-close") }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-    openMain()
+    reopenMain()
     return true
+  }
+  @objc private func reopenMain() {
+    let alreadyVisible = window?.isVisible == true
+    openMain()
+    if alreadyVisible { updates.foregroundOpened() }
   }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard !quitting else { return .terminateLater }
@@ -370,6 +383,10 @@ import Sparkle
           case "menu-refresh": self.status?.menu?.performActionForItem(at: 1)
           case "menu-quit": self.status?.menu?.performActionForItem(at: 4)
           case "open": self.openMain()
+          case "setup": self.openSetup()
+          case "setup-next": self.setup.next()
+          case "setup-back": self.setup.back()
+          case "fixture-usage": self.applyUsageFixture()
           case "settings": self.openSettings()
           case "login-on": self.model.loginItem.setEnabled(true)
           case "login-off": self.model.loginItem.setEnabled(false)
@@ -392,7 +409,8 @@ import Sparkle
               let file = URL(fileURLWithPath: root).appendingPathComponent(name + ".png")
               if item["surface"].string == "notch" {
                 self.notch.capture(to: file)
-              } else if let view = self.window.contentView,
+              } else if let view = (item["surface"].string == "setup"
+                ? self.setupWindow?.contentView : self.window?.contentView),
                 let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
               {
                 view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -420,4 +438,31 @@ import Sparkle
       }
     #endif
   }
+  #if DEBUG
+    private func applyUsageFixture() {
+      Task { [weak self] in
+        guard let self else { return }
+        await self.store.suspend()
+        let now = Date()
+        for provider in ProviderID.allCases {
+          let short = try! UsageWindow(id: "five_hour", bucket: provider.rawValue, label: "5-hour",
+            durationMinutes: 300, used: provider == .codex ? 24 : 18,
+            reset: now.addingTimeInterval(7_200))
+          let weekly = try! UsageWindow(id: "seven_day", bucket: provider.rawValue, label: "Weekly",
+            durationMinutes: 10_080, used: provider == .codex ? 37 : 42,
+            reset: now.addingTimeInterval(345_600))
+          var windows = [short, weekly]
+          if provider == .claude {
+            windows.append(try! UsageWindow(id: "seven_day_sonnet", bucket: "sonnet", label: "Sonnet",
+              durationMinutes: 10_080, used: 12, reset: now.addingTimeInterval(345_600)))
+          }
+          var snapshot = UsageSnapshot(provider: provider)
+          snapshot.apply(.success(.init(binding: "synthetic-preview", windows: windows, date: now)))
+          self.model.usage[provider] = snapshot
+        }
+        self.notch.update(self.model)
+        self.validationEvent("fixture-usage")
+      }
+    }
+  #endif
 }
