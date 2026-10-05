@@ -65,7 +65,7 @@ import AppKit
     // sibling build's images for this render process without modifying a bundle.
     let products = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let app = try XCTUnwrap(Bundle(url: products.appendingPathComponent("Llumi.app")))
-    for name in ["CodexLogo", "ClaudeLogo"] {
+    for name in ["CodexLogo", "ClaudeLogo", "ClaudeCodeMascot"] {
       XCTAssertNotNil(app.image(forResource: name))
     }
     let suite = "Llumi-Allowance-Render-" + UUID().uuidString
@@ -109,9 +109,15 @@ import AppKit
     ]
     for (name, codex, claude) in cases {
       model.usage = [.codex: codex, .claude: claude]
-      try await capture(UsageView(model: model).background(Color(nsColor: .windowBackgroundColor)),
+      try await capture(UsageView(model: model, assetBundle: app).background(Color(nsColor: .windowBackgroundColor)),
         name: name, size: CGSize(width: 800, height: 620),
         directory: directory)
+      if name == "both-window" {
+        try await capture(UsageView(model: model, assetBundle: app)
+          .background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(.dark),
+          name: name + "-dark", size: CGSize(width: 800, height: 620),
+          directory: directory, appearance: .darkAqua)
+      }
       let notch = NotchPresentation()
       notch.state.reconcile(activity: ActivitySnapshot(codex: SurfaceActivity(cli: true),
         claude: SurfaceActivity(cli: true)), enabled: true)
@@ -125,12 +131,13 @@ import AppKit
     XCTAssertNotNil(defaults.object(forKey: Preferences.lightMigrationKey))
   }
 
-  private func capture<V: View>(_ view: V, name: String, size: CGSize, directory: URL) async throws {
+  private func capture<V: View>(_ view: V, name: String, size: CGSize, directory: URL,
+    appearance: NSAppearance.Name = .aqua) async throws {
     _ = NSApplication.shared
     let window = NSWindow(contentRect: CGRect(origin: .zero, size: size), styleMask: [.borderless],
       backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
-    window.appearance = NSAppearance(named: .aqua)
+    window.appearance = NSAppearance(named: appearance)
     let host = NSHostingView(rootView: view)
     window.contentView = host
     host.frame = CGRect(origin: .zero, size: size)

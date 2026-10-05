@@ -10,6 +10,10 @@ All supported reported time allowances appear in Usage and expanded details with
 
 Consumer labels use “5-hour limit” and “Weekly limit”; other reported durations use a duration-specific limit label. The internal general scope is not shown as “General” in Usage, hover or accessibility details. Model/additional labels retain their scope to distinguish separate limits. Missing duration is labeled “Usage limit · Period not reported”. Windows presentation remains parked.
 
+Usage cards are informational, with no click-to-focus outline. Complete details remain available through Command-1 and accessibility labels. Light mode uses a pale card fill, clearer neutral border and subtle shadow to separate cards from the page. Dark-mode fill and border retain their previous appearance; equal sizing and allowance behavior are unchanged.
+
+The Claude Usage card uses Anthropic's Claude Code pixel mascot, with the provider name beside it. Bundle the vendor artwork locally. Preserve the existing Codex mark, setup presentation and notch artwork.
+
 Distinguish reported, not reported, unsupported format/billing, failed retrieval and stale observations internally and with concise UI state text. Empty and unknown-only successful responses never appear Live. Missing fields never imply unlimited or a synthetic zero/full allowance. Fresh successful missing responses invalidate old observations rather than reusing them as current data.
 
 Retain stale data only after the same account binding is reverified. Failed continuity checks, account switches, logout and disablement clear previous-account data. Stale cards/details report observation age. Resets trigger a bounded refresh through the existing single-flight scheduler; past timestamps do not imply refills. A 30-second reset-refresh cooldown also bounds moving near-future timestamps. Rate limits and repeat failures impose backoff capped at 15 minutes and respected by automatic, activity and manual refresh requests; reset scheduling cannot bypass it. Cancellation, sleep/wake and provider disablement clean up scheduled work.

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct UsageView: View {
   let model: Presentation
+  var assetBundle: Bundle? = nil
   @State private var cardHeights: [ProviderID: CGFloat] = [:]
   private var enabledProviders: [ProviderID] {
     ProviderID.allCases.filter { model.preferences.isEnabled($0) }
@@ -51,7 +52,7 @@ struct UsageView: View {
               LazyVGrid(columns: columns, alignment: .leading, spacing: 16) {
                 ForEach(enabledProviders, id: \.self) { p in
                   ProviderSection(snapshot: model.usage[p] ?? UsageSnapshot(provider: p),
-                    now: context.date, minimumHeight: uniformCardHeight)
+                    now: context.date, minimumHeight: uniformCardHeight, assetBundle: assetBundle)
                 }
               }.onPreferenceChange(ProviderCardHeightKey.self) { heights in
                 if cardHeights != heights { cardHeights = heights }
@@ -70,14 +71,25 @@ private struct ProviderCardHeightKey: PreferenceKey {
   }
 }
 private struct ProviderSection: View {
+  @Environment(\.colorScheme) private var colorScheme
   let snapshot: UsageSnapshot
   let now: Date
   let minimumHeight: CGFloat
+  let assetBundle: Bundle?
   var body: some View {
     VStack(alignment: .leading, spacing: 18) {
       HStack(spacing: 10) {
-        ProviderMark(provider: snapshot.provider, size: 25).foregroundStyle(
-          snapshot.provider.accent)
+        if snapshot.provider == .claude {
+          Image("ClaudeCodeMascot", bundle: assetBundle)
+            .renderingMode(.original)
+            .resizable()
+            .scaledToFit()
+            .frame(width: 25, height: 25)
+            .accessibilityHidden(true)
+        } else {
+          ProviderMark(provider: snapshot.provider, size: 25).foregroundStyle(
+            snapshot.provider.accent)
+        }
         Text(snapshot.provider.title).font(.headline)
         Spacer(minLength: 4)
         Text(snapshot.state.rawValue).font(.caption).foregroundStyle(.secondary)
@@ -123,9 +135,17 @@ private struct ProviderSection: View {
           value: [snapshot.provider: geometry.size.height])
       })
       .frame(minHeight: minimumHeight, alignment: .topLeading)
-      .background(.background.opacity(0.65), in: RoundedRectangle(cornerRadius: 13))
-      .overlay(RoundedRectangle(cornerRadius: 13).stroke(.primary.opacity(0.07), lineWidth: 1))
-      .focusable()
+      .background {
+        let shape = RoundedRectangle(cornerRadius: 13)
+        if colorScheme == .light {
+          shape.fill(Color(red: 0.96, green: 0.96, blue: 0.97))
+        } else {
+          shape.fill(.background.opacity(0.65))
+        }
+      }
+      .overlay(RoundedRectangle(cornerRadius: 13).stroke(
+        .primary.opacity(colorScheme == .light ? 0.14 : 0.07), lineWidth: 1))
+      .shadow(color: colorScheme == .light ? .black.opacity(0.05) : .clear, radius: 8, y: 2)
       .accessibilityElement(children: .ignore)
       .accessibilityLabel(UsageCopy.detailSummary(snapshot, now: now))
   }
