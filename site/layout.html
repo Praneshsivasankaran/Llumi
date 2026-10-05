@@ -15,6 +15,7 @@
     <link rel="icon" href="{{PREFIX}}mark.svg" type="image/svg+xml">
     <link rel="stylesheet" href="{{PREFIX}}styles.css">
     <script src="{{PREFIX}}app.js" defer></script>
+    {{PAGE_HEAD}}
   </head>
   <body>
     <a class="skip" href="#main" tabindex="0">Skip to content</a>
@@ -26,6 +27,7 @@
           ></a
         >
         <nav aria-label="Main navigation">
+          <a class="nav-release" href="{{PREFIX}}releases/"{{RELEASE_CURRENT}}>Release Notes</a>
           <a class="nav-download" href="{{PREFIX}}#download"
             >Download <span aria-hidden="true">↓</span></a
           >
@@ -46,7 +48,7 @@
         <p>Track your AI coding usage.</p>
       </div>
       <nav aria-label="Footer">
-        <a href="{{GITHUB}}">GitHub</a><a href="{{PREFIX}}privacy/">Privacy</a
+        <a href="{{PREFIX}}releases/">Release Notes</a><a href="{{GITHUB}}">GitHub</a><a href="{{PREFIX}}privacy/">Privacy</a
         ><a href="{{PREFIX}}support/">Support</a
         ><a href="{{GITHUB}}/blob/main/LICENSE">License</a>
       </nav>

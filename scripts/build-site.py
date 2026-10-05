@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build static Pages output with no dependencies; PRIVACY.md stays authoritative."""
 import argparse
+from datetime import date
 import html
 import json
 import shutil
@@ -62,7 +63,93 @@ def download_button(item, platform, primary=False):
     return f'<button class="{classes}" type="button" disabled aria-label="{label} — not yet available">{label}</button>'
 
 
-def build(output, base_url=""):
+def load_releases(include_review=False):
+    metadata = json.loads((ROOT / "site/releases.json").read_text(encoding="utf-8"))
+    if metadata.get("schema_version") != 1 or not isinstance(metadata.get("releases"), list):
+        raise ValueError("Unsupported release notes metadata")
+    seen = set()
+    selected = []
+    for item in metadata["releases"]:
+        if item.get("platform") not in ("macos", "windows"):
+            raise ValueError("Unknown release platform")
+        if not isinstance(item.get("version"), str) or not re.fullmatch(r"\d+\.\d+\.\d+", item["version"]):
+            raise ValueError("Release version must be a numeric display version")
+        if type(item.get("build")) is not int or item["build"] < 1:
+            raise ValueError("Release build must be a positive integer")
+        identity = (item["platform"], item["version"])
+        if identity in seen:
+            raise ValueError("Duplicate release notes route")
+        seen.add(identity)
+        if item.get("status") == "published":
+            try:
+                date.fromisoformat(item["published_at"])
+            except (KeyError, TypeError, ValueError):
+                raise ValueError("Published release requires a verified publication date") from None
+        elif item.get("status") != "preview" or item.get("published_at") is not None:
+            raise ValueError("Preview releases must not claim a publication date")
+        for key in ("title", "summary"):
+            if not isinstance(item.get(key), str) or not item[key].strip():
+                raise ValueError("Release notes require readable title and summary")
+        if "notice" in item and (not isinstance(item["notice"], str) or not item["notice"].strip()):
+            raise ValueError("Release notice must be readable text")
+        if not isinstance(item.get("sections"), list) or not item["sections"]:
+            raise ValueError("Release notes require reviewed sections")
+        for section in item["sections"]:
+            if not isinstance(section.get("title"), str) or not section["title"].strip():
+                raise ValueError("Release section requires a title")
+            if not isinstance(section.get("items"), list) or not section["items"] or any(
+                not isinstance(text, str) or not text.strip() for text in section["items"]
+            ):
+                raise ValueError("Release sections require readable notes")
+        if item["status"] == "published" or include_review:
+            selected.append(item)
+    return selected
+
+
+def release_route(item):
+    return f'releases/{item["platform"]}/{item["version"]}/'
+
+
+def release_metadata(item):
+    platform = "macOS" if item["platform"] == "macos" else "Windows"
+    label = "Local preview" if item["status"] == "preview" else "Released"
+    badge = "release-badge preview" if item["status"] == "preview" else "release-badge"
+    if item["status"] == "preview":
+        when = '<span class="release-date">Not released yet</span>'
+    else:
+        published = date.fromisoformat(item["published_at"])
+        readable = f"{published.day} {published.strftime('%B')} {published.year}"
+        when = f'<time class="release-date" datetime="{published.isoformat()}">{readable}</time>'
+    return f'<div class="release-meta"><span class="release-platform">{platform}</span><span class="{badge}">{label}</span>{when}</div>'
+
+
+def release_card(item):
+    url = f'{item["platform"]}/{item["version"]}/'
+    return (
+        '<article class="release-entry">' + release_metadata(item)
+        + f'<h2><a href="{url}">Llumi {html.escape(item["version"])}</a></h2>'
+        + f'<h3>{html.escape(item["title"])}</h3><p>{html.escape(item["summary"])}</p>'
+        + f'<a class="release-link" href="{url}">Read release notes <span aria-hidden="true">↗</span></a></article>'
+    )
+
+
+def release_detail(item):
+    sections = "".join(
+        '<section class="release-section"><h2>' + html.escape(section["title"]) + '</h2><ul>'
+        + "".join('<li>' + html.escape(text) + '</li>' for text in section["items"])
+        + '</ul></section>' for section in item["sections"]
+    )
+    notice = '<p class="release-notice">' + html.escape(item["notice"]) + '</p>' if item.get("notice") else ""
+    return (
+        '<div class="release-detail wrap"><a class="release-back" href="../../">← All releases</a>'
+        + '<header class="release-detail-header">' + release_metadata(item)
+        + f'<h1>Llumi {html.escape(item["version"])}</h1><p class="release-detail-title">{html.escape(item["title"])}</p>'
+        + f'<p class="release-summary">{html.escape(item["summary"])}</p></header>'
+        + '<div class="release-notes">' + sections + notice + '</div></div>'
+    )
+
+
+def build(output, base_url="", include_review=False):
     config = load_config()
     base_url = base_url or config.get("canonical_base_url") or ""
     if base_url:
@@ -71,8 +158,12 @@ def build(output, base_url=""):
             raise ValueError("The canonical Pages base URL must be HTTPS without query/fragment")
         base_url = base_url.rstrip("/") + "/"
     media = ["codex.svg", "claude.svg", "llumi-macos-usage.webp", "llumi-macos-usage-small.webp", "llumi-social.png"]
+    releases = load_releases(include_review)
     output.mkdir(parents=True, exist_ok=True)
-    allowed = {"index.html", "privacy/index.html", "support/index.html", "styles.css", "mark.svg", "app.js", "appcast.xml", ".nojekyll"} | {"media/" + name for name in media}
+    allowed = {"index.html", "privacy/index.html", "support/index.html", "releases/index.html", "styles.css", "release.css", "mark.svg", "app.js", "appcast.xml", ".nojekyll"} | {"media/" + name for name in media}
+    allowed |= {release_route(item) + "index.html" for item in releases}
+    if include_review:
+        allowed |= {"review/update-flow/index.html", "review/update-flow.css", "review/update-flow.js"}
     existing = {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()}
     if existing - allowed or any(p.is_symlink() for p in output.rglob("*")):
         raise ValueError("Unexpected files or links in site output; use a fresh output directory")
@@ -89,10 +180,30 @@ def build(output, base_url=""):
         ("privacy/", "Llumi Privacy Policy", "Llumi privacy policy. Developer/Publisher: Pranesh S.", privacy),
         ("support/", "Llumi Support", "Help with Llumi installation, usage and provider compatibility.", (ROOT / "site/support.html").read_text(encoding="utf-8")),
     ]
+    archive = (ROOT / "site/releases.html").read_text(encoding="utf-8")
+    preview = "".join(release_card(item) for item in releases if item["status"] == "preview")
+    history = "".join(release_card(item) for item in releases if item["status"] == "published")
+    published = [item for item in releases if item["status"] == "published"]
+    latest_public = max(published, key=lambda item: (item["published_at"], item["build"]))["version"] if published else "pending"
+    review_link = '<a class="release-review-link" href="../review/update-flow/">Preview the update flow <span aria-hidden="true">↗</span></a>' if include_review else ""
+    archive = archive.replace("{{RELEASE_PREVIEW}}", preview).replace("{{RELEASE_HISTORY}}", history).replace("{{LATEST_PUBLIC_VERSION}}", html.escape(latest_public)).replace("{{REVIEW_LINK}}", review_link)
+    pages.append(("releases/", "Llumi Release Notes", "Release notes and patch notes for Llumi.", archive))
+    for item in releases:
+        pages.append((release_route(item), f'Llumi {item["version"]} — Release Notes', item["summary"], release_detail(item)))
+    if include_review:
+        pages.append(("review/update-flow/", "Llumi — Local Update Flow Preview", "Local interactive preview of Llumi automatic and manual update flows.", (ROOT / "site/review/update-flow.html").read_text(encoding="utf-8")))
     for route, title, description, content in pages:
+        prefix = "../" * len(route.strip("/").split("/")) if route else "./"
+        extras = f'<link rel="stylesheet" href="{prefix}release.css">' if route.startswith("releases/") else ""
+        if route == "review/update-flow/":
+            extras += f'<link rel="stylesheet" href="{prefix}review/update-flow.css"><script src="{prefix}review/update-flow.js" defer></script>'
+        if include_review:
+            extras += '<meta name="robots" content="noindex, nofollow">'
+        current = ' aria-current="page"' if route.startswith("releases/") else ""
         values = {"TITLE": html.escape(title), "DESCRIPTION": html.escape(description, quote=True),
-                  "PREFIX": "../" if route else "./", "CONTENT": content,
-                  "PAGE_CLASS": "text-page" if route else "home",
+                  "PREFIX": prefix, "CONTENT": content,
+                  "PAGE_CLASS": "release-page" if route.startswith("releases/") else ("review-page" if route.startswith("review/") else ("text-page" if route else "home")),
+                  "PAGE_HEAD": extras, "RELEASE_CURRENT": current,
                   "GITHUB": html.escape(config["github_url"], quote=True),
                   "CANONICAL": f'<link rel="canonical" href="{html.escape(base_url + route, quote=True)}"><meta property="og:url" content="{html.escape(base_url + route, quote=True)}">' if base_url else "",
                   "SOCIAL_IMAGE": f'<meta property="og:image" content="{html.escape(base_url + "media/llumi-social.png", quote=True)}"><meta property="og:image:alt" content="Llumi Raspberry gauge">' if base_url else ""}
@@ -115,20 +226,25 @@ def build(output, base_url=""):
         target = output / route / "index.html"
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("\n".join(line.rstrip() for line in rendered.splitlines()) + "\n", encoding="utf-8")
-    for name in ("styles.css", "mark.svg", "app.js"):
+    for name in ("styles.css", "release.css", "mark.svg", "app.js"):
         shutil.copyfile(ROOT / "site" / name, output / name)
+    if include_review:
+        (output / "review").mkdir(exist_ok=True)
+        for name in ("update-flow.css", "update-flow.js"):
+            shutil.copyfile(ROOT / "site/review" / name, output / "review" / name)
     # Preserve Sparkle's signed feed byte for byte; template rendering invalidates it.
     shutil.copyfile(ROOT / "site/appcast.xml", output / "appcast.xml")
     (output / "media").mkdir(exist_ok=True)
     for name in media:
         shutil.copyfile(ROOT / "site/media" / name, output / "media" / name)
     (output / ".nojekyll").write_text("", encoding="utf-8")
-    print("Built three static Llumi pages; policy parity preserved; download config validated.")
+    print(f"Built {len(pages)} static Llumi pages; policy parity preserved; download config validated; local review {'enabled' if include_review else 'excluded'}.")
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=ROOT / "_site")
     parser.add_argument("--base-url", default="")
+    parser.add_argument("--include-review", action="store_true", help="Include unreleased notes and local update-flow simulation; never deploy this output")
     args = parser.parse_args()
-    build(args.output.resolve(), args.base_url)
+    build(args.output.resolve(), args.base_url, args.include_review)

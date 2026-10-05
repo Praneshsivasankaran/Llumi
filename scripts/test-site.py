@@ -76,7 +76,67 @@ class SiteTests(unittest.TestCase):
         cls.pages = {name: Page((SITE / name).read_text(encoding="utf-8")) for name in cls.files if name.endswith(".html")}
 
     def test_only_intended_public_output(self):
-        self.assertEqual(self.files, {"index.html", "privacy/index.html", "support/index.html", "styles.css", "mark.svg", "app.js", "appcast.xml", ".nojekyll", "media/codex.svg", "media/claude.svg", "media/llumi-macos-usage.webp", "media/llumi-macos-usage-small.webp", "media/llumi-social.png"})
+        expected = {"index.html", "privacy/index.html", "support/index.html", "releases/index.html", "styles.css", "release.css", "mark.svg", "app.js", "appcast.xml", ".nojekyll", "media/codex.svg", "media/claude.svg", "media/llumi-macos-usage.webp", "media/llumi-macos-usage-small.webp", "media/llumi-social.png"}
+        expected |= {builder.release_route(item) + "index.html" for item in builder.load_releases()}
+        self.assertEqual(self.files, expected)
+
+    def test_preview_and_simulation_are_excluded_from_public_output(self):
+        self.assertFalse(any(name.startswith("review/") for name in self.files))
+        for item in builder.load_releases(include_review=True):
+            if item["status"] == "preview":
+                self.assertNotIn(builder.release_route(item) + "index.html", self.files)
+                self.assertNotIn(item["version"], "".join(self.pages["releases/index.html"].data))
+
+    def test_release_navigation_and_version_notes(self):
+        self.assertIn("./releases/", self.pages["index.html"].links)
+        for item in builder.load_releases():
+            page = self.pages[builder.release_route(item) + "index.html"]
+            self.assertEqual(" ".join("".join(page.headings).split()), "Llumi " + item["version"])
+            self.assertIn("../../../styles.css", page.assets)
+            self.assertIn("../../../release.css", page.assets)
+            self.assertIn("../../", page.links)
+            for section in item["sections"]:
+                for note in section["items"]:
+                    self.assertIn(note, "".join(page.data))
+
+    def test_local_review_build_is_explicit_and_preserves_feed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            builder.build(output, include_review=True)
+            self.assertTrue((output / "review/update-flow/index.html").is_file())
+            for item in builder.load_releases(include_review=True):
+                text = (output / builder.release_route(item) / "index.html").read_text()
+                self.assertIn('name="robots" content="noindex, nofollow"', text)
+                if item["status"] == "preview":
+                    self.assertIn("Not released yet", text)
+                    self.assertNotIn("<time", text)
+            self.assertEqual((output / "appcast.xml").read_bytes(), (ROOT / "site/appcast.xml").read_bytes())
+            with self.assertRaises(ValueError):
+                builder.build(output, include_review=False)
+
+    def test_release_metadata_rejects_invalid_identity_and_release_claims(self):
+        original = json.loads((ROOT / "site/releases.json").read_text())
+        for patch_key, patch_value in (("version", "../../oops"), ("build", True), ("status", "latest"), ("published_at", "2026-10-05")):
+            metadata = json.loads(json.dumps(original))
+            preview = next(item for item in metadata["releases"] if item["status"] == "preview")
+            preview[patch_key] = patch_value
+            with patch.object(builder.json, "loads", return_value=metadata):
+                with self.assertRaises(ValueError):
+                    builder.load_releases(include_review=True)
+        metadata = json.loads(json.dumps(original))
+        metadata["releases"].append(metadata["releases"][0])
+        with patch.object(builder.json, "loads", return_value=metadata):
+            with self.assertRaises(ValueError):
+                builder.load_releases(include_review=True)
+
+    def test_release_notes_escape_metadata(self):
+        item = dict(builder.load_releases()[0])
+        item.update(title='<script>alert("unsafe")</script>', summary='<img src=x onerror="unsafe">')
+        item["sections"] = [{"title": "<b>Changed</b>", "items": ["<script>unsafe</script>"]}]
+        for rendered in (builder.release_card(item), builder.release_detail(item)):
+            self.assertNotIn("<script>", rendered)
+            self.assertNotIn("<img src=x", rendered)
+            self.assertIn("&lt;script&gt;", rendered)
 
     def test_signed_appcast_is_preserved_without_rendering(self):
         feed = (SITE / "appcast.xml").read_bytes()

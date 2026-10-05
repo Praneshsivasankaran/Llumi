@@ -144,6 +144,29 @@ button[hidden],
   border-color: #b393c7;
   background: #f9f4fc;
 }
+.header nav {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+.nav-release {
+  font-size: 13px;
+  font-weight: 600;
+  color: #514558;
+  padding-block: 11px;
+}
+.nav-release:hover,
+.nav-release[aria-current="page"] {
+  color: var(--raspberry);
+}
+@media (max-width: 480px) {
+  .header .nav-inner { padding-inline: 16px; gap: 10px; }
+  .header .brand { gap: 7px; font-size: 21px; }
+  .header .brand img { width: 30px; height: 30px; }
+  .header nav { gap: 12px; }
+  .nav-release { font-size: 11px; white-space: nowrap; }
+  .header .nav-download { padding-inline: 10px; gap: 6px; }
+}
 .hero {
   min-height: 660px;
   display: grid;

@@ -22,6 +22,8 @@ const results = [];
     "index.html",
     "privacy/index.html",
     "support/index.html",
+    "releases/index.html",
+    "releases/macos/1.1.2/index.html",
   ]) {
     const result = await validator.validateFile(
       path.join(root, "_site", route),
@@ -204,7 +206,7 @@ const results = [];
       true,
     );
     await page.locator(".hero .notch-toggle").click();
-    for (const route of ["privacy/", "support/"]) {
+    for (const route of ["privacy/", "support/", "releases/", "releases/macos/1.1.2/"]) {
       await page.goto("http://127.0.0.1:4173/" + route);
       const scan = await new AxeBuilder({ page })
         .withTags(["wcag2a", "wcag2aa", "wcag21aa"])
