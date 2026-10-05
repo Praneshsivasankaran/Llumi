@@ -80,7 +80,7 @@ class SiteTests(unittest.TestCase):
         expected |= {builder.release_route(item) + "index.html" for item in builder.load_releases()}
         self.assertEqual(self.files, expected)
 
-    def test_preview_and_simulation_are_excluded_from_public_output(self):
+    def test_preview_notes_are_excluded_from_public_output(self):
         self.assertFalse(any(name.startswith("review/") for name in self.files))
         for item in builder.load_releases(include_review=True):
             if item["status"] == "preview":
@@ -99,11 +99,18 @@ class SiteTests(unittest.TestCase):
                 for note in section["items"]:
                     self.assertIn(note, "".join(page.data))
 
-    def test_local_review_build_is_explicit_and_preserves_feed(self):
+    def test_local_review_build_contains_only_notes_and_preserves_feed(self):
         with tempfile.TemporaryDirectory() as directory:
             output = Path(directory)
             builder.build(output, include_review=True)
-            self.assertTrue((output / "review/update-flow/index.html").is_file())
+            files = {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()}
+            expected = self.files | {builder.release_route(item) + "index.html"
+                for item in builder.load_releases(include_review=True)}
+            self.assertEqual(files, expected)
+            self.assertFalse((output / "review").exists())
+            archive = (output / "releases/index.html").read_text()
+            self.assertNotIn("Preview the update flow", archive)
+            self.assertNotIn("update-flow", archive)
             for item in builder.load_releases(include_review=True):
                 text = (output / builder.release_route(item) / "index.html").read_text()
                 self.assertIn('name="robots" content="noindex, nofollow"', text)
@@ -113,6 +120,16 @@ class SiteTests(unittest.TestCase):
             self.assertEqual((output / "appcast.xml").read_bytes(), (ROOT / "site/appcast.xml").read_bytes())
             with self.assertRaises(ValueError):
                 builder.build(output, include_review=False)
+
+    def test_removed_browser_preview_output_requires_a_fresh_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            stale = output / "review/update-flow/index.html"
+            stale.parent.mkdir(parents=True)
+            stale.write_text("Historical browser preview")
+            for include_review in (False, True):
+                with self.assertRaises(ValueError):
+                    builder.build(output, include_review=include_review)
 
     def test_release_metadata_rejects_invalid_identity_and_release_claims(self):
         original = json.loads((ROOT / "site/releases.json").read_text())

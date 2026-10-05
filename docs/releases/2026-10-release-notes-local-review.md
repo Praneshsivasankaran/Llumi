@@ -1,6 +1,8 @@
 # Release Notes and update-flow local review
 
-Prepared 5 October 2026 for owner design review. The website adds a Release Notes tab, a published-release archive and permanent version pages. Notes are structured in `site/releases.json`; public 1.1.2 copy and date are drawn from its signed appcast and release record. The 1.1.3 notes are an unreleased preview with no publication date or public download.
+Historical design review prepared 5 October 2026. The browser simulation described below was subsequently removed at the owner’s direction; the current native implementation and validation are documented in docs/macos/UPDATES.md. Current review builds contain release history and notes only.
+
+Prepared for owner design review. The website adds a Release Notes tab, a published-release archive and permanent version pages. Notes are structured in `site/releases.json`; public 1.1.2 copy and date are drawn from its signed appcast and release record. The 1.1.3 notes are an unreleased preview with no publication date or public download.
 
 Ordinary builds include five public pages and exclude preview notes and simulations. Explicit `--include-review` builds include seven pages, adding the 1.1.3 notes and interactive update-flow prototype. Review output carries no-index metadata and cannot be reused as ordinary output without starting in a fresh directory. Nested routes retain working relative assets and navigation. Public downloads and signed appcast bytes are preserved.
 
@@ -35,4 +37,4 @@ python3 scripts/build-site.py --include-review --output .review/release-notes-si
 python3 -m http.server 4174 --bind 127.0.0.1 --directory .review/release-notes-site
 ```
 
-Open `/releases/`, `/releases/macos/1.1.3/` and `/review/update-flow/` on that loopback server. The flow-browser test expects port 4174; its screenshot directory can be supplied with `LLUMI_FLOW_SCREEN_DIR`.
+Open `/releases/` and `/releases/macos/1.1.3/` on that loopback server. The browser simulation route/assets/tests have been removed. Current website validation uses `scripts/test-site.py` and `site/tests/check.cjs`; native update regressions and screenshots are in the macOS test target.

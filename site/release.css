@@ -69,8 +69,7 @@
 .release-entry > h3 { grid-column: 2; font-size: 23px; line-height: 1.25; letter-spacing: -0.035em; }
 .release-entry > p { grid-column: 2; margin-top: 13px; max-width: 610px; color: var(--muted); font-size: 14px; }
 .release-link,
-.release-back,
-.release-review-link {
+.release-back {
   display: inline-flex;
   align-items: center;
   gap: 9px;
@@ -81,7 +80,6 @@
 .release-entry > .release-link { grid-column: 2; justify-self: start; margin-top: 23px; }
 .release-link:hover,
 .release-back:hover,
-.release-review-link:hover,
 .release-current > a:hover { text-decoration: underline; text-underline-offset: 4px; }
 .release-preview-section .release-entry {
   border-color: #e3cfea;
@@ -108,7 +106,6 @@
   text-decoration: none;
 }
 .release-preview-section .release-entry > .release-preview-note { margin-top: 17px; font-size: 11px; color: #776783; }
-.release-review-link { margin-top: 19px; margin-left: 2px; }
 .release-history { padding-top: 53px; padding-bottom: 49px; }
 .release-section-heading {
   display: flex;

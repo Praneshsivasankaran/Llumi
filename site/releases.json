@@ -35,10 +35,12 @@
           ]
         },
         {
-          "title": "Checking for updates",
+          "title": "Updates",
           "items": [
             "A dedicated Settings section shows update status and offers Check for Updates.",
-            "Llumi checks signed update information when opened and shows a banner when an update is available."
+            "Llumi checks signed update information when opened and shows a banner when an update is available.",
+            "Opt in to background downloads, then choose Restart and update or Later when the update is ready.",
+            "After a verified update, Llumi shows a one-time confirmation with a link to that version’s release notes."
           ]
         }
       ],

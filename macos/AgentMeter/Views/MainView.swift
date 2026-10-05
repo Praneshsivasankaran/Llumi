@@ -89,6 +89,10 @@ struct SettingsView: View {
                 get: { checks.updates.automaticChecks },
                 set: { checks.updates.automaticChecks = $0 }))
                 .toggleStyle(.switch)
+              Toggle("Automatically download updates", isOn: Binding(
+                get: { checks.updates.automaticDownloads },
+                set: { checks.updates.automaticDownloads = $0 }))
+                .toggleStyle(.switch)
             }
             Section {
               CheckSetupView(model: checks).id("setup-checks")

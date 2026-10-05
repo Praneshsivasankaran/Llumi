@@ -31,7 +31,7 @@
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUAllowsAutomaticUpdates</key>
-	<false/>
+	<true/>
 	<key>SUSendProfileInfo</key>
 	<false/>
 	<key>SUVerifyUpdateBeforeExtraction</key>

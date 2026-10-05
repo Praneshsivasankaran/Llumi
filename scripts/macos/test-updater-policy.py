@@ -44,10 +44,20 @@ class UpdaterPolicyTests(unittest.TestCase):
         for key,value in [('SUPublicEDKey','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='),('SUVerifyUpdateBeforeExtraction',False),('SURequireSignedFeed',False),('SUSignedFeedFailureExpirationInterval',1728000)]:
             info=copy.deepcopy(self.info);info[key]=value
             with self.assertRaises(AssertionError):self.check(info)
-    def test_telemetry_and_silent_updates_rejected(self):
-        for key in ['SUSendProfileInfo','SUEnableSystemProfiling','SUAutomaticallyUpdate','SUAllowsAutomaticUpdates']:
-            info=copy.deepcopy(self.info);info[key]=True
-            with self.assertRaises(AssertionError):self.check(info)
+    def test_telemetry_and_default_automatic_downloads_rejected(self):
+        for key in ['SUSendProfileInfo','SUEnableSystemProfiling','SUAutomaticallyUpdate']:
+            for value in [True, None, 0, 'false']:
+                with self.subTest(key=key,value=value):
+                    info=copy.deepcopy(self.info);info[key]=value
+                    with self.assertRaises(AssertionError):self.check(info)
+    def test_automatic_downloads_available_only_as_explicit_opt_in(self):
+        self.assertIs(self.info['SUAllowsAutomaticUpdates'], True)
+        self.assertIs(self.info['SUAutomaticallyUpdate'], False)
+        self.check()
+        for value in [False, None, 1, 'true']:
+            with self.subTest(value=value):
+                info=copy.deepcopy(self.info);info['SUAllowsAutomaticUpdates']=value
+                with self.assertRaises(AssertionError):self.check(info)
     def test_auto_checks_default_enabled_and_missing_default_rejected(self):
         for value in [False, None]:
             info=copy.deepcopy(self.info);info['SUEnableAutomaticChecks']=value

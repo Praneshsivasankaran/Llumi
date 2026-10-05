@@ -162,8 +162,6 @@ def build(output, base_url="", include_review=False):
     output.mkdir(parents=True, exist_ok=True)
     allowed = {"index.html", "privacy/index.html", "support/index.html", "releases/index.html", "styles.css", "release.css", "mark.svg", "app.js", "appcast.xml", ".nojekyll"} | {"media/" + name for name in media}
     allowed |= {release_route(item) + "index.html" for item in releases}
-    if include_review:
-        allowed |= {"review/update-flow/index.html", "review/update-flow.css", "review/update-flow.js"}
     existing = {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()}
     if existing - allowed or any(p.is_symlink() for p in output.rglob("*")):
         raise ValueError("Unexpected files or links in site output; use a fresh output directory")
@@ -185,24 +183,19 @@ def build(output, base_url="", include_review=False):
     history = "".join(release_card(item) for item in releases if item["status"] == "published")
     published = [item for item in releases if item["status"] == "published"]
     latest_public = max(published, key=lambda item: (item["published_at"], item["build"]))["version"] if published else "pending"
-    review_link = '<a class="release-review-link" href="../review/update-flow/">Preview the update flow <span aria-hidden="true">↗</span></a>' if include_review else ""
-    archive = archive.replace("{{RELEASE_PREVIEW}}", preview).replace("{{RELEASE_HISTORY}}", history).replace("{{LATEST_PUBLIC_VERSION}}", html.escape(latest_public)).replace("{{REVIEW_LINK}}", review_link)
+    archive = archive.replace("{{RELEASE_PREVIEW}}", preview).replace("{{RELEASE_HISTORY}}", history).replace("{{LATEST_PUBLIC_VERSION}}", html.escape(latest_public))
     pages.append(("releases/", "Llumi Release Notes", "Release notes and patch notes for Llumi.", archive))
     for item in releases:
         pages.append((release_route(item), f'Llumi {item["version"]} — Release Notes', item["summary"], release_detail(item)))
-    if include_review:
-        pages.append(("review/update-flow/", "Llumi — Local Update Flow Preview", "Local interactive preview of Llumi automatic and manual update flows.", (ROOT / "site/review/update-flow.html").read_text(encoding="utf-8")))
     for route, title, description, content in pages:
         prefix = "../" * len(route.strip("/").split("/")) if route else "./"
         extras = f'<link rel="stylesheet" href="{prefix}release.css">' if route.startswith("releases/") else ""
-        if route == "review/update-flow/":
-            extras += f'<link rel="stylesheet" href="{prefix}review/update-flow.css"><script src="{prefix}review/update-flow.js" defer></script>'
         if include_review:
             extras += '<meta name="robots" content="noindex, nofollow">'
         current = ' aria-current="page"' if route.startswith("releases/") else ""
         values = {"TITLE": html.escape(title), "DESCRIPTION": html.escape(description, quote=True),
                   "PREFIX": prefix, "CONTENT": content,
-                  "PAGE_CLASS": "release-page" if route.startswith("releases/") else ("review-page" if route.startswith("review/") else ("text-page" if route else "home")),
+                  "PAGE_CLASS": "release-page" if route.startswith("releases/") else ("text-page" if route else "home"),
                   "PAGE_HEAD": extras, "RELEASE_CURRENT": current,
                   "GITHUB": html.escape(config["github_url"], quote=True),
                   "CANONICAL": f'<link rel="canonical" href="{html.escape(base_url + route, quote=True)}"><meta property="og:url" content="{html.escape(base_url + route, quote=True)}">' if base_url else "",
@@ -228,10 +221,6 @@ def build(output, base_url="", include_review=False):
         target.write_text("\n".join(line.rstrip() for line in rendered.splitlines()) + "\n", encoding="utf-8")
     for name in ("styles.css", "release.css", "mark.svg", "app.js"):
         shutil.copyfile(ROOT / "site" / name, output / name)
-    if include_review:
-        (output / "review").mkdir(exist_ok=True)
-        for name in ("update-flow.css", "update-flow.js"):
-            shutil.copyfile(ROOT / "site/review" / name, output / "review" / name)
     # Preserve Sparkle's signed feed byte for byte; template rendering invalidates it.
     shutil.copyfile(ROOT / "site/appcast.xml", output / "appcast.xml")
     (output / "media").mkdir(exist_ok=True)
@@ -245,6 +234,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=ROOT / "_site")
     parser.add_argument("--base-url", default="")
-    parser.add_argument("--include-review", action="store_true", help="Include unreleased notes and local update-flow simulation; never deploy this output")
+    parser.add_argument("--include-review", action="store_true", help="Include unreleased local review notes; never deploy this output")
     args = parser.parse_args()
     build(args.output.resolve(), args.base_url, args.include_review)

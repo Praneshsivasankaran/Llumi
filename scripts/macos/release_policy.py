@@ -18,7 +18,8 @@ def validate_metadata(info, candidate, frozen):
     assert info.get('SUVerifyUpdateBeforeExtraction') is True and info.get('SURequireSignedFeed') is True, 'Update signature verification required'
     assert info.get('SUSignedFeedFailureExpirationInterval') == 0, 'Signed feed failures must not expire'
     assert info.get('SUEnableAutomaticChecks') is True, '1.1.3 enables automatic checks; later user preferences persist'
-    for field in ['SUAutomaticallyUpdate', 'SUAllowsAutomaticUpdates', 'SUSendProfileInfo', 'SUEnableSystemProfiling']:
+    assert info.get('SUAllowsAutomaticUpdates') is True, 'Automatic downloads must be available for explicit user opt-in'
+    for field in ['SUAutomaticallyUpdate', 'SUSendProfileInfo', 'SUEnableSystemProfiling']:
         assert info.get(field) is False, f'{field} must be disabled'
 
 def validate_publisher(text, identity, team, app=False):

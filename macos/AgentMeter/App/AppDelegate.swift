@@ -8,6 +8,7 @@ import SwiftUI
   private var notch: NotchController!
   private var window: NSWindow!
   private var setupWindow: NSWindow?
+  private var updateWindow: NSWindow?
   private lazy var setup = SetupFlow(preferences: model.preferences)
   private var status: NSStatusItem!
   private var schedule: Task<Void, Never>?
@@ -21,6 +22,8 @@ import SwiftUI
       self, selector: #selector(reopenMain), name: InstanceLease.reopen, object: nil)
     Diagnostics.shared.record("launch")
     createApplicationMenu()
+    model.updates.showPromptAction = { [weak self] in self?.showUpdatePrompt() }
+    model.updates.hidePromptAction = { [weak self] in self?.updateWindow?.orderOut(nil) }
     startUpdaterIfReady()
     let discovery = ProviderDiscovery()
     activity = ActivityMonitor { [weak self] snapshot in
@@ -88,6 +91,22 @@ import SwiftUI
   func applicationDidBecomeActive(_ notification: Notification) { model.loginItem.synchronize() }
   private func startUpdaterIfReady() {
     updates.startIfReady(setupComplete: !setup.needsAutomaticSetup)
+  }
+  private func showUpdatePrompt() {
+    guard !quitting else { return }
+    if updateWindow == nil {
+      let view = NSHostingView(rootView: UpdatePromptView(updates: model.updates))
+      let dialog = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 536, height: 230),
+        styleMask: [.titled, .closable], backing: .buffered, defer: false)
+      dialog.title = "Llumi"
+      dialog.isReleasedWhenClosed = false
+      dialog.delegate = self
+      dialog.contentView = view
+      dialog.center()
+      updateWindow = dialog
+    }
+    updateWindow?.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
   }
   @objc private func checkForUpdates() { updates.checkForUpdates() }
   func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
@@ -263,6 +282,10 @@ import SwiftUI
   }
   @objc func quit() { NSApp.terminate(nil) }
   func windowWillClose(_ notification: Notification) { Diagnostics.shared.record("window-close") }
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    if sender === updateWindow { model.updates.dismissPrompt() }
+    return true
+  }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
     reopenMain()
@@ -284,6 +307,7 @@ import SwiftUI
     status = nil
     window?.orderOut(nil)
     setupWindow?.orderOut(nil)
+    updateWindow?.orderOut(nil)
     let service = store!
     Task.detached {
       await service.stop()
