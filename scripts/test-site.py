@@ -118,8 +118,16 @@ class SiteTests(unittest.TestCase):
                     self.assertIn("Not released yet", text)
                     self.assertNotIn("<time", text)
             self.assertEqual((output / "appcast.xml").read_bytes(), (ROOT / "site/appcast.xml").read_bytes())
-            with self.assertRaises(ValueError):
+            if any(item["status"] == "preview" for item in builder.load_releases(include_review=True)):
+                with self.assertRaises(ValueError):
+                    builder.build(output, include_review=False)
+            else:
+                # Once every release ships, no extra preview routes remain.
+                # Rebuilding the same public pages must remove review noindex.
                 builder.build(output, include_review=False)
+                for item in builder.load_releases():
+                    text = (output / builder.release_route(item) / "index.html").read_text()
+                    self.assertNotIn('name="robots" content="noindex, nofollow"', text)
 
     def test_removed_browser_preview_output_requires_a_fresh_directory(self):
         with tempfile.TemporaryDirectory() as directory:

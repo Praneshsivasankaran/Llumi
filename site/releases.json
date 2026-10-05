@@ -5,8 +5,8 @@
       "platform": "macos",
       "version": "1.1.3",
       "build": 3,
-      "status": "preview",
-      "published_at": null,
+      "status": "published",
+      "published_at": "2026-10-05",
       "title": "A clearer view of your usage.",
       "summary": "Simpler setup, more complete allowance details and a monitor you can move.",
       "sections": [
@@ -46,8 +46,9 @@
           ]
         }
       ],
-      "notice": "Unreleased local preview. No public download is available for 1.1.3.",
+      "notice": "Requires macOS 14 or later. Existing 1.1.2 users can update through Llumi.",
       "source_documents": [
+        "docs/releases/2026-10-macos-1.1.3.md",
         "docs/releases/2026-10-macos-1.1.3-preview.md",
         "docs/releases/2026-10-macos-1.1.3-allowance-review.md",
         "docs/releases/2026-10-macos-1.1.3-setup-retry-review.md",
