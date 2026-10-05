@@ -12,4 +12,4 @@ Native updater implementation and local validation are authorized. A Mac-only ph
 
 Later defers restarting and preserves the prepared Sparkle update for installation on natural quit; disabling automatic downloading affects future downloads. An unacknowledged completion pauses new update cycles until dismissal. Completion records are isolated by canonical host-path hash, so a review preview cannot consume the installed app’s receipt.
 
-Reopening Llumi while a ready/completion prompt is visible brings that existing prompt to the front. It must not cover the prompt with the main window, create another notice or start another check. Later/Continue restores normal reopening behavior.
+Reopening Llumi while a ready/completion prompt is visible brings that existing prompt to the front. It must not cover the prompt with the main window, create another notice or start another check. The prompt stays above Llumi's main window while the app is active and hides when another app is active. Later/Continue restores normal reopening behavior.

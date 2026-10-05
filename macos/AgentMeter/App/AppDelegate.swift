@@ -89,17 +89,22 @@ import SwiftUI
       ) { [weak self] _ in MainActor.assumeIsolated { self?.didWake() } })
     startValidationIfRequested()
   }
-  func applicationDidBecomeActive(_ notification: Notification) { model.loginItem.synchronize() }
+  func applicationDidBecomeActive(_ notification: Notification) {
+    model.loginItem.synchronize()
+    if model.updates.promptVisible { showUpdatePrompt() }
+  }
   private func startUpdaterIfReady() {
     updates.startIfReady(setupComplete: !setup.needsAutomaticSetup)
   }
   private func showUpdatePrompt() {
-    guard !quitting else { return }
+    guard !quitting, model.updates.promptVisible else { return }
     if updateWindow == nil {
       let view = NSHostingView(rootView: UpdatePromptView(updates: model.updates))
       let dialog = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 536, height: 230),
         styleMask: [.titled, .closable], backing: .buffered, defer: false)
       dialog.title = "Llumi"
+      dialog.level = .floating
+      dialog.hidesOnDeactivate = true
       dialog.isReleasedWhenClosed = false
       dialog.delegate = self
       dialog.contentView = view
