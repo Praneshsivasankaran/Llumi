@@ -37,7 +37,7 @@ internal sealed class UsageForm : Form
     private readonly System.Windows.Forms.Timer countdown = new() { Interval = 1000 };
     private readonly Button copyDiagnostics = Palette.Button("Copy Diagnostics", "Copy Diagnostics");
     private readonly Button setupGuide = Palette.Button("Setup Llumi…", "Setup Llumi");
-    private readonly Label diagnosticMessage = new() { Text = "Copies only app, OS and provider status categories. Nothing is uploaded.", AutoSize = false };
+    private readonly Label diagnosticMessage = new() { AutoSize = false, Visible = false };
     private readonly ContextMenuStrip actions = new();
     private readonly ToolTip hints = new();
     private readonly Dictionary<string, ProviderCard> cards = new();
@@ -77,8 +77,9 @@ internal sealed class UsageForm : Form
         offSettings.Click += (_, _) => ShowSettings();
         setupGuide.Click += (_, _) => SetupRequested?.Invoke();
         copyDiagnostics.Click += (_, _) => {
-            try { Clipboard.SetText(DiagnosticReport()); diagnosticMessage.Text = "Diagnostics copied. Nothing is uploaded."; }
+            try { Clipboard.SetText(DiagnosticReport()); diagnosticMessage.Text = "Diagnostics copied."; }
             catch (System.Runtime.InteropServices.ExternalException) { diagnosticMessage.Text = "Clipboard is busy. Please try again."; }
+            Render(lastStates, loading, logFailed);
         };
         launch.Location = new(S(20), S(24)); compact.Location = new(S(20), S(68)); tray.Location = new(S(20), S(112));
         appearanceLabel.Location = new(S(20), S(164)); appearance.SetBounds(S(20), S(194), S(200), S(30));
@@ -193,9 +194,12 @@ internal sealed class UsageForm : Form
             checkAgain.SetBounds(S(20), S(actionsY), S(112), S(36));
             copyDiagnostics.SetBounds(S(144), S(actionsY), S(144), S(36));
             retryMessage.SetBounds(S(20), S(actionsY + 45), settingsWidth, S(42));
-            diagnosticMessage.SetBounds(S(20), S(actionsY + 96), settingsWidth, S(48));
-            setupGuide.SetBounds(S(20), S(actionsY + 152), S(140), S(36));
-            var preferencesY = actionsY + 215;
+            var showDiagnosticMessage = !string.IsNullOrEmpty(diagnosticMessage.Text);
+            diagnosticMessage.Visible = showDiagnosticMessage;
+            diagnosticMessage.SetBounds(S(20), S(actionsY + 96), settingsWidth, S(showDiagnosticMessage ? 48 : 0));
+            var setupGuideY = actionsY + (showDiagnosticMessage ? 152 : 96);
+            setupGuide.SetBounds(S(20), S(setupGuideY), S(140), S(36));
+            var preferencesY = setupGuideY + 63;
             preferencesHeading.Location = new(S(20), S(preferencesY));
             launch.Location = new(S(20), S(preferencesY + 44)); compact.Location = new(S(20), S(preferencesY + 80)); tray.Location = new(S(20), S(preferencesY + 116));
             appearanceLabel.Location = new(S(20), S(preferencesY + 162)); appearance.SetBounds(S(20), S(preferencesY + 189), S(200), S(30));

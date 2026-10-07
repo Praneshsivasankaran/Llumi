@@ -2,7 +2,7 @@
 
 Windows 2.1.0 locally adopts the macOS 1.1.3 product contract in [Windows catch-up requirements](windows-210.md), which supersedes conflicting earlier Windows allowance, setup and provider-selection rules below. Intentional native differences remain.
 
-Windows Settings omits the tray-availability explanation, independence/account/telemetry note and automatic-save footer. Persistence and monitor-position errors remain visible when they occur. macOS copy remains unchanged.
+Windows Settings omits the tray-availability explanation, independence/account/telemetry note, automatic-save footer and passive diagnostics privacy note. Copy Diagnostics shows success or clipboard-error feedback after use. Persistence and monitor-position errors remain visible when they occur. macOS copy remains unchanged.
 
 Keep settings limited to launch at login/startup, compact monitor, background menu/tray icon and Appearance: System, Light, Dark. Preferences persist without credentials, account data or usage history. Show authoritative startup registration state; failed persistence must not claim success.
 
