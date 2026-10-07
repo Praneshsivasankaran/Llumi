@@ -150,7 +150,16 @@ internal sealed class Review : Form
             if (flow.Step != (SetupStep)index) throw new InvalidOperationException("Synthetic setup did not reach the requested step.");
             form.RefreshStatuses(); Application.DoEvents();
             Save(form, Path.Combine(directory, $"setup-{index + 1:00}-{names[index]}.png"));
-            if (index == 0) Save(form, Path.Combine(directory, "setup-welcome.png"));
+            if (index == 0)
+            {
+                Save(form, Path.Combine(directory, "setup-welcome.png"));
+                var originalSize = form.ClientSize;
+                Palette.Apply(AppAppearance.Dark); form.ApplyTheme(); Application.DoEvents();
+                Save(form, Path.Combine(directory, "setup-welcome-dark.png"));
+                form.ClientSize = new Size(544, 442); Application.DoEvents();
+                Save(form, Path.Combine(directory, "setup-welcome-minimum-dark.png"));
+                form.ClientSize = originalSize; Palette.Apply(preferences.Appearance); form.ApplyTheme(); Application.DoEvents();
+            }
             if (flow.Step == SetupStep.Verify)
             {
                 var originalStates = states; var originalPreferences = preferences; var now = DateTimeOffset.UtcNow;
@@ -167,15 +176,14 @@ internal sealed class Review : Form
             }
             if (index + 1 < names.Length)
             {
-                var next = form.Controls.OfType<FlowLayoutPanel>().SelectMany(panel => panel.Controls.OfType<Button>())
-                    .Single(button => button.AccessibleName == "Continue setup");
+                var next = (Button)form.AcceptButton!;
                 next.PerformClick(); Application.DoEvents();
             }
         }
         form.Close();
     }
     private static void Save(Form form, string path)
-    { using var full = new Bitmap(form.Width, form.Height); form.DrawToBitmap(full, new Rectangle(Point.Empty, form.Size)); full.Save(path, ImageFormat.Png); }
+    { form.Refresh(); Application.DoEvents(); using var full = new Bitmap(form.Width, form.Height); form.DrawToBitmap(full, new Rectangle(Point.Empty, form.Size)); full.Save(path, ImageFormat.Png); }
     protected override void Dispose(bool disposing)
     { if (disposing) { setup?.Dispose(); usage.Dispose(); monitor.Dispose(); icon.Dispose(); } base.Dispose(disposing); }
     private sealed class MemoryStartup(Func<bool> read, Action<bool> write) : IStartupRegistration

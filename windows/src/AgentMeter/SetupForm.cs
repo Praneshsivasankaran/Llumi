@@ -16,6 +16,10 @@ internal sealed class SetupForm : Form
     private readonly Action finished;
     private readonly FlowLayoutPanel body = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(24, 16, 24, 16) };
     private readonly FlowLayoutPanel navigation = new() { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(10) };
+    private readonly Panel welcome = new() { Dock = DockStyle.Fill, Name = "welcome", Visible = false };
+    private readonly Panel welcomeGroup = new() { Name = "welcomeGroup" };
+    private readonly Panel welcomeLogo = new() { Name = "welcomeLogo", AccessibleName = "Llumi logo" };
+    private readonly Label welcomeName = new() { Text = "Llumi", AutoSize = true, TextAlign = ContentAlignment.MiddleCenter };
     private readonly Button next = Palette.Button("Continue", "Continue setup");
     private readonly Button back = Palette.Button("Back", "Previous setup step");
     private readonly Dictionary<string, Label> statusLabels = new();
@@ -27,6 +31,7 @@ internal sealed class SetupForm : Form
     private readonly Label message = new() { AutoSize = true, MaximumSize = new Size(520, 0), Visible = false };
     private readonly Font bodyFont = new("Segoe UI", 10);
     private readonly Font headingFont = new("Segoe UI", 16, FontStyle.Bold);
+    private readonly Font welcomeFont = new("Segoe UI", 24, FontStyle.Bold);
     private bool syncingProviders;
 
     internal SetupForm(SetupFlow flow, Func<IReadOnlyList<ProviderState>> states, Action<string?> refresh,
@@ -40,7 +45,12 @@ internal sealed class SetupForm : Form
         Text = "Setup Llumi"; Font = bodyFont; Icon = AppIcon.Load();
         AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(620, 580);
         MinimumSize = new Size(560, 480); StartPosition = FormStartPosition.CenterScreen;
-        Controls.Add(body); Controls.Add(navigation);
+        Controls.Add(body); Controls.Add(navigation); Controls.Add(welcome);
+        welcome.Controls.Add(welcomeGroup); welcomeGroup.Controls.Add(welcomeLogo); welcomeGroup.Controls.Add(welcomeName);
+        welcomeName.Font = welcomeFont;
+        welcomeLogo.Paint += (_, e) => { using var mark = AppIcon.Load(welcomeLogo.Width); e.Graphics.DrawIcon(mark, welcomeLogo.ClientRectangle); };
+        welcome.SizeChanged += (_, _) => LayoutWelcome();
+        welcomeName.SizeChanged += (_, _) => LayoutWelcome();
         next.AutoSize = back.AutoSize = true; next.MinimumSize = back.MinimumSize = new Size(112, 38); navigation.Controls.Add(next); navigation.Controls.Add(back);
         back.Click += (_, _) => { flow.Back(); RenderStep(); };
         next.Click += (_, _) =>
@@ -56,6 +66,7 @@ internal sealed class SetupForm : Form
         VisibleChanged += (_, _) => { if (Visible) countdown.Start(); else countdown.Stop(); };
         body.SizeChanged += (_, _) => FitBodyContent();
         AcceptButton = next; RenderStep();
+        Shown += (_, _) => next.Select();
     }
     private void TextLine(string text, bool heading = false, int spacing = 8)
     {
@@ -173,15 +184,21 @@ internal sealed class SetupForm : Form
         body.SuspendLayout(); body.Controls.Remove(message); body.Controls.Remove(retryMessage);
         foreach (var control in body.Controls.Cast<Control>().ToArray()) control.Dispose();
         body.Controls.Clear(); statusLabels.Clear(); retryButtons.Clear(); providerSwitches.Clear(); commandRows.Clear(); message.Text = ""; message.Visible = false; retryMessage.Text = "";
+        var isWelcome = flow.Step == SetupStep.Welcome;
+        body.Visible = navigation.Visible = !isWelcome; welcome.Visible = isWelcome;
+        if (isWelcome) { welcomeGroup.Controls.Add(next); next.AutoSize = false; }
+        else
+        {
+            navigation.Controls.Add(next); navigation.Controls.SetChildIndex(next, 0);
+            next.MinimumSize = new Size((int)Math.Round(112 * DeviceDpi / 96d), (int)Math.Round(38 * DeviceDpi / 96d));
+            next.Size = next.MinimumSize; next.AutoSize = true;
+        }
         back.Visible = flow.Step != SetupStep.Welcome;
         next.Text = flow.Step == SetupStep.Welcome ? "Get Started" : flow.Step == SetupStep.Done ? "Start Llumi" : "Continue";
         switch (flow.Step)
         {
             case SetupStep.Welcome:
-                var identity = new Panel { Width = 64, Height = 64, Margin = new Padding(0, 8, 0, 24) };
-                identity.Paint += (_, e) => { using var mark = AppIcon.Load(64); e.Graphics.DrawIcon(mark, new Rectangle(0, 0, 64, 64)); };
-                body.Controls.Add(identity);
-                TextLine("Llumi", true); break;
+                break;
             case SetupStep.Providers:
                 TextLine("Choose your providers", true); TextLine("Choose either, both, or set them up later."); Statuses(switches: true); break;
             case SetupStep.Codex: case SetupStep.Claude:
@@ -213,7 +230,21 @@ internal sealed class SetupForm : Form
             case SetupStep.Done:
                 TextLine("You’re all set", true); TextLine("Setup Llumi… remains available from the tray and app menu."); Statuses(); break;
         }
-        body.Controls.Add(message); RefreshStatuses(); ApplyTheme(); body.ResumeLayout(true); FitBodyContent();
+        body.Controls.Add(message); RefreshStatuses(); ApplyTheme(); body.ResumeLayout(true); FitBodyContent(); LayoutWelcome();
+        AcceptButton = next;
+        if (Visible) next.Select();
+    }
+    private void LayoutWelcome()
+    {
+        if (flow.Step != SetupStep.Welcome) return;
+        int S(int value) => (int)Math.Round(value * DeviceDpi / 96d);
+        var width = S(240);
+        welcomeLogo.SetBounds((width - S(72)) / 2, 0, S(72), S(72));
+        welcomeName.Location = new Point((width - welcomeName.Width) / 2, welcomeLogo.Bottom + S(20));
+        next.MinimumSize = new Size(S(160), S(44));
+        next.SetBounds((width - S(160)) / 2, welcomeName.Bottom + S(24), S(160), S(44));
+        welcomeGroup.Size = new Size(width, next.Bottom);
+        welcomeGroup.Location = new Point((welcome.ClientSize.Width - width) / 2, (welcome.ClientSize.Height - welcomeGroup.Height) / 2);
     }
     private void FitBodyContent()
     {
@@ -229,7 +260,13 @@ internal sealed class SetupForm : Form
             if (root is Button button) { button.BackColor = Palette.Card; Palette.StyleButton(button); }
             foreach (Control child in root.Controls) Theme(child); }
         Theme(this);
+        if (flow.Step == SetupStep.Welcome)
+        {
+            next.BackColor = Color.FromArgb(0, 103, 192); next.ForeColor = Color.White;
+            next.FlatAppearance.MouseOverBackColor = Color.FromArgb(0, 86, 160);
+            next.FlatAppearance.MouseDownBackColor = Color.FromArgb(0, 70, 130);
+        }
     }
     protected override void Dispose(bool disposing)
-    { base.Dispose(disposing); if (disposing) { countdown.Dispose(); retryMessage.Dispose(); Icon?.Dispose(); bodyFont.Dispose(); headingFont.Dispose(); } }
+    { base.Dispose(disposing); if (disposing) { countdown.Dispose(); retryMessage.Dispose(); Icon?.Dispose(); bodyFont.Dispose(); headingFont.Dispose(); welcomeFont.Dispose(); } }
 }

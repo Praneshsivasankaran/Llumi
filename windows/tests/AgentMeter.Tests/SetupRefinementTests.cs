@@ -5,6 +5,41 @@ namespace AgentMeter.Tests;
 [Collection("Windows UI")]
 public sealed class SetupRefinementTests
 {
+    [Theory]
+    [InlineData(1)] [InlineData(2)]
+    public Task CenteredWelcomeResizesAndKeepsDefaultNavigationThroughRepeatedBack(int appearance) => Sta(() =>
+    {
+        try
+        {
+            Palette.Apply((Appearance)appearance);
+            var requests = 0; var saves = 0;
+            using var form = FormAt(SetupStep.Welcome, () => [Ready("Codex"), Ready("Claude Code")], _ => requests++, () => new(), _ => saves++);
+            form.Show(); var next = Assert.IsType<Button>(form.AcceptButton);
+            for (var pass = 0; pass < 3; pass++)
+            {
+                form.ClientSize = pass == 1 ? new Size(544, 442) : new Size(760, 640); form.PerformLayout();
+                var group = Descendants(form).Single(c => c.Name == "welcomeGroup");
+                var logo = Descendants(form).Single(c => c.Name == "welcomeLogo");
+                var name = Labels(form).Single(l => l.Text == "Llumi");
+                Assert.True(group.Visible); Assert.Equal("Get Started", next.Text); Assert.False(next.IsDisposed);
+                Assert.InRange(Math.Abs(group.Left * 2 + group.Width - group.Parent!.ClientSize.Width), 0, 1);
+                Assert.InRange(Math.Abs(group.Top * 2 + group.Height - group.Parent.ClientSize.Height), 0, 1);
+                Assert.InRange(Math.Abs(logo.Left * 2 + logo.Width - group.Width), 0, 1);
+                Assert.InRange(Math.Abs(name.Left * 2 + name.Width - group.Width), 0, 1);
+                Assert.InRange(Math.Abs(next.Left * 2 + next.Width - group.Width), 0, 1);
+                Assert.True(logo.Bottom < name.Top && name.Bottom < next.Top);
+                Assert.Equal(Color.White.ToArgb(), next.ForeColor.ToArgb()); Assert.True(next.BackColor.B > next.BackColor.R + 100);
+                Assert.False(form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Bottom).Visible);
+                next.PerformClick();
+                Assert.Contains(Labels(form), l => l.Visible && l.Text == "Choose your providers");
+                Assert.Same(next, form.AcceptButton); Assert.True(form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Bottom).Visible);
+                Button(form, "Back").PerformClick(); Assert.Same(next, form.AcceptButton);
+            }
+            Assert.Equal(0, requests); Assert.Equal(0, saves);
+        }
+        finally { Palette.Apply(Appearance.System); }
+    });
+
     [Fact]
     public Task ClaudeGuideRetriesCanonicalProviderIndependentlyOfCodexLoading() => Sta(() =>
     {
