@@ -27,6 +27,49 @@ public sealed class CodexAccountTests
         Assert.True(session.Disposed);
         Assert.DoesNotContain(First, JsonSerializer.Serialize(result));
         Assert.DoesNotContain("api", string.Join(" ", session.Methods));
+        Assert.Equal("2.1.0", session.Version);
+        Assert.Equal(AuthenticationStatus.Verified, result.Authentication);
+        Assert.NotNull(result.VerifiedBinding);
+        Assert.DoesNotContain(result.VerifiedBinding.Digest, JsonSerializer.Serialize(result));
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("1")]
+    [InlineData("2.1")]
+    [InlineData("2.1.0 preview")]
+    [InlineData("2.1.0\n")]
+    public void ClientVersionMustBeValidatedProductVersion(string value) =>
+        Assert.Throws<ArgumentException>(() => new CodexProvider(clientVersion: value));
+
+    [Fact]
+    public async Task ApiKeyAuthenticationIsUnsupportedBillingAndDoesNotReadQuota()
+    {
+        var session = new Session { Before = Json("""{"account":{"type":"apiKey"}}""") };
+        var result = await Provider(() => session).QueryAsync(default);
+        Assert.Equal(FailureKind.UnsupportedBilling, result.Failure);
+        Assert.Equal(AuthenticationStatus.UnsupportedBilling, result.Authentication);
+        Assert.Null(result.VerifiedBinding);
+        Assert.DoesNotContain("account/rateLimits/read", session.Methods);
+    }
+
+    [Theory]
+    [InlineData("signed-out")]
+    [InlineData("different-account")]
+    [InlineData("failed-auth")]
+    public async Task RateEmbargoSurvivesFailedPostQueryContinuityCheck(string change)
+    {
+        var session = new Session
+        {
+            QuotaFailure = FailureKind.RateLimited, QuotaRetry = TimeSpan.FromMinutes(4),
+            After = change == "signed-out" ? Json("""{"account":null}""") : Account(Second),
+            AfterFailure = change == "failed-auth" ? FailureKind.Network : null
+        };
+        var result = await Provider(() => session).QueryAsync(default);
+        Assert.Null(result.Snapshot);
+        Assert.Null(result.VerifiedBinding);
+        Assert.Equal(TimeSpan.FromMinutes(4), result.RetryAfter);
+        Assert.Equal(change switch { "signed-out" => FailureKind.LoggedOut, "failed-auth" => FailureKind.Network, _ => FailureKind.AccountChanged }, result.Failure);
     }
 
     [Theory]
@@ -115,6 +158,9 @@ public sealed class CodexAccountTests
         public JsonElement Quota { get; init; } = Usage();
         public FailureKind? QuotaFailure { get; init; }
         public FailureKind? AccountFailure { get; init; }
+        public FailureKind? AfterFailure { get; init; }
+        public TimeSpan? QuotaRetry { get; init; }
+        public string? Version { get; private set; }
         public List<string> Methods { get; } = [];
         public bool Disposed { get; private set; }
         public Task SendAsync(object message, CancellationToken cancellationToken)
@@ -122,6 +168,8 @@ public sealed class CodexAccountTests
             cancellationToken.ThrowIfCancellationRequested();
             var json = JsonSerializer.SerializeToElement(message);
             Methods.Add(json.GetProperty("method").GetString()!);
+            if (json.GetProperty("method").GetString() == "initialize")
+                Version = json.GetProperty("params").GetProperty("clientInfo").GetProperty("version").GetString();
             if (json.GetProperty("method").GetString() == "account/read")
                 Assert.False(json.GetProperty("params").GetProperty("refreshToken").GetBoolean());
             return Task.CompletedTask;
@@ -130,7 +178,8 @@ public sealed class CodexAccountTests
         {
             cancellationToken.ThrowIfCancellationRequested();
             if (id == 2 && AccountFailure is { } auth) throw new ProviderQueryException(auth);
-            if (id == 3 && QuotaFailure is { } quota) throw new ProviderQueryException(quota);
+            if (id == 3 && QuotaFailure is { } quota) throw new ProviderQueryException(quota, QuotaRetry);
+            if (id == 4 && AfterFailure is { } after) throw new ProviderQueryException(after);
             return Task.FromResult(id switch { 2 => Before, 3 => Quota, 4 => After, _ => Json("{}") });
         }
         public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }

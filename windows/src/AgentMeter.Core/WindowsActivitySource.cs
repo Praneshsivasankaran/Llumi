@@ -8,14 +8,61 @@ namespace AgentMeter.Core;
 /// <summary>Metadata only. No window text, accessibility, terminal content, or screen capture.</summary>
 public sealed class WindowsActivitySource
 {
+    private readonly object captureLock = new();
     private readonly ActivityModeCache modes = new();
+    private readonly Func<string?> findCodex;
+    private readonly Func<string?> findClaude;
+    private readonly Func<DateTime> utcNow;
+    private readonly Func<bool, bool, string?, string?, ActivitySnapshot> collect;
+    private bool codexEnabled = true, claudeEnabled = true;
     private string? codex, claude;
     private DateTime nextDiscovery;
+
+    public WindowsActivitySource()
+    {
+        findCodex = CliLocator.FindCodex; findClaude = ClaudeCliLocator.Find; utcNow = () => DateTime.UtcNow;
+        collect = CaptureProcesses;
+    }
+
+    internal WindowsActivitySource(Func<string?> findCodex, Func<string?> findClaude,
+        Func<bool, bool, string?, string?, ActivitySnapshot> collect, Func<DateTime>? utcNow = null)
+    {
+        this.findCodex = findCodex; this.findClaude = findClaude; this.collect = collect;
+        this.utcNow = utcNow ?? (() => DateTime.UtcNow);
+    }
+
+    public void SetEnabled(bool codexEnabled, bool claudeEnabled)
+    {
+        // Capture and preference changes share the same lock. Once this call returns,
+        // no disabled provider discovery or process metadata read remains in flight.
+        lock (captureLock)
+        {
+            if (this.codexEnabled == codexEnabled && this.claudeEnabled == claudeEnabled) return;
+            this.codexEnabled = codexEnabled; this.claudeEnabled = claudeEnabled;
+            codex = null; claude = null; nextDiscovery = DateTime.MinValue; modes.Retain([]);
+        }
+    }
+
     public ActivitySnapshot Capture()
     {
         if (!OperatingSystem.IsWindows() || !Environment.Is64BitProcess) return ActivitySnapshot.Empty;
-        if (DateTime.UtcNow >= nextDiscovery)
-        { codex = CliLocator.FindCodex(); claude = ClaudeCliLocator.Find(); nextDiscovery = DateTime.UtcNow.AddSeconds(30); }
+        lock (captureLock)
+        {
+            if (!codexEnabled && !claudeEnabled) return ActivitySnapshot.Empty;
+            var now = utcNow();
+            if (now >= nextDiscovery)
+            {
+                codex = codexEnabled ? findCodex() : null;
+                claude = claudeEnabled ? findClaude() : null;
+                nextDiscovery = now.AddSeconds(30);
+            }
+            var snapshot = collect(codexEnabled, claudeEnabled, codex, claude);
+            return new(codexEnabled ? snapshot.Codex : new(), claudeEnabled ? snapshot.Claude : new());
+        }
+    }
+
+    private ActivitySnapshot CaptureProcesses(bool codexEnabled, bool claudeEnabled, string? codex, string? claude)
+    {
         var foreground = GetForegroundWindow();
         GetWindowThreadProcessId(foreground, out var frontPid);
         var desktopAllowed = ActivityPolicy.DesktopActive(true, IsWindowVisible(foreground), IsIconic(foreground));
@@ -30,8 +77,8 @@ public sealed class WindowsActivitySource
                 {
                     if (process.Id == Environment.ProcessId || ProviderProcess.IsOwned(process.Id)) continue;
                     var name = process.ProcessName;
-                    if (!name.Equals("codex", StringComparison.OrdinalIgnoreCase) && !name.Equals("claude", StringComparison.OrdinalIgnoreCase) &&
-                        !(process.Id == frontPid && name.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase))) continue;
+                    // Skip disabled candidates before opening a handle or reading a path/mode.
+                    if (!CandidateProcess(name, process.Id == frontPid, codexEnabled, claudeEnabled)) continue;
                     using var handle = OpenProcess(0x1000 | 0x10, false, process.Id);
                     if (handle.IsInvalid) continue;
                     var buffer = new StringBuilder(32768); var capacity = buffer.Capacity;
@@ -39,10 +86,10 @@ public sealed class WindowsActivitySource
                     var path = buffer.ToString();
                     if (process.Id == frontPid && desktopAllowed)
                     {
-                        cxDesktop |= DesktopProvider(path) == "Codex";
-                        clDesktop |= DesktopProvider(path) == "Claude Code";
+                        cxDesktop |= codexEnabled && DesktopProvider(path) == "Codex";
+                        clDesktop |= claudeEnabled && DesktopProvider(path) == "Claude Code";
                     }
-                    var provider = Same(path, codex) ? "Codex" : Same(path, claude) ? "Claude Code" : null;
+                    var provider = codexEnabled && Same(path, codex) ? "Codex" : claudeEnabled && Same(path, claude) ? "Claude Code" : null;
                     if (provider is null) continue;
                     var key = (process.Id, process.StartTime.ToUniversalTime().Ticks);
                     seen.Add(key);
@@ -55,6 +102,10 @@ public sealed class WindowsActivitySource
         modes.Retain(seen);
         return new(new(cxCli, cxDesktop), new(clCli, clDesktop));
     }
+
+    internal static bool CandidateProcess(string name, bool foreground, bool codexEnabled, bool claudeEnabled) =>
+        (codexEnabled && (name.Equals("codex", StringComparison.OrdinalIgnoreCase) || foreground && name.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase))) ||
+        (claudeEnabled && name.Equals("claude", StringComparison.OrdinalIgnoreCase));
 
     public static string? DesktopProvider(string path)
     {

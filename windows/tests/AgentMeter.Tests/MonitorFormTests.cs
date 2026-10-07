@@ -19,13 +19,27 @@ public sealed class MonitorFormTests
         Assert.Equal(new Size(width, height), MonitorForm.SizeForDpi(dpi));
 
     [Fact]
+    public Task CodexArtworkPreservesTransparentMarginsAndClaudeKeepsMascotColor() => RunSta(() =>
+    {
+        foreach (var provider in new[] { "Codex", "Claude" })
+        {
+            using var bitmap = new Bitmap(32, 32); using var graphics = Graphics.FromImage(bitmap);
+            graphics.Clear(Color.Transparent); ProviderMark.Draw(graphics, provider, new RectangleF(0, 0, 32, 32), Color.Black);
+            Assert.Equal(0, bitmap.GetPixel(0, 0).A);
+            var pixels = Enumerable.Range(0, 32).SelectMany(x => Enumerable.Range(0, 32).Select(y => bitmap.GetPixel(x, y))).Where(p => p.A > 0).ToArray();
+            Assert.InRange(pixels.Length, 50, 800);
+            if (provider == "Claude" && !SystemInformation.HighContrast) Assert.Contains(pixels, p => p.R > p.G && p.G > p.B);
+        }
+    });
+
+    [Fact]
     public Task SelectedLiveAllowancesAppearWithoutBonusOrSessionSubstitution() => RunSta(() =>
     {
         using var form = NewForm();
         form.Render(States(), Now);
         Assert.Equal(["29%", "100%"], form.RowValues);
         Assert.Contains("29% remaining", form.AccessibilityObject.GetChild(0)!.Name);
-        Assert.Contains("5 hours", form.AccessibilityObject.GetChild(1)!.Name);
+        Assert.Contains("5-hour limit", form.AccessibilityObject.GetChild(1)!.Name);
         Assert.Contains("Weekly", form.AccessibilityObject.GetChild(1)!.Name);
         Assert.Equal(2, form.AccessibilityObject.GetChildCount());
         Assert.Equal(AccessibleRole.StaticText, form.AccessibilityObject.GetChild(1)!.Role);
@@ -67,13 +81,13 @@ public sealed class MonitorFormTests
             form.SetExpanded(expanded, false);
             form.Render(states, Now);
             Assert.Equal("29%", form.RowValues[0]); // Existing Codex fixture presentation is unchanged.
-            Assert.Equal(fiveHour ? "80%" : "—", form.RowValues[1]);
+            Assert.Equal(fiveHour ? "80%" : weekly ? "70%" : "—", form.RowValues[1]);
             var text = form.AccessibilityObject.GetChild(1)!.Name!;
             foreach (var raw in unknown.Append("raw_primary_label").Append("raw_weekly_label"))
                 Assert.DoesNotContain(raw, text);
-            if (fiveHour) Assert.Contains("5-hour · 80% remaining", text);
+            if (fiveHour) Assert.Contains("5-hour limit · 80% remaining", text);
             else Assert.DoesNotContain("5-hour ·", text);
-            if (weekly) Assert.Contains("Weekly · 70% remaining", text);
+            if (weekly) Assert.Contains("Weekly limit · 70% remaining", text);
             else Assert.DoesNotContain("Weekly ·", text);
             using var preview = form.CreatePreviewBitmap();
             Assert.Equal(form.ClientSize.Width, preview.Width);
@@ -98,8 +112,8 @@ public sealed class MonitorFormTests
     {
         using var form = NewForm();
         var states = States();
-        var coreUnknown = new UsageWindow("codex/primary", "Codex · 5 hours", null, Now.AddHours(4));
-        states[0] = states[0] with { Snapshot = states[0].Snapshot! with { Windows = [coreUnknown, new("spark/primary", "Spark · 5 hours", 0, Now.AddHours(4))] } };
+        var coreUnknown = new UsageWindow("codex/primary", "Codex · 5 hours", null, Now.AddHours(4), 300);
+        states[0] = states[0] with { Snapshot = states[0].Snapshot! with { Windows = [coreUnknown, new("spark/primary", "Spark · 5 hours", 0, Now.AddHours(4), 300, UsageScope.Model, "Spark")] } };
         states[1] = new ProviderState("Claude", ProviderStatus.Unavailable, Failure: FailureKind.LoggedOut);
         form.Render(states, Now);
         Assert.Equal(["—", "—"], form.RowValues);
@@ -113,7 +127,7 @@ public sealed class MonitorFormTests
         form.Render([new ProviderState("Codex", ProviderStatus.Loading)], Now);
         Assert.Equal(["…", "—"], form.RowValues);
         form.Render([new ProviderState("Codex", ProviderStatus.Ready,
-            new UsageSnapshot([new("codex/primary", "5 hours", 40, null)], Now, "fixture"))], Now);
+            new UsageSnapshot([new("codex/primary", "5 hours", 40, null, 300)], Now, "fixture"))], Now);
         Assert.Equal(["60%", "—"], form.RowValues);
         Assert.Contains("Reset unavailable", form.AccessibilityObject.GetChild(0)!.Name);
     });
@@ -127,7 +141,7 @@ public sealed class MonitorFormTests
         var before = form.RenderVersion;
         form.Render(states, Now.AddSeconds(45));
         Assert.Equal(before, form.RenderVersion);
-        states[0] = states[0] with { Snapshot = states[0].Snapshot! with { Windows = [new("codex/primary", "5 hours", 72, Now.AddHours(5))] } };
+        states[0] = states[0] with { Snapshot = states[0].Snapshot! with { Windows = [new("codex/primary", "5 hours", 72, Now.AddHours(5), 300)] } };
         form.Render(states, Now.AddSeconds(46));
         Assert.Equal(before + 1, form.RenderVersion);
         Assert.Equal("28%", form.RowValues[0]);
@@ -172,15 +186,16 @@ public sealed class MonitorFormTests
     public Task ContextMenuAndKeyboardInvokeActualActionWiring() => RunSta(() =>
     {
         using var form = NewForm();
-        var opens = 0; var refreshes = 0; var exits = 0; var unpins = 0;
+        var opens = 0; var refreshes = 0; var exits = 0; var unpins = 0; var resets = 0;
         form.OpenRequested += () => opens++;
         form.RefreshRequested += () => refreshes++;
         form.ExitRequested += () => exits++;
         form.UnpinRequested += () => unpins++;
+        form.ResetPositionRequested += () => resets++;
         Assert.True(Key(form, Keys.Enter));
         Assert.True(Key(form, Keys.Control | Keys.R));
         foreach (var item in form.ContextMenuStrip!.Items.OfType<ToolStripMenuItem>()) item.PerformClick();
-        Assert.Equal(2, opens); Assert.Equal(2, refreshes); Assert.Equal(1, exits); Assert.Equal(1, unpins);
+        Assert.Equal(2, opens); Assert.Equal(2, refreshes); Assert.Equal(1, exits); Assert.Equal(1, unpins); Assert.Equal(1, resets);
     });
 
     [Fact]
@@ -212,7 +227,7 @@ public sealed class MonitorFormTests
         {
             using var image = form.CreatePreviewBitmap();
             var states = States();
-            states[0] = states[0] with { Snapshot = states[0].Snapshot! with { Windows = [new("codex/primary", "5 hours", i, Now.AddHours(5))] } };
+            states[0] = states[0] with { Snapshot = states[0].Snapshot! with { Windows = [new("codex/primary", "5 hours", i, Now.AddHours(5), 300)] } };
             form.Render(states, Now);
         }
         var after = GetGuiResources(process.Handle, 0);
@@ -267,13 +282,43 @@ public sealed class MonitorFormTests
     });
 
     [Fact]
+    public Task SupportedModelAndAdditionalLimitsExpandForBothProvidersAndKeepAgeAccessible() => RunSta(() =>
+    {
+        using var form = NewForm(); var states = States();
+        states[1] = states[1] with { Snapshot = new([
+            new("seven_day", "raw-week", 40, Now.AddDays(2)),
+            new("sonnet", "raw-model", 5, Now.AddDays(2), 10080, UsageScope.Model, "Sonnet"),
+            new("extra", "raw-additional", 10, Now.AddHours(1), 60, UsageScope.Additional, "Extra usage")], Now.AddMinutes(-3), "fixture") };
+        form.Render(states, Now); form.SetExpanded(true, false);
+        Assert.Equal(["29%", "60%"], form.RowValues);
+        Assert.Equal(MonitorForm.SizeForDpi(form.DeviceDpi, 2, true, allowanceRows: 3), form.ClientSize);
+        Assert.Contains("Model: Spark", form.AccessibilityObject.GetChild(0)!.Name);
+        var claude = form.AccessibilityObject.GetChild(1)!.Name!;
+        foreach (var expected in new[] { "Model: Sonnet", "Additional: Extra usage", "Updated 3m ago", "observation older than two minutes" }) Assert.Contains(expected, claude);
+        foreach (var denied in new[] { "raw-model", "raw-additional", "raw-week" }) Assert.DoesNotContain(denied, claude);
+        using var image = form.CreatePreviewBitmap(); Assert.Equal(form.ClientSize.Height, image.Height);
+    });
+
+    [Fact]
+    public Task DisabledProvidersDisappearAndBothOffHidesExistingMonitor() => RunSta(() =>
+    {
+        using var form = NewForm(); form.MotionAllowed = () => false; var states = States();
+        form.Render(states, Now); form.ShowMonitor(new(30, 30));
+        form.Render([states[0] with { Enabled = false }, states[1]], Now);
+        Assert.Equal(["Claude"], form.ProviderNames); Assert.Single(form.RowValues); Assert.Equal(1, form.AccessibilityObject.GetChildCount());
+        form.Render(states.Select(s => s with { Enabled = false }).ToArray(), Now);
+        Assert.Empty(form.RowValues); Assert.False(form.Visible);
+        form.Render(states, Now); Assert.Equal(2, form.RowValues.Count);
+    });
+
+    [Fact]
     public Task ReducedMotionChangesAreImmediateAndHaveNoAnimationTimer() => RunSta(() =>
     {
         using var form = NewForm(); form.MotionAllowed = () => false;
         form.Render(States(), Now);
         form.ShowMonitor(new(30, 30)); Assert.False(form.IsAnimating);
         form.SetExpanded(true); Assert.False(form.IsAnimating);
-        Assert.Equal(MonitorForm.SizeForDpi(form.DeviceDpi, 2, true), form.ClientSize);
+        Assert.Equal(form.ExpandedSize, form.ClientSize);
         form.HideMonitor(true); Assert.False(form.Visible); Assert.False(form.IsAnimating);
     });
 
@@ -281,9 +326,9 @@ public sealed class MonitorFormTests
     private static ProviderState[] States() =>
     [
         new("Codex", ProviderStatus.Ready, new UsageSnapshot([
-            new("codex/primary", "Codex · 5 hours", 71, Now.AddHours(5)),
-            new("codex/secondary", "Codex · 7 days", 15, Now.AddDays(4)),
-            new("spark/primary", "Spark · 5 hours", 0, Now.AddHours(5))
+            new("codex/primary", "Codex · 5 hours", 71, Now.AddHours(5), 300),
+            new("codex/secondary", "Codex · 7 days", 15, Now.AddDays(4), 10080),
+            new("spark/primary", "Spark · 5 hours", 0, Now.AddHours(5), 300, UsageScope.Model, "Spark")
         ], Now, "fixture")),
         new("Claude", ProviderStatus.Ready, new UsageSnapshot([
             new("five_hour", "5 hours", 0, Now.AddHours(3)),

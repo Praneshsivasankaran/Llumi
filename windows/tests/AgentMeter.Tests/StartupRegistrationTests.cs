@@ -55,7 +55,7 @@ public sealed class StartupRegistrationTests
     }
 
     [Theory]
-    [InlineData("Codex", "https://developers.openai.com/codex/cli/")]
+    [InlineData("Codex", "https://learn.chatgpt.com/docs/codex/cli")]
     [InlineData("Claude", "https://code.claude.com/docs/en/quickstart")]
     public void SetupDestinationsAreFixedOfficialHttpsInstructions(string provider, string expected)
     {

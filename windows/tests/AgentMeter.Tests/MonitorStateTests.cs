@@ -4,7 +4,7 @@ namespace AgentMeter.Tests;
 
 public sealed class MonitorStateTests
 {
-    private static UsageWindow W(string id, double? used = 30) => new(id, "Localized arbitrary label", used, null);
+    private static UsageWindow W(string id, double? used = 30) => new(id, "Localized arbitrary label", used, null, id == "codex/secondary" ? 10080 : 300);
     private static ProviderState State(string name, params UsageWindow[] windows) => new(name, ProviderStatus.Ready,
         new UsageSnapshot(windows, DateTimeOffset.UtcNow, "test"));
 
@@ -28,7 +28,7 @@ public sealed class MonitorStateTests
         Assert.NotNull(result.Snapshot);
         var selected = MonitorSelection.Select(new ProviderState("Codex", ProviderStatus.Ready, result.Snapshot));
         Assert.NotNull(selected);
-        Assert.Equal("Codex/primary", selected.Id);
+        Assert.Equal("codex/primary", selected.Id);
         Assert.Equal(29, selected.RemainingPercent);
     }
 
@@ -36,7 +36,7 @@ public sealed class MonitorStateTests
     public void MainUnknownPercentageDoesNotBecomeBonusAllowance()
     {
         var main = W("codex/primary", null);
-        Assert.Same(main, MonitorSelection.Select(State("Codex", main, W("codex/secondary", 0))));
+        Assert.Equal("codex/secondary", MonitorSelection.Select(State("Codex", main, W("codex/secondary", 0)))!.Id);
         Assert.Null(MonitorSelection.Select(State("Codex", W("codex_bengalfox/primary", 0))));
         Assert.Null(MonitorSelection.Select(State("Codex", W("invented/primary", 0))));
     }
@@ -63,8 +63,9 @@ public sealed class MonitorStateTests
     [Fact]
     public void DuplicateAndUnknownSemanticsDoNotGuess()
     {
-        Assert.Null(MonitorSelection.Select(State("Claude", W("seven_day"), W("seven_day"))));
-        Assert.Null(MonitorSelection.Select(State("Other", W("seven_day"))));
+        Assert.Equal("seven_day", MonitorSelection.Select(State("Claude", W("seven_day"), W("seven_day")))!.Id);
+        Assert.Null(MonitorSelection.Select(State("Claude", W("seven_day", 10), W("seven_day", 50))));
+        Assert.Null(MonitorSelection.Select(State("Other", W("opaque"))));
         Assert.Null(MonitorSelection.Select(new ProviderState("Claude", ProviderStatus.Unavailable)));
     }
 

@@ -32,7 +32,7 @@ public sealed class ClaudeControlTransportTests
         var source = new ClaudeControlTransport(() => "fixture.exe", (_, _) => Task.FromResult((J(++calls == 1 ? Auth : Auth.Replace(before, after)), 0)),
             (_, _, _) => Task.FromResult(J(Usage)));
         var result = await source.QueryAsync(default);
-        Assert.Null(result.Binding); Assert.Null(result.Usage.Snapshot); Assert.Equal(FailureKind.Unsupported, result.Usage.Failure);
+        Assert.Null(result.Binding); Assert.Null(result.Usage.Snapshot); Assert.Equal(FailureKind.AccountChanged, result.Usage.Failure);
     }
 
     [Theory]
@@ -40,12 +40,78 @@ public sealed class ClaudeControlTransportTests
     [InlineData("\"total_api_duration_ms\":0", "\"total_api_duration_ms\":1")]
     [InlineData("\"model_usage\":{}", "\"model_usage\":{\"model\":1}")]
     [InlineData("\"behaviors\":null", "\"behaviors\":{}")]
-    [InlineData("\"utilization\":12", "\"utilization\":101")]
-    [InlineData("\"utilization\":12", "\"utilization\":\"12\"")]
-    [InlineData("2030-01-01T12:30:00Z", "2030-01-01T12:30:00")]
     [InlineData("\"utilization\":12", "\"utilization\":12,\"utilization\":12")]
     public void MalformedOrInferenceBearingResponsesFailClosed(string old, string replacement) =>
         Assert.Throws<ProviderQueryException>(() => ClaudeControlTransport.ParseUsage(J(Usage.Replace(old, replacement)), "pro"));
+
+    [Theory]
+    [InlineData("\"utilization\":12", "\"utilization\":101")]
+    [InlineData("\"utilization\":12", "\"utilization\":\"12\"")]
+    [InlineData("2030-01-01T12:30:00Z", "2030-01-01T12:30:00")]
+    public void MalformedOptionalFieldsNeverInventValuesAndPreserveAnotherSupportedWindow(string old, string replacement)
+    {
+        var windows = ClaudeControlTransport.ParseUsage(J(Usage.Replace(old, replacement)), "pro");
+        Assert.Equal(100, windows.Single(w => w.Id == "seven_day").RemainingPercent);
+        var five = windows.Single(w => w.Id == "five_hour");
+        if (old.Contains("utilization", StringComparison.Ordinal)) Assert.Null(five.RemainingPercent);
+        else Assert.Null(five.ResetsAt);
+    }
+
+    [Theory]
+    [InlineData("{}", AllowanceAvailability.NotReported)]
+    [InlineData("{\"future_bucket\":{\"utilization\":2}}", AllowanceAvailability.UnsupportedFormat)]
+    [InlineData("{\"extra_usage\":{\"spend\":0}}", AllowanceAvailability.UnsupportedFormat)]
+    [InlineData("{\"extra_usage\":{}}", AllowanceAvailability.NotReported)]
+    [InlineData("{\"five_hour\":{\"utilization\":null}}", AllowanceAvailability.NotReported)]
+    public async Task SuccessfulNoDataResponsesRetainReadinessAndDoNotInventAllowance(string limits, AllowanceAvailability expected)
+    {
+        var payload = J("{\"rate_limits_available\":true,\"behaviors\":null,\"subscription_type\":\"pro\",\"session\":{\"total_cost_usd\":0,\"total_api_duration_ms\":0,\"model_usage\":{}},\"rate_limits\":" + limits + "}");
+        var source = new ClaudeControlTransport(() => "fixture.exe", (_, _) => Task.FromResult((J(Auth), 0)), (_, _, _) => Task.FromResult(payload));
+        var provider = new ClaudeProvider([source]);
+        var result = await provider.QueryAsync(default);
+        Assert.Equal(FailureKind.None, result.Failure);
+        Assert.Equal(AuthenticationStatus.Verified, result.Authentication);
+        Assert.NotNull(result.VerifiedBinding);
+        Assert.Equal(expected, result.Snapshot!.Availability);
+        Assert.All(result.Snapshot.Windows, w => Assert.Null(w.RemainingPercent));
+        Assert.DoesNotContain("future_bucket", JsonSerializer.Serialize(result));
+    }
+
+    [Fact]
+    public void VerifiedModelWindowsRetainScopeAndWeeklyDuration()
+    {
+        var payload = Usage.Replace("\"seven_day\":{\"utilization\":0,\"resets_at\":null}", "\"seven_day_sonnet\":{\"utilization\":100},\"seven_day_opus\":{\"utilization\":0},\"model_scoped\":[{\"display_name\":\"Fixture model\",\"utilization\":25}]");
+        var windows = ClaudeControlTransport.ParseUsage(J(payload), "pro");
+        Assert.Equal(4, windows.Count);
+        Assert.All(windows.Where(w => w.Scope == UsageScope.Model), w => Assert.Equal(10080, w.DurationMinutes));
+        Assert.Equal(0, windows.Single(w => w.ScopeLabel == "Sonnet").RemainingPercent);
+        Assert.Equal(100, windows.Single(w => w.ScopeLabel == "Opus").RemainingPercent);
+    }
+
+    [Theory]
+    [InlineData("\"authMethod\":\"claude.ai\"", "\"authMethod\":\"apiKey\"")]
+    [InlineData("\"apiProvider\":\"firstParty\"", "\"apiProvider\":\"bedrock\"")]
+    public void KnownUnsupportedBillingUsesAuthenticationEvidenceOnly(string before, string after)
+    {
+        var failure = Assert.Throws<ProviderQueryException>(() => ClaudeControlTransport.ParseIdentity(J(Auth.Replace(before, after)), 0));
+        Assert.Equal(FailureKind.UnsupportedBilling, failure.Failure);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task KnownRateEmbargoSurvivesLostOrChangedPostQueryAuthentication(bool signedOut)
+    {
+        var calls = 0;
+        var source = new ClaudeControlTransport(() => "fixture.exe", (_, _) => Task.FromResult((J(++calls == 1 ? Auth :
+            signedOut ? "{\"loggedIn\":false}" : Auth.Replace("fixture@example.invalid", "changed@example.invalid")), 0)),
+            (_, _, _) => throw new ProviderQueryException(FailureKind.RateLimited, TimeSpan.FromMinutes(3)));
+        var result = await new ClaudeProvider([source]).QueryAsync(default);
+        Assert.Null(result.VerifiedBinding);
+        Assert.Null(result.Snapshot);
+        Assert.Equal(signedOut ? FailureKind.LoggedOut : FailureKind.AccountChanged, result.Failure);
+        Assert.Equal(TimeSpan.FromMinutes(3), result.RetryAfter);
+    }
 
     [Fact]
     public void SessionMustMatchProviderOwnedAuthentication()

@@ -19,9 +19,13 @@ internal sealed class SetupForm : Form
     private readonly Button next = Palette.Button("Continue", "Continue setup");
     private readonly Button back = Palette.Button("Back", "Previous setup step");
     private readonly Dictionary<string, Label> statusLabels = new();
+    private readonly List<Button> retryButtons = [];
+    private readonly Label retryMessage = new() { AutoSize = true, MaximumSize = new Size(520, 0) };
+    private readonly System.Windows.Forms.Timer countdown = new() { Interval = 1000 };
     private readonly Label message = new() { AutoSize = true, MaximumSize = new Size(520, 0) };
     private readonly Font bodyFont = new("Segoe UI", 10);
     private readonly Font headingFont = new("Segoe UI", 16, FontStyle.Bold);
+    private bool syncingProviders;
 
     internal SetupForm(SetupFlow flow, Func<IReadOnlyList<ProviderState>> states, Action refresh,
         Func<Preferences> preferences, Action<Preferences> savePreferences, IStartupRegistration startup,
@@ -30,6 +34,7 @@ internal sealed class SetupForm : Form
         this.flow = flow; this.states = states; this.refresh = refresh; this.preferences = preferences;
         this.savePreferences = savePreferences; this.startup = startup; this.toggleStartup = toggleStartup;
         this.finished = finished;
+        var current = preferences(); flow.Codex = current.CodexEnabled; flow.Claude = current.ClaudeEnabled;
         Text = "Setup Llumi"; Font = bodyFont; Icon = AppIcon.Load();
         AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(620, 580);
         MinimumSize = new Size(560, 480); StartPosition = FormStartPosition.CenterScreen;
@@ -45,6 +50,8 @@ internal sealed class SetupForm : Form
             }
             flow.Next(); RenderStep(); if (flow.Step == SetupStep.Verify) refresh();
         };
+        countdown.Tick += (_, _) => RefreshStatuses();
+        VisibleChanged += (_, _) => { if (Visible) countdown.Start(); else countdown.Stop(); };
         AcceptButton = next; RenderStep();
     }
     private void TextLine(string text, bool heading = false)
@@ -73,63 +80,81 @@ internal sealed class SetupForm : Form
     {
         foreach (var provider in new[] { "Codex", "Claude" })
         {
-            TextLine(provider == "Claude" ? "Claude Code" : provider, true);
+            var heading = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 8) };
+            heading.Controls.Add(new ProviderArtwork(provider) { Size = new Size(26, 26), Margin = new Padding(0, 0, 10, 0) });
+            heading.Controls.Add(new Label { Text = provider == "Claude" ? "Claude Code" : provider, AutoSize = true, Font = bodyFont, Margin = new Padding(0, 3, 0, 0) });
+            body.Controls.Add(heading);
             var label = new Label { AutoSize = true, MaximumSize = new Size(520, 0), Margin = new Padding(0, 0, 0, 12) };
             statusLabels[provider] = label; body.Controls.Add(label);
         }
-        ActionButton("Check Again", refresh);
+        retryButtons.Add(ActionButton("Retry", refresh));
+        body.Controls.Add(retryMessage);
         ActionButton("Copy Diagnostics", () => Copy(SetupDiagnostics.Report(states(),
             typeof(SetupForm).Assembly.GetName().Version?.ToString(3), typeof(SetupForm).Assembly.GetName().Version?.ToString())));
         TextLine("Copies only app/OS versions, architecture and status categories. Nothing is uploaded.");
     }
     internal void RefreshStatuses()
     {
+        var current = preferences(); flow.Codex = current.CodexEnabled; flow.Claude = current.ClaudeEnabled;
+        syncingProviders = true;
+        foreach (var control in body.Controls.OfType<CheckBox>())
+        {
+            if (control.AccessibleName == "Monitor Codex") control.Checked = current.CodexEnabled;
+            if (control.AccessibleName == "Monitor Claude Code") control.Checked = current.ClaudeEnabled;
+        }
+        syncingProviders = false;
         foreach (var (name, label) in statusLabels)
         {
             var state = states().FirstOrDefault(s => s.Name == name || (name == "Claude" && s.Name == "Claude Code"))
                 ?? new ProviderState(name, ProviderStatus.Loading);
-            label.Text = SetupDiagnostic.From(state).Summary;
+            var enabled = name == "Codex" ? preferences().CodexEnabled : preferences().ClaudeEnabled;
+            label.Text = SetupDiagnostic.From(state with { Enabled = enabled }).Summary;
         }
+        var selected = states().Where(s => s.Enabled && (s.Name == "Codex" ? preferences().CodexEnabled : preferences().ClaudeEnabled)).ToArray();
+        var at = DateTimeOffset.UtcNow;
+        foreach (var button in retryButtons) button.Enabled = selected.Any(s => SetupRetryPresentation.CanRetry(s, at));
+        retryMessage.Text = string.Join("\n", selected.Select(s => (State: s, Message: SetupRetryPresentation.Message(s, at)))
+            .Where(x => x.Message is not null).Select(x => $"{(UsagePresentation.IsClaude(x.State.Name) ? "Claude Code" : x.State.Name)}: {x.Message}"));
         if (flow.Step == SetupStep.Verify)
             next.Text = states().Any(s => ((flow.Codex && s.Name == "Codex") || (flow.Claude && s.Name is "Claude" or "Claude Code"))
-                && SetupDiagnostic.From(s).Status == "Ready") ? "Continue" : "Finish Anyway";
+                && s.Enabled && s.Authentication == AuthenticationStatus.Verified) ? "Continue" : "Finish Anyway";
     }
     private void RenderStep()
     {
-        body.SuspendLayout(); body.Controls.Remove(message);
+        body.SuspendLayout(); body.Controls.Remove(message); body.Controls.Remove(retryMessage);
         foreach (var control in body.Controls.Cast<Control>().ToArray()) control.Dispose();
-        body.Controls.Clear(); statusLabels.Clear(); message.Text = "";
+        body.Controls.Clear(); statusLabels.Clear(); retryButtons.Clear(); message.Text = ""; retryMessage.Text = "";
         back.Visible = flow.Step != SetupStep.Welcome;
-        next.Text = flow.Step == SetupStep.Welcome ? "Set Up Llumi" : flow.Step == SetupStep.Done ? "Start Llumi" : "Continue";
+        next.Text = flow.Step == SetupStep.Welcome ? "Get Started" : flow.Step == SetupStep.Done ? "Start Llumi" : "Continue";
         switch (flow.Step)
         {
             case SetupStep.Welcome:
                 var identity = new Panel { Width = 64, Height = 64, Margin = new Padding(0, 8, 0, 24) };
                 identity.Paint += (_, e) => { using var mark = AppIcon.Load(); e.Graphics.DrawIcon(mark, new Rectangle(0, 0, 64, 64)); };
                 body.Controls.Add(identity);
-                TextLine("Welcome to Llumi", true); TextLine("Track your AI coding usage.");
-                TextLine("Llumi monitors usage from your locally installed Codex and Claude Code tools. Use either provider, or both. Your sign-in stays with your provider."); break;
+                TextLine("Llumi", true); break;
             case SetupStep.Providers:
-                TextLine("Choose providers", true);
-                var codex = new CheckBox { Text = "Codex", AutoSize = true, Checked = flow.Codex };
-                var claude = new CheckBox { Text = "Claude Code", AutoSize = true, Checked = flow.Claude };
-                codex.CheckedChanged += (_, _) => flow.Codex = codex.Checked;
-                claude.CheckedChanged += (_, _) => flow.Claude = claude.Checked;
+                TextLine("Choose your providers", true); TextLine("Select either or both. You can also set them up later. Turning a provider off stops its monitoring.");
+                var codex = new CheckBox { Text = "Monitor Codex", AutoSize = true, Checked = flow.Codex, AccessibleName = "Monitor Codex" };
+                var claude = new CheckBox { Text = "Monitor Claude Code", AutoSize = true, Checked = flow.Claude, AccessibleName = "Monitor Claude Code" };
+                codex.CheckedChanged += (_, _) => { if (syncingProviders) return; savePreferences(preferences() with { CodexEnabled = codex.Checked }); RefreshStatuses(); };
+                claude.CheckedChanged += (_, _) => { if (syncingProviders) return; savePreferences(preferences() with { ClaudeEnabled = claude.Checked }); RefreshStatuses(); };
                 body.Controls.Add(codex); body.Controls.Add(claude); Statuses(); break;
             case SetupStep.Codex: case SetupStep.Claude:
                 var isCodex = flow.Step == SetupStep.Codex;
                 TextLine(isCodex ? "Set up Codex" : "Set up Claude Code", true);
-                TextLine("Open PowerShell. Copy each command, paste it there, then press Enter. Llumi never executes these commands or reads Terminal contents.");
+                TextLine("Open PowerShell, paste each command, then press Enter. Llumi only copies these instructions.");
                 TextLine(isCodex ? "This installation method requires Node.js and npm. Skip installation if Codex is already installed. Use native Windows, not a WSL-only installation."
-                    : "This is Anthropic’s native Windows installer. Skip installation if Claude Code is already installed.");
+                    : "Use Claude Code on native Windows. Git for Windows is recommended for Git Bash. Skip installation if Claude Code is already installed.");
                 Command("Install", isCodex ? "npm install -g @openai/codex" : "irm https://claude.ai/install.ps1 | iex");
+                TextLine("After installing, open a new PowerShell window before signing in.");
                 Command("Sign in", isCodex ? "codex login" : "claude auth login");
                 TextLine(isCodex ? "Choose your ChatGPT subscription account." : "Choose your Claude subscription account, not Console/API billing. Credentials stay with Claude Code.");
                 ActionButton("Official setup guide", () => ProviderSetup.Open(new Uri(isCodex
-                    ? "https://developers.openai.com/codex/cli/" : "https://code.claude.com/docs/en/setup")));
+                    ? "https://learn.chatgpt.com/docs/codex/cli" : "https://code.claude.com/docs/en/setup")));
                 Statuses(); break;
             case SetupStep.Verify:
-                TextLine("Verify setup", true); TextLine("One ready provider is enough. You can also finish without configuring a provider."); Statuses(); break;
+                TextLine("Check Setup", true); TextLine("Sign-in and allowance availability are checked separately. One signed-in provider is enough, even if its allowances are not reported yet. You can also finish and set up later."); Statuses(); break;
             case SetupStep.Preferences:
                 TextLine("Preferences", true); TextLine("These use the same settings as the main application.");
                 var p = preferences();
@@ -157,5 +182,5 @@ internal sealed class SetupForm : Form
         Theme(this);
     }
     protected override void Dispose(bool disposing)
-    { base.Dispose(disposing); if (disposing) { Icon?.Dispose(); bodyFont.Dispose(); headingFont.Dispose(); } }
+    { base.Dispose(disposing); if (disposing) { countdown.Dispose(); retryMessage.Dispose(); Icon?.Dispose(); bodyFont.Dispose(); headingFont.Dispose(); } }
 }

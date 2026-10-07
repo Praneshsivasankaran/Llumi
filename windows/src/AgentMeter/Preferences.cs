@@ -4,7 +4,8 @@ using System.Text.Json.Serialization;
 namespace AgentMeter;
 
 internal enum Appearance { System, Light, Dark }
-internal sealed record Preferences(bool CompactMonitor = true, bool TrayIcon = true, Appearance Appearance = Appearance.System);
+internal sealed record Preferences(bool CompactMonitor = true, bool TrayIcon = true, Appearance Appearance = Appearance.System,
+    bool CodexEnabled = true, bool ClaudeEnabled = true);
 internal sealed class PreferenceStore(string path)
 {
     internal static PreferenceStore Default() => new(Path.Combine(PackagedEnvironment.DataDirectory, "v2-preferences.json"));
@@ -14,11 +15,11 @@ internal sealed class PreferenceStore(string path)
         {
             using var file = File.OpenRead(path);
             if (file.Length > 4096) return false;
-            using var document = JsonDocument.Parse(file);
+            using var document = JsonDocument.Parse(file, new JsonDocumentOptions { MaxDepth = 4 });
             var root = document.RootElement;
-            if (root.ValueKind != JsonValueKind.Object) return false;
+            if (!ValidRoot(root)) return false;
             return root.EnumerateObject().Any(p =>
-                (p.Name is "CompactMonitor" or "TrayIcon" && p.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                (p.Name is "CompactMonitor" or "TrayIcon" or "CodexEnabled" or "ClaudeEnabled" && p.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
                 || (p.Name == "Appearance" && p.Value.ValueKind == JsonValueKind.Number && p.Value.TryGetInt32(out var n) && Enum.IsDefined((Appearance)n)));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException) { return false; }
@@ -29,10 +30,25 @@ internal sealed class PreferenceStore(string path)
         {
             using var file = File.OpenRead(path);
             if (file.Length > 4096) return new();
-            var value = JsonSerializer.Deserialize<Preferences>(file);
-            return value is not null && Enum.IsDefined(value.Appearance) ? value : new();
+            using var document = JsonDocument.Parse(file, new JsonDocumentOptions { MaxDepth = 4 });
+            var root = document.RootElement;
+            if (!ValidRoot(root)) return new();
+            // Missing provider flags in older preferences preserve existing monitoring.
+            var value = root.Deserialize<Preferences>();
+            return value ?? new();
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException) { return new(); }
+    }
+
+    private static bool ValidRoot(JsonElement root)
+    {
+        if (root.ValueKind != JsonValueKind.Object) return false;
+        var names = new HashSet<string>();
+        if (root.EnumerateObject().Any(p => !names.Add(p.Name))) return false;
+        foreach (var key in new[] { "CompactMonitor", "TrayIcon", "CodexEnabled", "ClaudeEnabled" })
+            if (root.TryGetProperty(key, out var flag) && flag.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false;
+        return !root.TryGetProperty("Appearance", out var appearance) ||
+            appearance.ValueKind == JsonValueKind.Number && appearance.TryGetInt32(out var number) && Enum.IsDefined((Appearance)number);
     }
     internal bool Save(Preferences value)
     {
@@ -60,7 +76,7 @@ internal static class LegacyPreferences
             var old = ReadObject(Path.Combine(legacyDirectory, "v2-preferences.json"));
             var current = ReadObject(Path.Combine(currentDirectory, "v2-preferences.json"));
             var values = new Dictionary<string, object>();
-            foreach (var key in new[] { "CompactMonitor", "TrayIcon", "Appearance" })
+            foreach (var key in new[] { "CompactMonitor", "TrayIcon", "Appearance", "CodexEnabled", "ClaudeEnabled" })
             {
                 var value = Value(current, key) ?? Value(old, key);
                 if (value is not null) values[key] = value;

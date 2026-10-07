@@ -5,7 +5,7 @@ namespace AgentMeter.Tests;
 public sealed class RefreshResilienceTests
 {
     private static readonly DateTimeOffset Now = DateTimeOffset.Parse("2026-09-16T00:00:00Z");
-    private static ProviderResult Good(double used = 25) => new(new UsageSnapshot([new("primary", "5 hours", used, Now.AddHours(2))], Now, "fixture"));
+    private static ProviderResult Good(double used = 25) => new(new UsageSnapshot([new("primary", "5 hours", used, Now.AddHours(2), 300, UsageScope.General)], Now, "fixture")) { VerifiedBinding = new("fixture"), Authentication = AuthenticationStatus.Verified };
 
     [Fact]
     public async Task HealthyProviderCanRefreshAgainWhileAnotherQueryIsStillPending()
@@ -57,7 +57,7 @@ public sealed class RefreshResilienceTests
             next = Good(index % 101);
             await coordinator.RefreshAsync();
             Assert.Equal("Live", PopupText.Status(coordinator.States[0], Now));
-            next = ProviderResult.Fail(FailureKind.Network);
+            next = ProviderResult.Fail(FailureKind.Network) with { VerifiedBinding = new("fixture"), Authentication = AuthenticationStatus.Verified };
             await coordinator.RefreshAsync();
             Assert.Equal("Stale", PopupText.Status(coordinator.States[0], Now));
             Assert.Equal(100 - index, coordinator.States[0].Snapshot!.Windows[0].RemainingPercent);
@@ -92,7 +92,7 @@ public sealed class RefreshResilienceTests
         clock.UtcNow = Now.AddHours(2);
         Assert.Equal("Stale", PopupText.Status(coordinator.States[0], clock.UtcNow));
         Assert.Equal(0, coordinator.States[0].Snapshot!.Windows[0].RemainingPercent);
-        next = new(new UsageSnapshot([new("primary", "5 hours", 4, Now.AddHours(7))], clock.UtcNow, "fixture"));
+        next = new(new UsageSnapshot([new("primary", "5 hours", 4, Now.AddHours(7), 300, UsageScope.General)], clock.UtcNow, "fixture"));
         await coordinator.RefreshAsync();
         Assert.Equal("Live", PopupText.Status(coordinator.States[0], clock.UtcNow));
         Assert.Equal(96, coordinator.States[0].Snapshot!.Windows[0].RemainingPercent);

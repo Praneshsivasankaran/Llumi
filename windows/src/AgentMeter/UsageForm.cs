@@ -17,15 +17,24 @@ internal sealed class UsageForm : Form
     private readonly CheckBox launch = new() { Text = "Launch at Startup", AutoSize = true };
     private readonly CheckBox compact = new() { Text = "Compact Monitor", AutoSize = true };
     private readonly CheckBox tray = new() { Text = "Tray Icon", AutoSize = true };
+    private readonly CheckBox codex = new() { Text = "Monitor Codex", AutoSize = true, AccessibleName = "Monitor Codex" };
+    private readonly CheckBox claude = new() { Text = "Monitor Claude Code", AutoSize = true, AccessibleName = "Monitor Claude Code" };
+    private readonly ProviderArtwork codexArtwork = new("Codex");
+    private readonly ProviderArtwork claudeArtwork = new("Claude");
+    private readonly Button resetPosition = Palette.Button("Reset Position", "Reset compact monitor position");
+    private readonly Label offMessage = new() { Text = "Monitoring is off.\nEnable Codex or Claude Code in Settings.", AutoSize = false };
+    private readonly Button offSettings = Palette.Button("Open Settings", "Enable providers in Settings");
     private readonly ComboBox appearance = new() { DropDownStyle = ComboBoxStyle.DropDownList, AccessibleName = "Appearance" };
     private readonly Label settingsMessage = new() { AutoSize = false };
     private readonly Label appearanceLabel = new() { Text = "Appearance", AutoSize = true };
     private readonly Label preferencesHeading = new() { Text = "Preferences", AutoSize = true };
-    private readonly Label providerHeading = new() { Text = "Provider Setup", AutoSize = true };
+    private readonly Label providerHeading = new() { Text = "Providers", AutoSize = true };
     private readonly Label providerHint = new() { Text = "Check your locally installed tools. Sign-in stays with each provider.", AutoSize = false };
     private readonly Label codexSetup = new() { AutoSize = false, AccessibleName = "Codex setup status" };
     private readonly Label claudeSetup = new() { AutoSize = false, AccessibleName = "Claude Code setup status" };
-    private readonly Button checkAgain = Palette.Button("Check Again", "Check Again");
+    private readonly Button checkAgain = Palette.Button("Retry", "Retry provider checks");
+    private readonly Label retryMessage = new() { AutoSize = false };
+    private readonly System.Windows.Forms.Timer countdown = new() { Interval = 1000 };
     private readonly Button copyDiagnostics = Palette.Button("Copy Diagnostics", "Copy Diagnostics");
     private readonly Button setupGuide = Palette.Button("Setup Llumi…", "Setup Llumi");
     private readonly Label diagnosticMessage = new() { Text = "Copies only app, OS and provider status categories. Nothing is uploaded.", AutoSize = false };
@@ -43,6 +52,7 @@ internal sealed class UsageForm : Form
     internal event Action? ExitRequested;
     internal event Action? PinRequested;
     internal event Action? StartupToggleRequested;
+    internal event Action? ResetPositionRequested;
     internal event Action? MenuOpening;
     internal event Action<Preferences>? PreferencesChanged;
 
@@ -57,11 +67,14 @@ internal sealed class UsageForm : Form
         header.Paint += (_, e) => GlyphDrawing.DrawIdentity(e.Graphics, new Rectangle(S(18), S(15), S(18), S(22)));
         Controls.AddRange([header, content, settings, footer]);
         foreach (var name in names) { var card = new ProviderCard(hints); cards[name] = card; content.Controls.Add(card); }
+        content.Controls.AddRange([offMessage, offSettings]);
         appearance.Items.AddRange(["System", "Light", "Dark"]);
-        settings.Controls.AddRange([preferencesHeading, launch, compact, tray, appearanceLabel, appearance, settingsMessage,
-            providerHeading, providerHint, codexSetup, claudeSetup, checkAgain, copyDiagnostics, setupGuide, diagnosticMessage]);
+        settings.Controls.AddRange([preferencesHeading, launch, compact, tray, appearanceLabel, appearance, settingsMessage, resetPosition,
+            providerHeading, providerHint, codex, claude, codexArtwork, claudeArtwork, codexSetup, claudeSetup, checkAgain, retryMessage, copyDiagnostics, setupGuide, diagnosticMessage]);
         preferencesHeading.Font = providerHeading.Font = headingFont;
         checkAgain.Click += (_, _) => RefreshRequested?.Invoke();
+        resetPosition.Click += (_, _) => ResetPositionRequested?.Invoke();
+        offSettings.Click += (_, _) => ShowSettings();
         setupGuide.Click += (_, _) => SetupRequested?.Invoke();
         copyDiagnostics.Click += (_, _) => {
             try { Clipboard.SetText(DiagnosticReport()); diagnosticMessage.Text = "Diagnostics copied. Nothing is uploaded."; }
@@ -81,10 +94,13 @@ internal sealed class UsageForm : Form
         menu.Click += (_, _) => { MenuOpening?.Invoke(); actions.Show(menu, new Point(0, menu.Height)); };
         launch.Click += (_, _) => { if (!syncing) StartupToggleRequested?.Invoke(); };
         compact.CheckedChanged += (_, _) => SavePreferences(); tray.CheckedChanged += (_, _) => SavePreferences();
+        codex.CheckedChanged += (_, _) => SavePreferences(); claude.CheckedChanged += (_, _) => SavePreferences();
         appearance.SelectedIndexChanged += (_, _) => SavePreferences();
         FormClosing += (_, e) => { if (!AllowExit && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; HidePanel(); } };
         Resize += (_, _) => { if (!rendering) Render(lastStates, loading, logFailed); };
         DpiChanged += (_, _) => { FitInitialWindow(Screen.FromControl(this).WorkingArea); Render(lastStates, loading, logFailed); KeepOnScreen(); };
+        countdown.Tick += (_, _) => UpdateRetry();
+        VisibleChanged += (_, _) => { if (Visible) countdown.Start(); else countdown.Stop(); };
         _ = Handle;
         FitInitialWindow(Screen.FromControl(this).WorkingArea);
         SetPreferences(preferences);
@@ -102,27 +118,31 @@ internal sealed class UsageForm : Form
     private void SavePreferences()
     {
         if (syncing || appearance.SelectedIndex < 0) return;
-        preferences = new(compact.Checked, tray.Checked, (Appearance)appearance.SelectedIndex);
+        preferences = preferences with { CompactMonitor = compact.Checked, TrayIcon = tray.Checked, Appearance = (Appearance)appearance.SelectedIndex,
+            CodexEnabled = codex.Checked, ClaudeEnabled = claude.Checked };
         PreferencesChanged?.Invoke(preferences);
     }
     internal void SetPreferences(Preferences value)
     {
         preferences = value; syncing = true;
         compact.Checked = value.CompactMonitor; tray.Checked = value.TrayIcon; appearance.SelectedIndex = (int)value.Appearance;
+        codex.Checked = value.CodexEnabled; claude.Checked = value.ClaudeEnabled;
         syncing = false; ApplyTheme();
     }
     internal void PreferenceSaveFailed() => settingsMessage.Text = "Settings could not be saved. The previous preferences remain active.";
+    internal void PositionResetFailed() => settingsMessage.Text = "Monitor position could not be saved. Try again.";
     internal void ApplyTheme()
     {
         void Theme(Control root)
         {
+            if (root is ProviderCard) return; // Cards own their pale surface and transparent label backgrounds.
             root.BackColor = Palette.Background; root.ForeColor = Palette.Foreground;
             foreach (Control child in root.Controls) Theme(child);
         }
         Theme(this); footer.ForeColor = Palette.Muted; settingsMessage.ForeColor = Palette.Muted;
-        providerHint.ForeColor = diagnosticMessage.ForeColor = Palette.Muted;
+        providerHint.ForeColor = diagnosticMessage.ForeColor = retryMessage.ForeColor = offMessage.ForeColor = Palette.Muted;
         foreach (var status in new[] { codexSetup, claudeSetup }) { status.BackColor = Palette.Card; status.Padding = new Padding(S(14)); }
-        foreach (var button in new[] { usageTab, settingsTab, checkAgain, copyDiagnostics, setupGuide })
+        foreach (var button in new[] { usageTab, settingsTab, checkAgain, copyDiagnostics, setupGuide, resetPosition, offSettings })
         { if (button != usageTab && button != settingsTab) button.BackColor = Palette.Card; Palette.StyleButton(button); }
         Render(lastStates, loading, logFailed); Invalidate(true);
     }
@@ -161,59 +181,82 @@ internal sealed class UsageForm : Form
             providerHint.SetBounds(S(20), S(51), settingsWidth, S(32));
             var twoColumns = settingsWidth >= S(500);
             var setupWidth = twoColumns ? (settingsWidth - S(12)) / 2 : settingsWidth;
-            codexSetup.SetBounds(S(20), S(88), setupWidth, S(128));
-            claudeSetup.SetBounds(twoColumns ? S(32) + setupWidth : S(20), twoColumns ? S(88) : S(228), setupWidth, S(128));
-            var actionsY = twoColumns ? 232 : 372;
+            codexArtwork.SetBounds(S(20), S(88), S(26), S(26)); codex.Location = new(S(56), S(90));
+            var claudeX = twoColumns ? S(32) + setupWidth : S(20); var claudeY = twoColumns ? 88 : 240;
+            claudeArtwork.SetBounds(claudeX, S(claudeY), S(26), S(26)); claude.Location = new(claudeX + S(36), S(claudeY + 2));
+            codexSetup.SetBounds(S(20), S(124), setupWidth, S(100));
+            claudeSetup.SetBounds(claudeX, S(claudeY + 36), setupWidth, S(100));
+            var actionsY = twoColumns ? 240 : 392;
             checkAgain.SetBounds(S(20), S(actionsY), S(112), S(36));
             copyDiagnostics.SetBounds(S(144), S(actionsY), S(144), S(36));
-            diagnosticMessage.SetBounds(S(20), S(actionsY + 48), settingsWidth, S(48));
-            setupGuide.SetBounds(S(20), S(actionsY + 104), S(140), S(36));
-            var preferencesY = actionsY + 170;
+            retryMessage.SetBounds(S(20), S(actionsY + 45), settingsWidth, S(42));
+            diagnosticMessage.SetBounds(S(20), S(actionsY + 96), settingsWidth, S(48));
+            setupGuide.SetBounds(S(20), S(actionsY + 152), S(140), S(36));
+            var preferencesY = actionsY + 215;
             preferencesHeading.Location = new(S(20), S(preferencesY));
             launch.Location = new(S(20), S(preferencesY + 44)); compact.Location = new(S(20), S(preferencesY + 80)); tray.Location = new(S(20), S(preferencesY + 116));
             appearanceLabel.Location = new(S(20), S(preferencesY + 162)); appearance.SetBounds(S(20), S(preferencesY + 189), S(200), S(30));
-            settingsMessage.SetBounds(S(20), S(preferencesY + 235), settingsWidth, S(100));
-            settings.AutoScrollMinSize = new(0, S(preferencesY + 350));
+            resetPosition.SetBounds(S(20), S(preferencesY + 236), S(145), S(36));
+            settingsMessage.SetBounds(S(20), S(preferencesY + 287), settingsWidth, S(100));
+            settings.AutoScrollMinSize = new(0, S(preferencesY + 405));
             settings.AutoScrollPosition = new(0, -settingsScroll.Y);
             string SetupText(string name, string title)
             {
                 var state = states.FirstOrDefault(s => s.Name == name || (name == "Claude" && s.Name == "Claude Code"))
                     ?? new ProviderState(name, ProviderStatus.Loading);
-                var value = SetupDiagnostic.From(state);
-                return $"{title} · {value.Status}\nInstallation: {value.Detected}\nAuthentication: {value.Authentication}\nUsage: {value.Usage}";
+                var enabled = name == "Codex" ? preferences.CodexEnabled : preferences.ClaudeEnabled;
+                var value = SetupDiagnostic.From(state with { Enabled = enabled });
+                return $"{title} · {value.Status}\nMonitoring: {value.Monitoring}";
             }
             codexSetup.Text = SetupText("Codex", "Codex"); claudeSetup.Text = SetupText("Claude", "Claude Code");
-            checkAgain.Enabled = !loading; checkAgain.Text = loading ? "Checking…" : "Check Again";
+            UpdateRetry();
             refresh.Visible = !settingsShown; refresh.Text = loading ? "Refreshing…" : "Refresh";
             footer.SetBounds(S(24), height - S(39), width - S(48), S(30));
-            var observed = states.Where(s => s.Snapshot is not null).Select(s => s.Snapshot!.ObservedAt).DefaultIfEmpty().Min();
+            var observed = states.Where(s => s.Enabled && s.Snapshot is not null).Select(s => s.Snapshot!.ObservedAt).DefaultIfEmpty().Min();
             footer.Text = logFailed ? "Diagnostic log unavailable" : observed == default ? "Connect your tools to see remaining allowance." : $"Last updated {observed.ToLocalTime():HH:mm} · Refreshes automatically";
             if (settingsShown && !logFailed) footer.Text = "Preferences are saved automatically.";
             var scroll = content.AutoScrollPosition;
             content.AutoScrollPosition = Point.Empty;
             var y = 0;
-            var columns = content.Width >= S(560) && states.Count > 1 ? 2 : 1;
+            var enabledStates = states.Where(s => s.Enabled && (s.Name == "Codex" ? preferences.CodexEnabled : preferences.ClaudeEnabled)).ToArray();
+            var bothOff = !preferences.CodexEnabled && !preferences.ClaudeEnabled || states.Count > 0 && enabledStates.Length == 0;
+            offMessage.Visible = offSettings.Visible = bothOff;
+            offMessage.SetBounds(S(14), S(24), content.Width - S(36), S(52)); offSettings.SetBounds(S(14), S(86), S(145), S(36));
+            var columns = content.Width >= S(560) && enabledStates.Length > 1 ? 2 : 1;
             var cardWidth = (content.Width - SystemInformation.VerticalScrollBarWidth - S(16) * (columns - 1)) / columns;
-            var index = 0; var rowHeight = 0;
-            foreach (var (name, card) in cards) card.Visible = states.Any(s => s.Name == name);
-            foreach (var state in states)
+            foreach (var (name, card) in cards) card.Visible = enabledStates.Any(s => s.Name == name);
+            foreach (var state in enabledStates)
             {
                 if (!cards.TryGetValue(state.Name, out var card)) { card = new ProviderCard(hints); cards[state.Name] = card; content.Controls.Add(card); }
                 card.Width = cardWidth;
                 card.Render(state, DateTimeOffset.UtcNow, DeviceDpi / 96f);
-                card.SetBounds(index % columns * (cardWidth + S(16)), y, card.Width, S(card.LogicalHeight));
-                rowHeight = Math.Max(rowHeight, card.Height);
-                if (++index % columns == 0) { y += rowHeight + S(16); rowHeight = 0; }
             }
-            if (rowHeight > 0) y += rowHeight + S(16);
+            var equalHeight = enabledStates.Length == 0 ? 0 : enabledStates.Max(s => S(cards[s.Name].LogicalHeight));
+            for (var index = 0; index < enabledStates.Length; index++)
+            {
+                var card = cards[enabledStates[index].Name];
+                card.SetBounds(index % columns * (cardWidth + S(16)), index / columns * (equalHeight + S(16)), cardWidth, equalHeight);
+            }
+            y = bothOff ? S(145) : (int)Math.Ceiling((double)enabledStates.Length / columns) * (equalHeight + S(16));
             content.AutoScrollMinSize = new(0, y); content.AutoScrollPosition = new(0, -scroll.Y);
         }
         finally { rendering = false; }
+    }
+    private void UpdateRetry()
+    {
+        var now = DateTimeOffset.UtcNow;
+        var active = lastStates.Where(s => s.Enabled && (s.Name == "Codex" ? preferences.CodexEnabled : preferences.ClaudeEnabled)).ToArray();
+        checkAgain.Enabled = !loading && active.Any(s => SetupRetryPresentation.CanRetry(s, now));
+        checkAgain.Text = loading ? "Checking…" : "Retry";
+        retryMessage.Text = string.Join("\n", active.Where(s => s.Status == ProviderStatus.Loading || s.RetryAt > now)
+            .Select(s => $"{(UsagePresentation.IsClaude(s.Name) ? "Claude Code" : s.Name)}: {PopupText.Retry(s, now)}"));
     }
     protected override bool ProcessCmdKey(ref Message msg, Keys keyData)
     {
         if (keyData == Keys.Escape) { HidePanel(); return true; }
         if (keyData == (Keys.Control | Keys.R)) { RefreshRequested?.Invoke(); return true; }
+        if (keyData == (Keys.Control | Keys.D1)) { ShowUsage(); return true; }
+        if (keyData == (Keys.Control | Keys.Oemcomma)) { ShowSettings(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);
     }
     // Kept as a callable control seam for the existing monitor ownership tests.
@@ -221,6 +264,6 @@ internal sealed class UsageForm : Form
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing) { actions.Dispose(); hints.Dispose(); headingFont.Dispose(); bodyFont.Dispose(); }
+        if (disposing) { countdown.Dispose(); actions.Dispose(); hints.Dispose(); headingFont.Dispose(); bodyFont.Dispose(); }
     }
 }

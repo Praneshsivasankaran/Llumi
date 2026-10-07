@@ -1,4 +1,7 @@
 # Provider semantics
+
+Windows 2.1.0 locally adopts the macOS 1.1.3 product contract in [Windows catch-up requirements](windows-210.md), which supersedes conflicting earlier Windows allowance, setup and provider-selection rules below. Intentional native differences remain.
+
 A normalized reading carries provider, window identity, duration where known, remaining percentage, reset instant, observed instant, freshness and provider status. Identity continuity is verified in memory; account or plan changes invalidate incompatible observations. No account identifiers belong in presentation or logs.
 
 Codex allowance comes from structured provider-owned rate-limit retrieval. Main/core and additional buckets remain separate. A missing main window cannot be synthesized or replaced by Spark. Never assume a five-hour window exists.

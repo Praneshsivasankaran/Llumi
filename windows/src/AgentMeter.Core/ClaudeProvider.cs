@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+
 namespace AgentMeter.Core;
 
 // V1 uses standalone Claude Code only. The injectable legacy source seam is kept
@@ -11,7 +14,6 @@ public sealed class ClaudeProvider : IUsageProvider
     private readonly TimeSpan sourceTimeout;
     private readonly SemaphoreSlim gate = new(1, 1);
     private readonly Dictionary<ClaudeClient, Task<ClaudeSourceResult>> pending = new();
-    private ClaudeAccountBinding? previousBinding;
     public string Name => "Claude Code";
 
     public ClaudeProvider(Action<string>? log = null)
@@ -44,19 +46,22 @@ public sealed class ClaudeProvider : IUsageProvider
             var resolution = ClaudeSourceResolver.Resolve(results, utcNow());
             if (resolution.Result.Snapshot is not null && resolution.Result.Failure == FailureKind.None)
             {
-                previousBinding = resolution.Binding;
                 log($"claude.selected.{resolution.Client}");
-                return resolution.Result;
             }
-
-            // The coordinator may retain old values after a network/parse error.
-            // Losing identity, or changing account before a failed query, must clear them.
-            if (previousBinding is not null && previousBinding != resolution.Binding)
+            // Current query proof is explicit. The coordinator owns old-observation continuity.
+            return resolution.Result with
             {
-                previousBinding = resolution.Binding;
-                return ProviderResult.Fail(FailureKind.Unsupported, "Claude account binding changed or could not be verified; previous usage was cleared.");
-            }
-            return resolution.Result;
+                RetryAfter = results.Select(r => r.Usage.RetryAfter).Where(d => d is not null).DefaultIfEmpty(resolution.Result.RetryAfter).Max(),
+                VerifiedBinding = resolution.Binding is { IsComplete: true } binding ? new AccountBinding(Convert.ToHexString(
+                    SHA256.HashData(Encoding.UTF8.GetBytes(binding.AccountId + "\n" + binding.OrganizationId)))) : null,
+                Authentication = resolution.Binding is { IsComplete: true } ? AuthenticationStatus.Verified : resolution.Result.Failure switch
+                {
+                    FailureKind.LoggedOut => AuthenticationStatus.SignedOut,
+                    FailureKind.NotInstalled => AuthenticationStatus.Missing,
+                    FailureKind.UnsupportedBilling => AuthenticationStatus.UnsupportedBilling,
+                    _ => AuthenticationStatus.Unknown
+                }
+            };
         }
         finally { gate.Release(); }
     }

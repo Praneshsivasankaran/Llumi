@@ -10,6 +10,7 @@ namespace AgentMeter;
 internal sealed class MonitorForm : Form
 {
     private string[] providerNames;
+    private string[] requestedProviderNames;
     private readonly ContextMenuStrip menu = new();
     private readonly Font bodyFont = new("Segoe UI", 12, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly Font numberFont = new("Segoe UI Semibold", 13, FontStyle.Regular, GraphicsUnit.Pixel);
@@ -57,12 +58,13 @@ internal sealed class MonitorForm : Form
     internal event Action? ExitRequested;
     internal event Action? PositionCommitted;
     internal event Action? SurfaceFallbackUsed;
+    internal event Action? ResetPositionRequested;
     internal MonitorForm(IEnumerable<string> names, Icon icon)
     {
-        providerNames = names.Distinct().ToArray();
+        providerNames = requestedProviderNames = names.Distinct().ToArray();
         Text = "Llumi monitor"; Icon = icon;
         AccessibleName = "Llumi compact monitor";
-        AccessibleDescription = "Remaining Codex and Claude Code allowance. Hover for details. Click or Enter opens Llumi. Drag to move.";
+        AccessibleDescription = "Remaining coding subscription allowance. Hover for all supported limits. Click, Enter or Control+1 opens Usage. Drag to move. Reset Position is in the menu.";
         FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None;
         BackColor = Palette.Background; ForeColor = Palette.Foreground;
@@ -70,6 +72,7 @@ internal sealed class MonitorForm : Form
         menu.Items.Add("Open Llumi", null, (_, _) => OpenRequested?.Invoke());
         menu.Items.Add("Refresh", null, (_, _) => RefreshRequested?.Invoke());
         menu.Items.Add("Hide monitor", null, (_, _) => UnpinRequested?.Invoke());
+        menu.Items.Add("Reset Position", null, (_, _) => ResetPositionRequested?.Invoke());
         menu.Items.Add("Quit", null, (_, _) => ExitRequested?.Invoke());
         ContextMenuStrip = menu;
         transition.Tick += (_, _) => AdvanceTransition();
@@ -86,22 +89,31 @@ internal sealed class MonitorForm : Form
     {
         get { var p = base.CreateParams; p.ExStyle |= 0x80 | 0x08000000; if (!opaqueFallback) p.ExStyle |= 0x80000; return p; }
     }
-    internal static Size SizeForDpi(int dpi, int providerCount = 2, bool expanded = false, bool claudeDetails = true)
+    internal static Size SizeForDpi(int dpi, int providerCount = 2, bool expanded = false, bool claudeDetails = true, int allowanceRows = 2)
     {
         var scale = Math.Clamp(dpi, 48, 768) / 96d;
         return new((int)Math.Round((expanded ? (providerCount > 1 ? 390 : 228) : (providerCount > 1 ? 202 : 112)) * scale),
-            (int)Math.Round((expanded ? (claudeDetails ? 194 : 144) : 34) * scale));
+            (int)Math.Round((expanded ? Math.Max(144, 86 + Math.Max(0, allowanceRows) * 54) : 34) * scale));
     }
+    private Size CurrentSize(bool expanded)
+    {
+        var size = SizeForDpi(DeviceDpi, providerNames.Length, expanded, allowanceRows: rows.Select(r => r.Windows.Length).DefaultIfEmpty(0).Max());
+        if (expanded && IsHandleCreated) size.Height = Math.Min(size.Height, Math.Max(34, Screen.FromControl(this).WorkingArea.Height - (int)Math.Round(16 * DeviceDpi / 96d)));
+        return size;
+    }
+    internal Size ExpandedSize => CurrentSize(true);
     internal void SetProviders(IEnumerable<string> names)
     {
-        var next = names.Distinct().ToArray(); if (providerNames.SequenceEqual(next)) return;
+        var next = names.Distinct().ToArray(); requestedProviderNames = next; if (providerNames.SequenceEqual(next)) return;
         providerNames = next; providersChanged = true;
-        if (Visible) BeginTransition(SizeForDpi(DeviceDpi, providerNames.Length, hovered, providerNames.Any(n => n is "Claude" or "Claude Code")), 1, hovered ? 1 : 0, true);
-        else { ClientSize = SizeForDpi(DeviceDpi, providerNames.Length, hovered, providerNames.Any(n => n is "Claude" or "Claude Code")); KeepOnScreen(); }
+        if (Visible) BeginTransition(CurrentSize(hovered), 1, hovered ? 1 : 0, true);
+        else { ClientSize = CurrentSize(hovered); KeepOnScreen(); }
     }
     internal void Render(IReadOnlyList<ProviderState> states, DateTimeOffset? now = null)
     {
         var at = now ?? DateTimeOffset.UtcNow;
+        var enabledNames = requestedProviderNames.Where(name => states.FirstOrDefault(s => s.Name == name)?.Enabled != false).ToArray();
+        if (!providerNames.SequenceEqual(enabledNames)) { providerNames = enabledNames; providersChanged = true; }
         var next = providerNames.Select(name =>
         {
             var state = states.FirstOrDefault(s => s.Name == name) ?? new(name, ProviderStatus.Unavailable);
@@ -109,21 +121,25 @@ internal sealed class MonitorForm : Form
             var value = window is not null ? PopupText.Remaining(window) : state.Status == ProviderStatus.Loading ? "…" : "—";
             var status = PopupText.Status(state, at);
             var reset = window is null ? status : PopupText.Reset(window, at);
-            var hint = $"{name}: {status}\n{value} remaining\n{(window is null ? "" : PopupText.WindowName(name, window))}\n{reset}";
-            var details = state.Name is "Claude" or "Claude Code"
-                ? string.Join("\n", MonitorSelection.Details(state).Select(w =>
-                    $"{(w.Id == "five_hour" ? "5-hour" : "Weekly")} · {PopupText.Remaining(w)} remaining\n{PopupText.Reset(w, at)}"))
-                : "";
-            return new MonitorRow(name, value, window?.RemainingPercent, stale, status, reset, window is null ? "Allowance unavailable" : PopupText.WindowName(name, window), hint + "\n" + details, details);
+            var hint = $"{name}: {status}\n{value} remaining\n{(window is null ? "" : PopupText.WindowName(name, window))}\n{reset}\n{UsageAccessibility.Observation(state, at)}";
+            var windows = UsagePresentation.Windows(state).Select(w => new MonitorDetail(PopupText.WindowName(name, w), PopupText.Remaining(w), PopupText.Reset(w, at))).ToArray();
+            var details = string.Join("\n", windows.Select(w => $"{w.Label} · {w.Value} remaining\n{w.Reset}"));
+            return new MonitorRow(name, value, window?.RemainingPercent, stale, status, reset, window is null ? "Allowance unavailable" : PopupText.WindowName(name, window), hint + "\n" + details, details, windows);
         }).ToArray();
         var changed = providersChanged || !rows.Select(r => r.Visual(hovered)).SequenceEqual(next.Select(r => r.Visual(hovered)));
+        var accessibilityChanged = !rows.Select(r => r.Hint).SequenceEqual(next.Select(r => r.Hint));
         rows = next; providersChanged = false;
-        if (changed) { UpdateSurface(); AccessibilityNotifyClients(AccessibleEvents.NameChange, -1); }
+        if (providerNames.Length == 0 && Visible) HideMonitor();
+        var size = CurrentSize(hovered);
+        if (size != ClientSize && !transition.Enabled) BeginTransition(size, 1, hovered ? 1 : 0, Visible);
+        else if (changed) UpdateSurface();
+        if (accessibilityChanged) AccessibilityNotifyClients(AccessibleEvents.NameChange, -1);
     }
     internal void ShowMonitor(Point position)
     {
         var wasVisible = Visible; DesiredVisible = true;
-        var size = SizeForDpi(DeviceDpi, providerNames.Length, hovered, providerNames.Any(n => n is "Claude" or "Claude Code"));
+        if (providerNames.Length == 0) return;
+        var size = CurrentSize(hovered);
         if (!wasVisible)
         {
             Location = position; ClientSize = size; KeepOnScreen();
@@ -181,10 +197,10 @@ internal sealed class MonitorForm : Form
     {
         if (providerNames.Length == 0 || hovered == value || (Visible && !DesiredVisible)) return;
         hovered = value;
-        BeginTransition(SizeForDpi(DeviceDpi, providerNames.Length, hovered, providerNames.Any(n => n is "Claude" or "Claude Code")), 1, hovered ? 1 : 0, animate);
+        BeginTransition(CurrentSize(hovered), 1, hovered ? 1 : 0, animate);
     }
     protected override void OnDpiChanged(DpiChangedEventArgs e)
-    { base.OnDpiChanged(e); transition.Stop(); animation.Stop(); ClientSize = SizeForDpi(DeviceDpi, providerNames.Length, hovered, providerNames.Any(n => n is "Claude" or "Claude Code")); expansion = hovered ? 1 : 0; KeepOnScreen(); UpdateSurface(); }
+    { base.OnDpiChanged(e); transition.Stop(); animation.Stop(); ClientSize = CurrentSize(hovered); expansion = hovered ? 1 : 0; KeepOnScreen(); UpdateSurface(); }
     private void ScheduleHover(bool value)
     { hoverDelay.Stop(); hoverPending = value; hoverDelay.Interval = value ? 120 : 100; if (DesiredVisible) hoverDelay.Start(); }
     protected override void OnMouseEnter(EventArgs e) { base.OnMouseEnter(e); ScheduleHover(true); }
@@ -214,6 +230,7 @@ internal sealed class MonitorForm : Form
         if (keyData == Keys.Enter) { OpenRequested?.Invoke(); return true; }
         if (keyData == Keys.Escape) { UnpinRequested?.Invoke(); return true; }
         if (keyData == (Keys.Control | Keys.R)) { RefreshRequested?.Invoke(); return true; }
+        if (keyData == (Keys.Control | Keys.D1)) { OpenRequested?.Invoke(); return true; }
         return base.ProcessCmdKey(ref msg, keyData);
     }
     internal Bitmap CreatePreviewBitmap()
@@ -255,7 +272,7 @@ internal sealed class MonitorForm : Form
             if (i > 0)
             {
                 using var separator = new Pen(Color.FromArgb(110, Palette.Border));
-                g.DrawLine(separator, x - 19, 9 + 9 * expanded, x - 19, 25 + 99 * expanded);
+                g.DrawLine(separator, x - 19, 9 + 9 * expanded, x - 19, 25 + Math.Max(0, height - 43) * expanded);
             }
             if (expanded <= .01) continue;
             Color Detail(Color color) => Color.FromArgb((int)(255 * Math.Clamp((expanded - .2) / .8, 0, 1)), color);
@@ -269,12 +286,17 @@ internal sealed class MonitorForm : Form
                 using var bar = DrawingHelpers.RoundedRectangle(new(x, 53, Math.Max(1, (float)(columnWidth * row.Remaining / 100)), 5), 2.5f);
                 g.FillPath(fill, bar);
             }
-            if (row.Name is "Claude" or "Claude Code")
+            if (row.Windows.Length > 0)
             {
-                using var detailBrush = new SolidBrush(Detail(Ink));
-                g.DrawString(string.IsNullOrEmpty(row.Details) ? row.Status : row.Details, bodyFont, detailBrush,
-                    new RectangleF(x, 65, columnWidth, 105));
-                if (row.Stale) Draw(g, "Stale", bodyFont, Detail(ink), new(x, 173, columnWidth, 18));
+                for (var detailIndex = 0; detailIndex < row.Windows.Length; detailIndex++)
+                {
+                    var detail = row.Windows[detailIndex]; var detailY = 65 + detailIndex * 54;
+                    Draw(g, detail.Label, bodyFont, Detail(Muted), new(x, detailY, columnWidth, 17));
+                    Draw(g, detail.Value + " remaining", bodyFont, Detail(Ink), new(x, detailY + 17, columnWidth, 17));
+                    Draw(g, detail.Reset, bodyFont, Detail(Muted), new(x, detailY + 34, columnWidth, 17));
+                }
+                var statusY = 65 + rows.Max(r => r.Windows.Length) * 54;
+                if (row.Status != "Live") Draw(g, row.Status, bodyFont, Detail(ink), new(x, statusY, columnWidth, 19));
                 continue;
             }
             Draw(g, row.Window, bodyFont, Detail(Muted), new(x, 65, columnWidth, 19));
@@ -315,7 +337,8 @@ internal sealed class MonitorForm : Form
         public override AccessibleStates State => AccessibleStates.ReadOnly;
         public override AccessibleObject? Parent => parent;
     }
-    private sealed record MonitorRow(string Name, string Value, double? Remaining, bool Stale, string Status, string Reset, string Window, string Hint, string Details)
+    private sealed record MonitorDetail(string Label, string Value, string Reset);
+    private sealed record MonitorRow(string Name, string Value, double? Remaining, bool Stale, string Status, string Reset, string Window, string Hint, string Details, MonitorDetail[] Windows)
     { public string Visual(bool expanded) => $"{Name}|{Value}|{Remaining}|{Stale}" + (expanded ? $"|{Status}|{Reset}|{Details}" : ""); }
     protected override void Dispose(bool disposing)
     { base.Dispose(disposing); if (disposing) { transition.Dispose(); hoverDelay.Dispose(); animation.Dispose(); menu.Dispose(); surface?.Dispose(); bodyFont.Dispose(); numberFont.Dispose(); expandedNumberFont.Dispose(); } }

@@ -60,16 +60,16 @@ public sealed class PhysicalReviewTests
         using var icon = AppIcon.Load(); using var form = new UsageForm(["Codex", "Claude Code"], icon);
         form.Show(); form.ShowSettings();
         var refreshes = 0; form.RefreshRequested += () => refreshes++;
-        form.Render([new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "private@example.test")),
-            new("Claude Code", ProviderStatus.Error, Detail: "secret-token", Failure: FailureKind.LoggedOut)], false, false);
+        form.Render([new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "private@example.test"), Authentication: AuthenticationStatus.Verified),
+            new("Claude Code", ProviderStatus.Error, Detail: "secret-token", Failure: FailureKind.LoggedOut, Authentication: AuthenticationStatus.SignedOut)], false, false);
         var controls = Controls(form).ToArray();
-        Assert.Contains(controls.OfType<Label>(), c => c.Visible && c.Text.Contains("Authentication: verified"));
-        Assert.Contains(controls.OfType<Label>(), c => c.Visible && c.Text.Contains("Authentication: signed-out"));
-        controls.OfType<Button>().Single(b => b.Text == "Check Again").PerformClick(); Assert.Equal(1, refreshes);
+        Assert.Contains(controls.OfType<Label>(), c => c.Visible && c.Text.Contains("Signed in") && c.Text.Contains("Allowances not reported"));
+        Assert.Contains(controls.OfType<Label>(), c => c.Visible && c.Text.Contains("Sign in required"));
+        controls.OfType<Button>().Single(b => b.Text == "Retry").PerformClick(); Assert.Equal(1, refreshes);
         Assert.Contains(controls.OfType<Button>(), b => b.Text == "Copy Diagnostics" && b.Parent?.Name == "settings");
         Assert.DoesNotContain("private", form.DiagnosticReport()); Assert.DoesNotContain("secret", form.DiagnosticReport());
         form.Render([new("Codex", ProviderStatus.Error, Failure: FailureKind.Timeout)], false, false);
-        Assert.DoesNotContain(controls.OfType<Label>(), c => c.Text.Contains("Authentication: verified"));
+        Assert.DoesNotContain(controls.OfType<Label>(), c => c.Text.Contains("Signed in"));
         form.ShowUsage(); Assert.False(controls.OfType<Button>().Single(b => b.Text == "Copy Diagnostics").Visible);
     });
     [Fact]

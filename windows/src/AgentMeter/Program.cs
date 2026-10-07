@@ -37,6 +37,9 @@ internal static class Program
         if (args.Length == 2 && args[0] == "--probe")
         {
             var coordinator = new RefreshCoordinator(CreateProviders(log.Write), log.Write);
+            var preferences = PreferenceStore.Default().Load();
+            coordinator.SetEnabled("Codex", preferences.CodexEnabled);
+            coordinator.SetEnabled("Claude Code", preferences.ClaudeEnabled);
             coordinator.RefreshAsync().GetAwaiter().GetResult();
             File.WriteAllText(args[1], JsonSerializer.Serialize(coordinator.States, new JsonSerializerOptions
             { WriteIndented = true, Converters = { new JsonStringEnumConverter() } }));
@@ -57,5 +60,5 @@ internal static class Program
         finally { legacy.ReleaseMutex(); singleton.ReleaseMutex(); }
     }
 
-    private static IUsageProvider[] CreateProviders(Action<string> log) => [new CodexProvider(), new ClaudeProvider(log)];
+    private static IUsageProvider[] CreateProviders(Action<string> log) => [new CodexProvider(clientVersion: typeof(Program).Assembly.GetName().Version?.ToString(3)), new ClaudeProvider(log)];
 }

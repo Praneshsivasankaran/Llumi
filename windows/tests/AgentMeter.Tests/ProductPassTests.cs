@@ -7,7 +7,7 @@ public sealed class ProductPassTests : IDisposable
     private readonly string root = Path.Combine(Path.GetTempPath(), "AgentMeter-tests-" + Guid.NewGuid());
     private SetupCompletionStore Store => new(Path.Combine(root, "setup.json"));
     private static ProviderState State(params UsageWindow[] windows) => new("Claude", ProviderStatus.Ready,
-        new UsageSnapshot(windows, DateTimeOffset.UtcNow, "synthetic"));
+        new UsageSnapshot(windows, DateTimeOffset.UtcNow, "synthetic"), Authentication: AuthenticationStatus.Verified);
     [Theory]
     [InlineData(10, 80)] [InlineData(80, 10)] [InlineData(37, 19)]
     public void FiveHourAlwaysWinsAndDetailsRetainBoth(double shortUsed, double weeklyUsed)
@@ -17,13 +17,13 @@ public sealed class ProductPassTests : IDisposable
         Assert.Equal(new[] { "five_hour", "seven_day" }, MonitorSelection.Details(s).Select(w => w.Id));
     }
     [Fact]
-    public void MissingMalformedAndDuplicateFiveHourNeverSubstituteWeekly()
+    public void MissingMalformedAndDuplicateFiveHourAllowValidGeneralWeeklyFallback()
     {
         var week = new UsageWindow("seven_day", "Weekly", 20, null);
-        Assert.Null(MonitorSelection.Select(State(week)));
+        Assert.Equal(week, MonitorSelection.Select(State(week)));
         foreach (var invalid in new[] { double.NaN, double.PositiveInfinity, 101, -1 })
-            Assert.Null(MonitorSelection.Select(State(week, new("five_hour", "", invalid, null)))?.RemainingPercent);
-        Assert.Null(MonitorSelection.Select(State(week, new("five_hour", "", 20, null), new("five_hour", "", 20, null))));
+            Assert.Equal(week, MonitorSelection.Select(State(week, new("five_hour", "", invalid, null))));
+        Assert.Equal("five_hour", MonitorSelection.Select(State(week, new("five_hour", "", 20, null), new("five_hour", "", 20, null)))?.Id);
     }
     [Fact]
     public void ExpiredResetDoesNotRefill()
@@ -82,14 +82,34 @@ public sealed class ProductPassTests : IDisposable
         Assert.Contains("App version: unknown", text); Assert.Contains("Authentication: verified", text);
     }
     [Theory]
-    [InlineData(FailureKind.NotInstalled, "no", "unknown")]
-    [InlineData(FailureKind.LoggedOut, "yes", "signed-out")]
-    [InlineData(FailureKind.Timeout, "unknown", "unknown")]
-    [InlineData(FailureKind.Malformed, "unknown", "unknown")]
-    public void FailureReadinessNeverGuessesAuthentication(FailureKind failure, string detected, string auth)
+    [InlineData(FailureKind.NotInstalled, AuthenticationStatus.Missing, "no", "unknown")]
+    [InlineData(FailureKind.LoggedOut, AuthenticationStatus.SignedOut, "yes", "signed-out")]
+    [InlineData(FailureKind.Timeout, AuthenticationStatus.Unknown, "unknown", "unknown")]
+    [InlineData(FailureKind.Malformed, AuthenticationStatus.Unknown, "unknown", "unknown")]
+    public void FailureReadinessNeverGuessesAuthentication(FailureKind failure, AuthenticationStatus authentication, string detected, string auth)
     {
-        var d = SetupDiagnostic.From(new("Codex", ProviderStatus.Error, Failure: failure));
-        Assert.Equal(detected, d.Detected); Assert.Equal(auth, d.Authentication); Assert.NotEqual("Ready", d.Status);
+        var d = SetupDiagnostic.From(new("Codex", ProviderStatus.Error, Failure: failure, Authentication: authentication));
+        Assert.Equal(detected, d.Detected); Assert.Equal(auth, d.Authentication); Assert.NotEqual("Signed in", d.Status);
+    }
+    [Theory]
+    [InlineData(AllowanceAvailability.NotReported, "Allowances not reported")]
+    [InlineData(AllowanceAvailability.UnsupportedFormat, "Allowance format not supported")]
+    public void SignedInReadinessDoesNotPromiseAllowance(AllowanceAvailability availability, string monitoring)
+    {
+        var diagnostic = SetupDiagnostic.From(new("Claude", ProviderStatus.Ready,
+            new([], DateTimeOffset.UtcNow, "fixture", Availability: availability), Authentication: AuthenticationStatus.Verified));
+        Assert.Equal("Signed in", diagnostic.Status); Assert.Equal(monitoring, diagnostic.Monitoring);
+        Assert.Equal("verified", diagnostic.Authentication); Assert.NotEqual("available", diagnostic.Usage);
+        Assert.NotEqual("Signed in", SetupDiagnostic.From(new("Claude", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "fixture"))).Status);
+    }
+    [Fact]
+    public void RetryCountdownUsesCollectorDeadlineAndDisabledProvidersCannotRetry()
+    {
+        var now = DateTimeOffset.UtcNow; var state = new ProviderState("Codex", ProviderStatus.Error, RetryAt: now.AddSeconds(10));
+        Assert.False(SetupRetryPresentation.CanRetry(state, now)); Assert.Contains("10s", SetupRetryPresentation.Message(state, now));
+        Assert.True(SetupRetryPresentation.CanRetry(state, now.AddSeconds(10)));
+        Assert.False(SetupRetryPresentation.CanRetry(state with { Enabled = false }, now.AddMinutes(1)));
+        Assert.Equal("Monitoring off", SetupDiagnostic.From(state with { Enabled = false }).Status);
     }
     public void Dispose() { if (Directory.Exists(root)) Directory.Delete(root, true); }
 }
@@ -116,22 +136,51 @@ public sealed class SetupFormTests
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); return completion.Task;
     }
     [Fact]
-    public Task CheckAgainReadsSharedProviderStateAndAllowsFailure() => Sta(() =>
+    public Task RetryReadsSharedProviderStateAndAllowsFailure() => Sta(() =>
     {
         var path = Path.Combine(Path.GetTempPath(), "AgentMeter-setup-" + Guid.NewGuid(), "done.json");
         ProviderState[] states = [new("Codex", ProviderStatus.Loading), new("Claude", ProviderStatus.Error, Failure: FailureKind.NotInstalled)];
         var refreshes = 0;
         using var form = new SetupForm(new(new(path)), () => states, () => {
-            refreshes++; states = [new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "fixture"))];
+            refreshes++; states = [new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "fixture"), Authentication: AuthenticationStatus.Verified)];
         }, () => new(), _ => { }, new Startup(), () => { }, () => { });
-        form.Show(); Button(form, "Set Up Llumi").PerformClick(); form.RefreshStatuses();
-        Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text.Contains("Authentication: unknown"));
-        Button(form, "Check Again").PerformClick(); form.RefreshStatuses();
+        form.Show(); Button(form, "Get Started").PerformClick(); form.RefreshStatuses();
+        Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text.Contains("Checking allowances"));
+        Button(form, "Retry").PerformClick(); form.RefreshStatuses();
         Assert.Equal(1, refreshes);
-        Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text.Contains("Authentication: verified"));
+        Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text.Contains("Signed in") && l.Text.Contains("Allowances not reported"));
         states = [new("Codex", ProviderStatus.Error, Failure: FailureKind.Timeout)]; form.RefreshStatuses();
-        Assert.DoesNotContain(Descendants(form).OfType<Label>(), l => l.Text.Contains("Authentication: verified"));
+        Assert.DoesNotContain(Descendants(form).OfType<Label>(), l => l.Text.Contains("Signed in"));
     });
+    [Fact]
+    public Task VerificationCanContinueWithSignedInProviderWhoseAllowanceIsNotReported() => Sta(() =>
+    {
+        var path = Path.Combine(Path.GetTempPath(), "AgentMeter-setup-" + Guid.NewGuid(), "done.json");
+        var flow = new SetupFlow(new(path)); while (flow.Step != SetupStep.Verify) flow.Next();
+        ProviderState[] states = [new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "fixture"), Authentication: AuthenticationStatus.Verified)];
+        using var form = new SetupForm(flow, () => states, () => { }, () => new(), _ => { }, new Startup(), () => { }, () => { });
+        form.Show(); Assert.True(Button(form, "Continue").Visible);
+        Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text.Contains("Signed in") && l.Text.Contains("Allowances not reported"));
+        states = [states[0] with { Authentication = AuthenticationStatus.Unknown }]; form.RefreshStatuses();
+        Assert.True(Button(form, "Finish Anyway").Visible);
+    });
+
+    [Fact]
+    public Task ProviderChoicesReadAndWriteSharedPreferencesAndChangeRouting() => Sta(() =>
+    {
+        var path = Path.Combine(Path.GetTempPath(), "AgentMeter-setup-" + Guid.NewGuid(), "done.json");
+        var p = new Preferences(CodexEnabled: false, ClaudeEnabled: true); var flow = new SetupFlow(new(path));
+        ProviderState[] states = [new("Codex", ProviderStatus.Unavailable, Enabled: false), new("Claude", ProviderStatus.Unavailable)];
+        using var form = new SetupForm(flow, () => states, () => { }, () => p, value => p = value,
+            new Startup(), () => { }, () => { });
+        form.Show(); Button(form, "Get Started").PerformClick();
+        var choices = Descendants(form).OfType<CheckBox>().ToArray(); Assert.False(choices.Single(c => c.AccessibleName == "Monitor Codex").Checked);
+        choices.Single(c => c.AccessibleName == "Monitor Claude Code").Checked = false;
+        Assert.False(p.ClaudeEnabled); Assert.DoesNotContain(SetupStep.Claude, flow.Steps);
+        Button(form, "Continue").PerformClick(); Assert.Equal(SetupStep.Verify, flow.Step);
+        Assert.False(Button(form, "Retry").Enabled);
+    });
+
     [Fact]
     public Task OnboardingEditsRealPreferencesAndStartupAndCompletes() => Sta(() =>
     {
@@ -140,12 +189,13 @@ public sealed class SetupFormTests
         {
             var completion = new SetupCompletionStore(Path.Combine(root, "done.json"));
             var preferences = new PreferenceStore(Path.Combine(root, "preferences.json"));
+            Assert.True(preferences.Save(new(CodexEnabled: false, ClaudeEnabled: false)));
             var flow = new SetupFlow(completion) { Codex = false, Claude = false };
             var startup = new Startup(); var finished = false;
             using var form = new SetupForm(flow, () => [], () => { }, preferences.Load,
                 p => { preferences.Save(p); Palette.Apply(p.Appearance); }, startup,
                 () => startup.TrySet(!startup.Enabled), () => finished = true);
-            form.Show(); Button(form, "Set Up Llumi").PerformClick();
+            form.Show(); Button(form, "Get Started").PerformClick();
             Button(form, "Continue").PerformClick(); Assert.Equal(SetupStep.Verify, flow.Step);
             Button(form, "Finish Anyway").PerformClick(); Assert.Equal(SetupStep.Preferences, flow.Step);
             var controls = Descendants(form).OfType<CheckBox>().ToArray();

@@ -1,0 +1,15 @@
+# Windows 2.1.0 local catch-up contract
+
+Reference: macOS 1.1.3 tag `llumi-macos-1.1.3`, particularly `allowance-113.md`. This Windows contract supersedes the earlier five-hour-only Claude and longest-Codex selection rules. macOS source and published releases remain unchanged.
+
+Preserve supported general, model and additional time windows with explicit scope, duration, percentage and optional reset. Compact selects usable general five-hour, then weekly, then deterministic shortest duration. Unknown identifiers and credit/spend metadata never become consumer allowances. Zero percent used and zero remaining are valid. Missing values remain unknown. Merge equivalent Codex legacy/map windows and reject contradictory mirrors. Claude Sonnet, Opus and labeled model_scoped weekly windows remain model-specific.
+
+Separate freshly verified authentication from monitoring: Reported, Not reported, Unsupported format, Unsupported billing, Unavailable and Stale. Empty successful responses replace old readings. Stale retention requires current proof of the same account binding; logout, account changes, failed verification and disablement clear it. Bindings remain memory-only, omitted from serialization/logs/diagnostics.
+
+Per-provider switches default on, migrate existing preferences without resetting other choices and share one setting across setup and Settings. Off cancels querying, removes discovery/activity tracking and consumer cards/monitor entries, and fences pending results. Both off is supported with a Settings action. Re-enable checks immediately within the same scheduler.
+
+One query per provider; bounded timeout/output/helper cleanup; independent scheduling. Manual Retry has a ten-second minimum and can bypass generic background backoff. A separate rate-limit embargo survives toggles and suspend/resume, cannot shrink from a later failure, and applies to all triggers. Background repeat failures back off exponentially from 30 seconds to 15 minutes. Reset-triggered refreshes have a 30-second floor and honor backoff/embargo. No timestamp implies a refill. Sleep cancels scheduled/in-flight work; wake resumes bounded checks. UI displays checking or a live retry countdown.
+
+Windows keeps native WinForms/tray, PowerShell copy-only setup instructions, authoritative StartupTask/registration, current appearance preferences, monitor activity/dragging/DPI/work-area behavior and Store-managed updates. No Sparkle, Mac notch, Mac Light migration or external release work. Settings exposes Reset Position; Usage/expanded details display all supported allowances with meaningful labels, consistent provider artwork, equal cards and accessible observation/stale details.
+
+Review gate: unit/integration/native UI synthetic fixtures, Release build, production privacy and package-content checks. Deliver unsigned local review output, changelog and explicit validation gaps. Do not install over the Store build, publish, push, tag, deploy, change website/Store metadata or distribute externally. Real account/physical/Store lifecycle evidence stays separate from fixtures.

@@ -70,7 +70,7 @@ public sealed class ClaudeCodeUsageTests
         var source = Source((_, _) => Task.FromResult(Usage(binding: different)));
         var result = await source.QueryAsync(CancellationToken.None);
         Assert.Equal(ClaudeAuthentication.Unknown, result.Authentication);
-        Assert.Equal(FailureKind.Unsupported, result.Usage.Failure);
+        Assert.Equal(FailureKind.AccountChanged, result.Usage.Failure);
         Assert.Null(result.Binding);
         Assert.Null(result.Usage.Snapshot);
     }

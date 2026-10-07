@@ -29,6 +29,31 @@ public sealed class ClaudeUsageParserTests
         Assert.Equal(new[] { "seven_day_sonnet", "model:Fixture model" }, result.Usage.Snapshot!.Windows.Select(window => window.Id));
         Assert.Equal(DateTimeOffset.Parse("2026-09-15T16:30:00Z"), result.Usage.Snapshot.Windows[1].ResetsAt);
         Assert.Null(result.Usage.Snapshot.Windows[0].ResetsAt);
+        Assert.All(result.Usage.Snapshot.Windows, w =>
+        {
+            Assert.Equal(UsageScope.Model, w.Scope);
+            Assert.Equal(10080, w.DurationMinutes);
+        });
+    }
+
+    [Theory]
+    [InlineData("{\"extra_usage\":{\"spend\":0}}", AllowanceAvailability.UnsupportedFormat)]
+    [InlineData("{\"extra_usage\":{}}", AllowanceAvailability.NotReported)]
+    [InlineData("{\"seven_day_oauth_apps\":{\"utilization\":12}}", AllowanceAvailability.UnsupportedFormat)]
+    public void MetadataOnlyCannotEstablishTimeAllowanceOrBilling(string usage, AllowanceAvailability expected)
+    {
+        var result = Parse(usage);
+        Assert.Equal(FailureKind.None, result.Usage.Failure);
+        Assert.Equal(expected, result.Usage.Snapshot!.Availability);
+        Assert.Empty(result.Usage.Snapshot.Windows);
+    }
+
+    [Fact]
+    public void ContradictoryDuplicateModelAllowanceFailsClosed()
+    {
+        var result = Parse("""{"seven_day_sonnet":{"utilization":20},"model_scoped":[{"display_name":"Sonnet","utilization":21}]}""");
+        Assert.Equal(FailureKind.Malformed, result.Usage.Failure);
+        Assert.Null(result.Usage.Snapshot);
     }
 
     [Theory]
@@ -40,8 +65,8 @@ public sealed class ClaudeUsageParserTests
     [InlineData("{}")]
     public void InvalidPercentageRemainsUnknownAndNeverBecomesZeroOrFull(string value)
     {
-        var result = Parse("{\"five_hour\":{\"utilization\":" + value + ",\"resets_at\":\"2026-09-15T19:00:00Z\"}}");
-        var window = Assert.Single(result.Usage.Snapshot!.Windows);
+        var result = Parse("{\"five_hour\":{\"utilization\":" + value + ",\"resets_at\":\"2026-09-15T19:00:00Z\"},\"seven_day\":{\"utilization\":8}}");
+        var window = Assert.Single(result.Usage.Snapshot!.Windows, w => w.Id == "five_hour");
         Assert.Null(window.UsedPercent);
         Assert.Null(window.RemainingPercent);
         Assert.NotNull(window.ResetsAt);
@@ -73,11 +98,12 @@ public sealed class ClaudeUsageParserTests
     [InlineData("{}")]
     [InlineData("{\"five_hour\":{}}")]
     [InlineData("{\"five_hour\":{\"utilization\":null,\"resets_at\":null}}")]
-    public void EntirelyUnknownUsageIsUnavailableButVerifiedIdentitySurvives(string usage)
+    public void MissingUsageIsNotReportedAndVerifiedIdentitySurvives(string usage)
     {
         var result = Parse(usage);
-        Assert.Equal(FailureKind.Unsupported, result.Usage.Failure);
-        Assert.Null(result.Usage.Snapshot);
+        Assert.Equal(FailureKind.None, result.Usage.Failure);
+        Assert.Equal(AllowanceAvailability.NotReported, result.Usage.Snapshot!.Availability);
+        Assert.All(result.Usage.Snapshot.Windows, w => Assert.Null(w.RemainingPercent));
         Assert.NotNull(result.Binding);
     }
 
@@ -145,7 +171,7 @@ public sealed class ClaudeUsageParserTests
     {
         var expected = new ClaudeAccountBinding("claude-email-sha256:" + new string('b', 64), Organization);
         var result = ClaudeUsageParser.Parse(Envelope("{\"five_hour\":{\"utilization\":0}}"), 0, Now, expected);
-        Assert.Equal(FailureKind.Unsupported, result.Usage.Failure);
+        Assert.Equal(FailureKind.AccountChanged, result.Usage.Failure);
         Assert.Equal(ClaudeAuthentication.Unknown, result.Authentication);
         Assert.Null(result.Binding);
         Assert.Null(result.Usage.Snapshot);
