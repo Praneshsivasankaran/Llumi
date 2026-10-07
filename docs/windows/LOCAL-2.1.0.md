@@ -20,6 +20,7 @@ Local catch-up implementation based on the macOS 1.1.3 allowance/setup requireme
 - Remove the Settings tray-availability explanation, independence/account/telemetry note and automatic-save footer; preserve error messages and collapse the unused message area.
 - Remove the passive diagnostics privacy note and its empty layout space. Copy Diagnostics retains concise success/clipboard-error feedback after use.
 - Simplify named additional/model rows to Spark limit, Opus and Sonnet; retain scope/period in accessibility metadata. Match the dashboard identity to the official Llumi application icon.
+- Match the Windows tray icon to the same official full-color Llumi tile, using the embedded small sizes instead of a separately drawn monochrome gauge. Preserve display-change reload, tray interactions and status tooltips.
 - Add a development-only live first-time review mode with fresh isolated settings, complete native setup, real provider checks and sandboxed startup. Preserve the installed Store app and existing CLI credentials.
 - Update local app version to 2.1.0. Microsoft Store remains the Windows update channel. No Sparkle, installer, public release, website change or Store metadata change.
 

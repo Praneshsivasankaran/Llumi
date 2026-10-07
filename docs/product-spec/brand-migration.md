@@ -2,7 +2,7 @@
 
 The current product is **Llumi** (capital L followed by lowercase lumi).
 Tagline: **Track your AI coding usage.**
-The approved Raspberry gauge replaces the former three-bar mark. One semicircular arc, purple through magenta to pink, and one needle; monochrome gauge variants serve system status surfaces. Provider marks and layout remain unchanged.
+The approved Raspberry gauge replaces the former three-bar mark. One semicircular arc, purple through magenta to pink, and one needle. Windows uses the official full-color Llumi application tile for its notification-area icon, matching setup, the dashboard and taskbar; select the embedded size appropriate to the display and retain the status tooltip. macOS keeps its monochrome menu-bar variant. Provider marks and layout remain unchanged.
 
 macOS retains version 1.1.1 and moves to `io.github.praneshsivasankaran.llumi`.
 Allowlisted legacy preferences come first from `io.github.praneshsivasankaran.agentmeter`, then `local.agentmeter.mac`. Current valid Llumi preferences win. Only appearance, notch/menu visibility and setup completion may migrate. No provider data, logs, credentials, paths or login registration migrate. The old domains remain intact.
