@@ -154,8 +154,13 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
             Get(session, "model_usage") is not { ValueKind: JsonValueKind.Object } models || models.EnumerateObject().Any())
             throw new ProviderQueryException(FailureKind.Unsupported);
         var limits = Get(value, "rate_limits");
-        if (available.ValueKind == JsonValueKind.False || limits.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+        if (available.ValueKind == JsonValueKind.False)
             return ([], AllowanceAvailability.NotReported);
+        // The CLI reports plan support separately from fetch success. A supported
+        // plan with null limits is an unavailable read (including swallowed HTTP
+        // failures), not an authoritative empty allowance observation.
+        if (limits.ValueKind == JsonValueKind.Null) throw new ProviderQueryException(FailureKind.Network);
+        if (limits.ValueKind == JsonValueKind.Undefined) throw new ProviderQueryException(FailureKind.Malformed);
         if (limits.ValueKind != JsonValueKind.Object || limits.EnumerateObject().Count() > 64) throw new ProviderQueryException(FailureKind.Malformed);
         var windows = new List<UsageWindow>();
         var malformed = false;
