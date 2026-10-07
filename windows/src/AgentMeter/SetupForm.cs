@@ -97,7 +97,6 @@ internal sealed class SetupForm : Form
         catch (ExternalException) { Feedback("Clipboard is busy. Please try again."); }
     }
     private void Feedback(string text) { message.Text = text; message.Visible = !string.IsNullOrEmpty(text); body.PerformLayout(); }
-    private string? GuideProvider => flow.Step switch { SetupStep.Codex => "Codex", SetupStep.Claude => "Claude", _ => null };
     private static string Title(string provider) => provider == "Claude" ? "Claude Code" : provider;
     private ProviderState StateFor(string provider, IReadOnlyList<ProviderState> source, Preferences current)
     {
@@ -108,13 +107,13 @@ internal sealed class SetupForm : Form
     private ProviderState[] RelevantStates()
     {
         var source = states(); var current = preferences();
-        return (GuideProvider is { } guide ? new[] { guide } : new[] { "Codex", "Claude" }).Select(p => StateFor(p, source, current)).ToArray();
+        return new[] { "Codex", "Claude" }.Select(p => StateFor(p, source, current)).ToArray();
     }
     private void Retry()
     {
         var relevant = RelevantStates();
         if (!relevant.Any(s => SetupRetryPresentation.CanRetry(s, DateTimeOffset.UtcNow))) return;
-        refresh(GuideProvider is null ? null : relevant[0].Name);
+        refresh(null);
     }
     private void ProviderSwitch(string provider, FlowLayoutPanel row)
     {
@@ -148,20 +147,14 @@ internal sealed class SetupForm : Form
     }
     private void Statuses(bool switches = false)
     {
-        foreach (var provider in GuideProvider is { } guide ? new[] { guide } : new[] { "Codex", "Claude" })
+        foreach (var provider in new[] { "Codex", "Claude" })
         {
-            if (GuideProvider is null)
-            {
-                ProviderHeading(provider, switches);
-            }
+            ProviderHeading(provider, switches);
             var label = new Label { AutoSize = true, MaximumSize = new Size(520, 0), Margin = new Padding(0, 0, 0, 8), AccessibleName = Title(provider) + " setup status" };
             statusLabels[provider] = label; body.Controls.Add(label);
         }
         var actions = new FlowLayoutPanel { Name = "setupActions", AutoSize = true, WrapContents = true, MaximumSize = new Size(520, 0), Margin = new Padding(0, 0, 0, 8) };
         retryButtons.Add(ActionButton("Retry", Retry, actions));
-        if (GuideProvider is { } selected)
-            ActionButton("Official setup guide", () => ProviderSetup.Open(new Uri(selected == "Codex"
-                ? "https://learn.chatgpt.com/docs/codex/cli" : "https://code.claude.com/docs/en/setup")), actions);
         ActionButton("Copy Diagnostics", () => Copy(SetupDiagnostics.Report(states(),
             typeof(SetupForm).Assembly.GetName().Version?.ToString(3), typeof(SetupForm).Assembly.GetName().Version?.ToString())), actions);
         body.Controls.Add(actions);
@@ -185,7 +178,7 @@ internal sealed class SetupForm : Form
         var at = DateTimeOffset.UtcNow;
         foreach (var button in retryButtons) button.Enabled = selected.Any(s => SetupRetryPresentation.CanRetry(s, at));
         retryMessage.Text = string.Join("\n", selected.Select(s => (State: s, Message: SetupRetryPresentation.Message(s, at)))
-            .Where(x => x.Message is not null).Select(x => GuideProvider is null ? $"{(UsagePresentation.IsClaude(x.State.Name) ? "Claude Code" : x.State.Name)}: {x.Message}" : x.Message));
+            .Where(x => x.Message is not null).Select(x => $"{(UsagePresentation.IsClaude(x.State.Name) ? "Claude Code" : x.State.Name)}: {x.Message}"));
         retryMessage.Visible = !string.IsNullOrEmpty(retryMessage.Text);
         if (flow.Step == SetupStep.Verify)
             next.Text = states().Any(s => ((flow.Codex && s.Name == "Codex") || (flow.Claude && s.Name is "Claude" or "Claude Code"))
@@ -219,13 +212,14 @@ internal sealed class SetupForm : Form
             case SetupStep.Codex: case SetupStep.Claude:
                 var isCodex = flow.Step == SetupStep.Codex;
                 TextLine(isCodex ? "Set up Codex" : "Set up Claude Code", true);
-                TextLine("Open PowerShell, paste each command, then press Enter.");
-                TextLine(isCodex ? "Requires Node.js and npm on Windows. Skip if already installed."
-                    : "Use native Windows; Git for Windows is recommended. Skip if already installed.");
+                TextLine("Run these in PowerShell.");
                 Command("1. Install", isCodex ? "npm install -g @openai/codex" : "irm https://claude.ai/install.ps1 | iex");
-                TextLine("After installing, open a new PowerShell window.");
                 Command("2. Sign in", isCodex ? "codex login" : "claude auth login");
-                Statuses(); break;
+                var help = new LinkLabel { Text = "Setup help", AccessibleName = (isCodex ? "Codex" : "Claude Code") + " setup help",
+                    AutoSize = true, TabStop = true, LinkBehavior = LinkBehavior.HoverUnderline, Margin = new Padding(0, 8, 0, 0) };
+                help.LinkClicked += (_, _) => ProviderSetup.Open(new Uri(isCodex
+                    ? "https://learn.chatgpt.com/docs/codex/cli" : "https://code.claude.com/docs/en/setup"));
+                body.Controls.Add(help); break;
             case SetupStep.Verify:
                 TextLine("Check Setup", true); TextLine("Sign-in and monitoring are checked separately. You can also finish and set up later."); Statuses(switches: true); break;
             case SetupStep.Preferences:
@@ -289,6 +283,8 @@ internal sealed class SetupForm : Form
     {
         void Theme(Control root) { root.BackColor = Palette.Background; root.ForeColor = Palette.Foreground;
             if (root is Button button) { button.BackColor = Palette.Card; Palette.StyleButton(button); }
+            if (root is LinkLabel link) { link.LinkColor = Palette.IsLight ? Color.FromArgb(0, 103, 192) : Palette.Accent;
+                link.ActiveLinkColor = link.VisitedLinkColor = link.LinkColor; }
             foreach (Control child in root.Controls) Theme(child); }
         Theme(this);
         if (flow.Step == SetupStep.Welcome)

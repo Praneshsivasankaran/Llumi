@@ -74,23 +74,49 @@ public sealed class SetupRefinementTests
         finally { Palette.Apply(Appearance.System); }
     });
 
-    [Fact]
-    public Task ClaudeGuideRetriesCanonicalProviderIndependentlyOfCodexLoading() => Sta(() =>
+    [Theory]
+    [InlineData(2, 0)] [InlineData(2, 1)] [InlineData(2, 2)]
+    [InlineData(3, 0)] [InlineData(3, 1)] [InlineData(3, 2)]
+    public Task CleanGuidesDoNotReadCollectorStateOrOfferCheckActionsBeforeVerification(int step, int scenario) => Sta(() =>
     {
-        var now = DateTimeOffset.UtcNow;
-        ProviderState[] states = [new("Codex", ProviderStatus.Loading), new("Claude Code", ProviderStatus.Error,
-            Failure: FailureKind.Timeout, AutomaticRetryAt: now.AddSeconds(60))];
-        var requests = new List<string?>();
-        using var form = FormAt(SetupStep.Claude, () => states, requests.Add, () => new(), _ => { });
-        form.Show(); var retry = Button(form, "Retry"); Assert.True(retry.Enabled); retry.PerformClick();
-        Assert.Equal(new[] { "Claude Code" }, requests);
-        Assert.Contains(Labels(form), l => l.AccessibleName == "Claude Code setup status");
-        Assert.DoesNotContain(Labels(form), l => l.AccessibleName == "Codex setup status");
-        Assert.Contains(Labels(form), l => l.Text.Contains("Automatic retry", StringComparison.Ordinal));
-        Assert.DoesNotContain(Labels(form), l => l.Text.StartsWith("Codex:", StringComparison.Ordinal));
-        for (var i = 0; i < 4; i++) form.RefreshStatuses(); Assert.Single(requests);
-        states = [states[0] with { Status = ProviderStatus.Unavailable }, states[1] with { RetryAt = now.AddSeconds(30), Failure = FailureKind.RateLimited }];
-        form.RefreshStatuses(); Assert.False(retry.Enabled); retry.PerformClick(); Assert.Single(requests);
+        var now = DateTimeOffset.UtcNow; var reads = 0; var saves = 0; var requests = new List<string?>();
+        Preferences preferences = scenario == 1 ? new(CodexEnabled: false, ClaudeEnabled: false) : new();
+        ProviderState[] states = scenario switch
+        {
+            0 => [],
+            1 => [new("Codex", ProviderStatus.Unavailable, Enabled: false), new("Claude Code", ProviderStatus.Unavailable, Enabled: false)],
+            _ => [new("Codex", ProviderStatus.Error, Failure: FailureKind.RateLimited, RetryAt: now.AddMinutes(1)),
+                new("Claude Code", ProviderStatus.Error, Failure: FailureKind.Timeout, AutomaticRetryAt: now.AddMinutes(2))]
+        };
+        var flow = new SetupFlow(new(Path.Combine(Path.GetTempPath(), "Llumi-guide-fixture-" + Guid.NewGuid(), "completion.json")));
+        while (flow.Step != (SetupStep)step) flow.Next();
+        using var form = new SetupForm(flow, () => { reads++; return states; }, requests.Add, () => preferences,
+            _ => saves++, new Startup(), () => { }, () => { });
+        form.Show(); var isCodex = (SetupStep)step == SetupStep.Codex;
+        var title = isCodex ? "Codex" : "Claude Code";
+        Assert.Equal(new[] { "Set up " + title, "Run these in PowerShell.", "1. Install", "2. Sign in" },
+            Labels(form).Where(l => l.Visible && l is not LinkLabel).Select(l => l.Text).ToArray());
+        Assert.Equal(new[] { "Back", "Continue", "Copy", "Copy" },
+            Descendants(form).OfType<Button>().Where(b => b.Visible).Select(b => b.Text).Order().ToArray());
+        Assert.DoesNotContain(Descendants(form).OfType<CheckBox>(), c => c.Visible);
+        Assert.DoesNotContain(Labels(form), l => l.Visible && l.AccessibleName?.EndsWith("setup status", StringComparison.Ordinal) == true);
+        var help = Descendants(form).OfType<LinkLabel>().Single(l => l.Visible);
+        Assert.Equal("Setup help", help.Text); Assert.Equal(title + " setup help", help.AccessibleName);
+        Assert.True(help.TabStop);
+        for (var pass = 0; pass < 5; pass++) form.RefreshStatuses();
+        Assert.Equal(0, reads); Assert.Equal(0, saves); Assert.Empty(requests);
+
+        var next = Assert.IsType<Button>(form.AcceptButton); next.PerformClick();
+        if (isCodex && preferences.ClaudeEnabled)
+        {
+            Assert.Equal(SetupStep.Claude, flow.Step);
+            Assert.Equal(0, reads); Assert.Empty(requests); next.PerformClick();
+        }
+        Assert.Equal(SetupStep.Verify, flow.Step); Assert.True(reads > 0);
+        Assert.Single(requests); Assert.Null(requests[0]);
+        Assert.Contains(Descendants(form).OfType<Button>(), b => b.Visible && b.Text == "Retry");
+        Assert.Contains(Descendants(form).OfType<Button>(), b => b.Visible && b.Text == "Copy Diagnostics");
+        Assert.Equal(0, saves);
     });
 
     [Fact]
@@ -149,15 +175,17 @@ public sealed class SetupRefinementTests
             if (codexEnabled)
             {
                 Assert.Equal(SetupStep.Codex, flow.Step);
-                Assert.Contains(Labels(form), l => l.AccessibleName == "Codex setup status");
-                Assert.Contains(Descendants(form).OfType<Button>(), b => b.Text == "Copy Diagnostics");
+                Assert.Contains(Labels(form), l => l.Visible && l.Text == "Set up Codex");
+                Assert.DoesNotContain(Labels(form), l => l.Visible && l.AccessibleName?.EndsWith("setup status", StringComparison.Ordinal) == true);
+                Assert.DoesNotContain(Descendants(form).OfType<Button>(), b => b.Text is "Retry" or "Copy Diagnostics");
                 Assert.Empty(requests); next.PerformClick();
             }
             if (claudeEnabled)
             {
                 Assert.Equal(SetupStep.Claude, flow.Step);
-                Assert.Contains(Labels(form), l => l.AccessibleName == "Claude Code setup status");
-                Assert.Contains(Descendants(form).OfType<Button>(), b => b.Text == "Copy Diagnostics");
+                Assert.Contains(Labels(form), l => l.Visible && l.Text == "Set up Claude Code");
+                Assert.DoesNotContain(Labels(form), l => l.Visible && l.AccessibleName?.EndsWith("setup status", StringComparison.Ordinal) == true);
+                Assert.DoesNotContain(Descendants(form).OfType<Button>(), b => b.Text is "Retry" or "Copy Diagnostics");
                 Assert.Empty(requests); next.PerformClick();
             }
             Assert.Equal(SetupStep.Verify, flow.Step); Assert.Single(requests); Assert.Null(requests[0]);
@@ -187,30 +215,26 @@ public sealed class SetupRefinementTests
         Assert.Empty(requests);
     });
 
-    [Fact]
-    public Task MissingOrDisabledGuideNeverUsesOtherProvidersReadinessOrRetry() => Sta(() =>
-    {
-        ProviderState[] states = [Ready("Codex")]; var preferences = new Preferences(); var requests = new List<string?>();
-        using var form = FormAt(SetupStep.Claude, () => states, requests.Add, () => preferences, _ => { });
-        form.Show(); Assert.False(Button(form, "Retry").Enabled);
-        states = [states[0], Ready("Claude Code")]; preferences = preferences with { ClaudeEnabled = false }; form.RefreshStatuses();
-        Assert.False(Button(form, "Retry").Enabled); Button(form, "Retry").PerformClick(); Assert.Empty(requests);
-        Assert.Contains(Labels(form), l => l.AccessibleName == "Claude Code setup status" && l.Text.Contains("Monitoring off", StringComparison.Ordinal));
-    });
-
     [Theory]
     [InlineData(2)] [InlineData(3)]
-    public Task NumberedCopyOnlyGuidesKeepCommandsAndNativeActionsReachable(int step) => Sta(() =>
+    public Task CleanCopyOnlyGuidesKeepCommandsAndKeyboardActionsReachable(int step) => Sta(() =>
     {
         using var form = FormAt((SetupStep)step, () => [Ready("Codex"), Ready("Claude Code")], _ => { }, () => new(), _ => { });
         form.Show(); form.ClientSize = new Size(620, 580); form.PerformLayout();
         var boxes = Descendants(form).OfType<TextBox>().ToArray(); Assert.Equal(2, boxes.Length);
-        Assert.All(boxes, box => Assert.True(box.ReadOnly));
+        Assert.All(boxes, box => { Assert.True(box.ReadOnly); Assert.True(box.ShortcutsEnabled); Assert.True(box.TabStop); box.Select(); Assert.True(box.Focused); });
         Assert.Equal((SetupStep)step == SetupStep.Codex ? "npm install -g @openai/codex" : "irm https://claude.ai/install.ps1 | iex", boxes[0].Text);
         Assert.Equal((SetupStep)step == SetupStep.Codex ? "codex login" : "claude auth login", boxes[1].Text);
         Assert.Contains(Labels(form), l => l.Text == "1. Install"); Assert.Contains(Labels(form), l => l.Text == "2. Sign in");
+        Assert.Equal(new[] { "1. Install", "2. Sign in" }, boxes.Select(box => box.AccessibleName).ToArray());
+        Assert.Contains(Labels(form), l => l.Visible && l.Text == "Run these in PowerShell.");
+        Assert.Equal(new[] { "Copy 1. Install command", "Copy 2. Sign in command" },
+            Descendants(form).OfType<Button>().Where(button => button.Visible && button.Text == "Copy").Select(button => button.AccessibleName).ToArray());
         Assert.All(Descendants(form).OfType<Button>().Where(button => button.Text == "Copy"), button =>
-            Assert.True(button.ClientSize.Height >= button.GetPreferredSize(Size.Empty).Height));
+        {
+            Assert.True(button.ClientSize.Height >= button.GetPreferredSize(Size.Empty).Height);
+            Assert.True(button.TabStop); button.Select(); Assert.True(button.Focused);
+        });
         Assert.DoesNotContain(Labels(form), l => l.Text.Contains("Copies only", StringComparison.Ordinal) || l.Text.Contains("Console/API", StringComparison.Ordinal) || l.Text.Contains("Credentials stay", StringComparison.Ordinal));
         var body = form.Controls.OfType<FlowLayoutPanel>().Single(panel => panel.Dock == DockStyle.Fill);
         foreach (var control in Descendants(body).Where(c => c is System.Windows.Forms.Button or TextBox))
