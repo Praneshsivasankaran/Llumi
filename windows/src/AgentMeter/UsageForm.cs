@@ -36,7 +36,6 @@ internal sealed class UsageForm : Form
     private readonly Label retryMessage = new() { AutoSize = false };
     private readonly System.Windows.Forms.Timer countdown = new() { Interval = 1000 };
     private readonly Button copyDiagnostics = Palette.Button("Copy Diagnostics", "Copy Diagnostics");
-    private readonly Button setupGuide = Palette.Button("Setup Llumi…", "Setup Llumi");
     private readonly Label diagnosticMessage = new() { AutoSize = false, Visible = false };
     private readonly ContextMenuStrip actions = new();
     private readonly ToolTip hints = new();
@@ -71,12 +70,11 @@ internal sealed class UsageForm : Form
         content.Controls.AddRange([offMessage, offSettings]);
         appearance.Items.AddRange(["System", "Light", "Dark"]);
         settings.Controls.AddRange([preferencesHeading, launch, compact, tray, appearanceLabel, appearance, settingsMessage, resetPosition,
-            providerHeading, providerHint, codex, claude, codexArtwork, claudeArtwork, codexSetup, claudeSetup, checkAgain, retryMessage, copyDiagnostics, setupGuide, diagnosticMessage]);
+            providerHeading, providerHint, codex, claude, codexArtwork, claudeArtwork, codexSetup, claudeSetup, checkAgain, retryMessage, copyDiagnostics, diagnosticMessage]);
         preferencesHeading.Font = providerHeading.Font = headingFont;
         checkAgain.Click += (_, _) => RefreshRequested?.Invoke();
         resetPosition.Click += (_, _) => ResetPositionRequested?.Invoke();
         offSettings.Click += (_, _) => ShowSettings();
-        setupGuide.Click += (_, _) => SetupRequested?.Invoke();
         copyDiagnostics.Click += (_, _) => {
             try { Clipboard.SetText(DiagnosticReport()); diagnosticMessage.Text = "Diagnostics copied."; }
             catch (System.Runtime.InteropServices.ExternalException) { diagnosticMessage.Text = "Clipboard is busy. Please try again."; }
@@ -152,7 +150,7 @@ internal sealed class UsageForm : Form
         Theme(this); footer.ForeColor = Palette.Muted; settingsMessage.ForeColor = Palette.Muted;
         providerHint.ForeColor = diagnosticMessage.ForeColor = retryMessage.ForeColor = offMessage.ForeColor = Palette.Muted;
         foreach (var status in new[] { codexSetup, claudeSetup }) { status.BackColor = Palette.Card; status.Padding = new Padding(S(14)); }
-        foreach (var button in new[] { usageTab, settingsTab, checkAgain, copyDiagnostics, setupGuide, resetPosition, offSettings })
+        foreach (var button in new[] { usageTab, settingsTab, checkAgain, copyDiagnostics, resetPosition, offSettings })
         { if (button != usageTab && button != settingsTab) button.BackColor = Palette.Card; Palette.StyleButton(button); }
         Render(lastStates, loading, logFailed); Invalidate(true);
     }
@@ -203,9 +201,7 @@ internal sealed class UsageForm : Form
             var showDiagnosticMessage = !string.IsNullOrEmpty(diagnosticMessage.Text);
             diagnosticMessage.Visible = showDiagnosticMessage;
             diagnosticMessage.SetBounds(S(20), S(actionsY + 96), settingsWidth, S(showDiagnosticMessage ? 48 : 0));
-            var setupGuideY = actionsY + (showDiagnosticMessage ? 152 : 96);
-            setupGuide.SetBounds(S(20), S(setupGuideY), S(140), S(36));
-            var preferencesY = setupGuideY + 63;
+            var preferencesY = actionsY + (showDiagnosticMessage ? 152 : 96);
             preferencesHeading.Location = new(S(20), S(preferencesY));
             launch.Location = new(S(20), S(preferencesY + 44)); compact.Location = new(S(20), S(preferencesY + 80)); tray.Location = new(S(20), S(preferencesY + 116));
             appearanceLabel.Location = new(S(20), S(preferencesY + 162)); appearance.SetBounds(S(20), S(preferencesY + 189), S(200), S(30));

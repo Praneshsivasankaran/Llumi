@@ -19,6 +19,7 @@ Local catch-up implementation based on the macOS 1.1.3 allowance/setup requireme
 - When expanded monitor details exceed the screen, show complete rows, preserve status and show the number of remaining allowances with Open Usage. The full list is available through the existing click and keyboard actions.
 - Equal Usage card sizing, consistent official Codex blossom/Claude Code pixel artwork, all supported expanded allowance details, stale age/accessibility text, keyboard access to Usage, and Reset Position in Settings/monitor menu.
 - Remove the Settings tray-availability explanation, independence/account/telemetry note and automatic-save footer; preserve error messages and collapse the unused message area.
+- Remove the Setup Llumi button from Settings and close its reserved gap. First-time onboarding, existing menu access, and the separate review tool remain available.
 - Remove the passive diagnostics privacy note and its empty layout space. Copy Diagnostics retains concise success/clipboard-error feedback after use.
 - Simplify named additional/model rows to Spark limit, Opus and Sonnet; retain scope/period in accessibility metadata. Match the dashboard identity to the official Llumi application icon.
 - Match the Windows tray icon to the same official full-color Llumi tile, using the embedded small sizes instead of a separately drawn monochrome gauge. Preserve display-change reload, tray interactions and status tooltips.
