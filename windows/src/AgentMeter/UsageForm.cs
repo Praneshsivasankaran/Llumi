@@ -25,7 +25,7 @@ internal sealed class UsageForm : Form
     private readonly Label offMessage = new() { Text = "Monitoring is off.\nEnable Codex or Claude Code in Settings.", AutoSize = false };
     private readonly Button offSettings = Palette.Button("Open Settings", "Enable providers in Settings");
     private readonly ComboBox appearance = new() { DropDownStyle = ComboBoxStyle.DropDownList, AccessibleName = "Appearance" };
-    private readonly Label settingsMessage = new() { AutoSize = false };
+    private readonly Label settingsMessage = new() { AutoSize = false, Visible = false };
     private readonly Label appearanceLabel = new() { Text = "Appearance", AutoSize = true };
     private readonly Label preferencesHeading = new() { Text = "Preferences", AutoSize = true };
     private readonly Label providerHeading = new() { Text = "Providers", AutoSize = true };
@@ -82,8 +82,6 @@ internal sealed class UsageForm : Form
         };
         launch.Location = new(S(20), S(24)); compact.Location = new(S(20), S(68)); tray.Location = new(S(20), S(112));
         appearanceLabel.Location = new(S(20), S(164)); appearance.SetBounds(S(20), S(194), S(200), S(30));
-        settingsMessage.SetBounds(S(20), S(244), S(410), S(100));
-        settingsMessage.Text = "Llumi stays available from the taskbar when the tray icon is hidden.\n\nIndependent of OpenAI and Anthropic. No Llumi account or telemetry.";
         usageTab.Click += (_, _) => ShowUsage(); settingsTab.Click += (_, _) => ShowSettings();
         refresh.Click += (_, _) => RefreshRequested?.Invoke();
         actions.Items.Add("Open Llumi", null, (_, _) => ShowUsage());
@@ -129,8 +127,13 @@ internal sealed class UsageForm : Form
         codex.Checked = value.CodexEnabled; claude.Checked = value.ClaudeEnabled;
         syncing = false; ApplyTheme();
     }
-    internal void PreferenceSaveFailed() => settingsMessage.Text = "Settings could not be saved. The previous preferences remain active.";
-    internal void PositionResetFailed() => settingsMessage.Text = "Monitor position could not be saved. Try again.";
+    internal void PreferenceSaveFailed() => ShowSettingsMessage("Settings could not be saved. The previous preferences remain active.");
+    internal void PositionResetFailed() => ShowSettingsMessage("Monitor position could not be saved. Try again.");
+    private void ShowSettingsMessage(string message)
+    {
+        settingsMessage.Text = message;
+        Render(lastStates, loading, logFailed);
+    }
     internal void ApplyTheme()
     {
         void Theme(Control root)
@@ -197,8 +200,9 @@ internal sealed class UsageForm : Form
             launch.Location = new(S(20), S(preferencesY + 44)); compact.Location = new(S(20), S(preferencesY + 80)); tray.Location = new(S(20), S(preferencesY + 116));
             appearanceLabel.Location = new(S(20), S(preferencesY + 162)); appearance.SetBounds(S(20), S(preferencesY + 189), S(200), S(30));
             resetPosition.SetBounds(S(20), S(preferencesY + 236), S(145), S(36));
-            settingsMessage.SetBounds(S(20), S(preferencesY + 287), settingsWidth, S(100));
-            settings.AutoScrollMinSize = new(0, S(preferencesY + 405));
+            settingsMessage.Visible = !string.IsNullOrEmpty(settingsMessage.Text);
+            settingsMessage.SetBounds(S(20), S(preferencesY + 287), settingsWidth, S(settingsMessage.Visible ? 100 : 0));
+            settings.AutoScrollMinSize = new(0, S(preferencesY + (settingsMessage.Visible ? 405 : 292)));
             settings.AutoScrollPosition = new(0, -settingsScroll.Y);
             string SetupText(string name, string title)
             {
@@ -213,8 +217,8 @@ internal sealed class UsageForm : Form
             refresh.Visible = !settingsShown; refresh.Text = loading ? "Refreshing…" : "Refresh";
             footer.SetBounds(S(24), height - S(39), width - S(48), S(30));
             var observed = states.Where(s => s.Enabled && s.Snapshot is not null).Select(s => s.Snapshot!.ObservedAt).DefaultIfEmpty().Min();
-            footer.Text = logFailed ? "Diagnostic log unavailable" : observed == default ? "Connect your tools to see remaining allowance." : $"Last updated {observed.ToLocalTime():HH:mm} · Refreshes automatically";
-            if (settingsShown && !logFailed) footer.Text = "Preferences are saved automatically.";
+            footer.Visible = !settingsShown || logFailed;
+            footer.Text = logFailed ? "Diagnostic log unavailable" : settingsShown ? string.Empty : observed == default ? "Connect your tools to see remaining allowance." : $"Last updated {observed.ToLocalTime():HH:mm} · Refreshes automatically";
             var scroll = content.AutoScrollPosition;
             content.AutoScrollPosition = Point.Empty;
             var y = 0;
