@@ -128,12 +128,36 @@ internal sealed class Review : Form
             {
                 monitor.SetExpanded(true, false); using var expanded = monitor.CreatePreviewBitmap(); expanded.Save(Path.Combine(directory, "monitor-expanded.png"), ImageFormat.Png);
                 monitor.SetExpanded(false, false); using var compact = monitor.CreatePreviewBitmap(); compact.Save(Path.Combine(directory, "monitor-compact.png"), ImageFormat.Png);
+                CaptureOverflowMonitors(directory);
                 usage.ShowSettings(); Application.DoEvents(); Save(usage, Path.Combine(directory, "settings.png"));
                 CaptureSetupSteps(directory);
                 theme.SelectedIndex = 1; Apply(); usage.ShowUsage(); Application.DoEvents(); Save(usage, Path.Combine(directory, "usage-dark.png")); theme.SelectedIndex = 0;
             }
         }
         monitor.HideMonitor(); usage.Hide();
+    }
+
+    private void CaptureOverflowMonitors(string directory)
+    {
+        // Explicitly synthetic native renders, not live account or physical acceptance.
+        var now = DateTimeOffset.UtcNow;
+        var dense = new[] { "Codex", "Claude Code" }.Select(name =>
+        {
+            var windows = new[] { new UsageWindow(name == "Codex" ? "codex/primary" : "five_hour", "fixture", 37, now.AddHours(3), 300) }
+                .Concat(Enumerable.Range(1, 20).Select(index => new UsageWindow("extra:" + index, "fixture", index,
+                    now.AddHours(index), 60, UsageScope.Additional, "Extra " + index))).ToArray();
+            return new ProviderState(name, ProviderStatus.Ready, new(windows, now.AddMinutes(-3), "synthetic overflow fixture"));
+        }).ToArray();
+        foreach (var shortArea in new[] { false, true })
+        {
+            var area = Screen.PrimaryScreen!.WorkingArea;
+            using var overflow = new MonitorForm(["Codex", "Claude Code"], icon, () => area) { AllowExit = true, MotionAllowed = () => false };
+            int S(int value) => (int)Math.Round(value * overflow.DeviceDpi / 96d);
+            area = new(area.Location, new Size(S(620), S(shortArea ? 100 : 240)));
+            overflow.Render(dense, now); overflow.ShowMonitor(area.Location); overflow.SetExpanded(true, false);
+            using var image = overflow.CreatePreviewBitmap();
+            image.Save(Path.Combine(directory, shortArea ? "monitor-overflow-short.png" : "monitor-overflow-dense.png"), ImageFormat.Png);
+        }
     }
 
     private void CaptureSetupSteps(string directory)

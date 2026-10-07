@@ -18,6 +18,7 @@ internal sealed class MonitorForm : Form
     private readonly Font expandedNumberFont = new("Segoe UI Semibold", 17, FontStyle.Regular, GraphicsUnit.Pixel);
     private readonly MonitorAnimation animation = new();
     private readonly System.Windows.Forms.Timer hoverDelay = new();
+    private readonly Func<Rectangle>? workingArea;
     private MonitorRow[] rows = [];
     private bool hoverPending, providersChanged;
     private Rectangle transitionStartBounds, transitionTargetBounds;
@@ -59,12 +60,13 @@ internal sealed class MonitorForm : Form
     internal event Action? PositionCommitted;
     internal event Action? SurfaceFallbackUsed;
     internal event Action? ResetPositionRequested;
-    internal MonitorForm(IEnumerable<string> names, Icon icon)
+    internal MonitorForm(IEnumerable<string> names, Icon icon, Func<Rectangle>? workingArea = null)
     {
+        this.workingArea = workingArea;
         providerNames = requestedProviderNames = names.Distinct().ToArray();
         Text = "Llumi monitor"; Icon = icon;
         AccessibleName = "Llumi compact monitor";
-        AccessibleDescription = "Remaining coding subscription allowance. Hover for all supported limits. Click, Enter or Control+1 opens Usage. Drag to move. Reset Position is in the menu.";
+        AccessibleDescription = "Remaining coding subscription allowance. Hover for details; Open Usage shows all supported limits. Click, Enter or Control+1 opens Usage. Drag to move. Reset Position is in the menu.";
         FormBorderStyle = FormBorderStyle.None; ShowInTaskbar = false;
         StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None;
         BackColor = Palette.Background; ForeColor = Palette.Foreground;
@@ -98,10 +100,37 @@ internal sealed class MonitorForm : Form
     private Size CurrentSize(bool expanded)
     {
         var size = SizeForDpi(DeviceDpi, providerNames.Length, expanded, allowanceRows: rows.Select(r => r.Windows.Length).DefaultIfEmpty(0).Max());
-        if (expanded && IsHandleCreated) size.Height = Math.Min(size.Height, Math.Max(34, Screen.FromControl(this).WorkingArea.Height - (int)Math.Round(16 * DeviceDpi / 96d)));
+        if (expanded && IsHandleCreated)
+        {
+            var area = WorkingArea; var margin = (int)Math.Round(16 * DeviceDpi / 96d);
+            size.Height = Math.Min(size.Height, Math.Max(1, area.Height - margin));
+            size.Width = Math.Min(size.Width, Math.Max(1, area.Width - margin));
+        }
         return size;
     }
+    private Rectangle WorkingArea => workingArea?.Invoke() ?? Screen.FromControl(this).WorkingArea;
     internal Size ExpandedSize => CurrentSize(true);
+    internal MonitorDetailLayout ExpandedLayout => DetailLayout(DeviceDpi, ExpandedSize.Height, rows.Select(r => r.Windows.Length).DefaultIfEmpty(0).Max());
+    internal IReadOnlyList<int> ExpandedAllowanceCounts => rows.Select(r => Math.Min(r.Windows.Length, ExpandedLayout.VisibleRows)).ToArray();
+    internal static MonitorDetailLayout DetailLayout(int dpi, int pixelHeight, int allowanceRows)
+    {
+        var height = Math.Max(1, pixelHeight) * 96f / Math.Clamp(dpi, 48, 768);
+        var count = Math.Max(0, allowanceRows);
+        if (height + .51f * 96 / Math.Clamp(dpi, 48, 768) >= Math.Max(144, 86 + count * 54))
+            return new(count, false, false, true, false, 65 + count * 54, 0, 0);
+        // Reserve a full status line and Usage footer before selecting complete rows.
+        if (height >= 107)
+        {
+            var visible = Math.Min(count, (int)Math.Floor((height - 107) / 54));
+            return new(visible, true, false, true, false, 65 + visible * 54, height - 21, 19);
+        }
+        var footer = Math.Min(19, Math.Max(1, height - 4));
+        var showHeader = height >= 55;
+        return new(0, true, true, showHeader, height < 76, 34,
+            showHeader ? height - 21 : Math.Max(0, (height - footer) / 2), footer);
+    }
+    internal readonly record struct MonitorDetailLayout(int VisibleRows, bool Overflow, bool CompactHeader,
+        bool HeaderVisible, bool CombinedStatus, float StatusY, float UsageY, float FooterHeight);
     internal void SetProviders(IEnumerable<string> names)
     {
         var next = names.Distinct().ToArray(); requestedProviderNames = next; if (providerNames.SequenceEqual(next)) return;
@@ -168,7 +197,7 @@ internal sealed class MonitorForm : Form
         transition.Stop(); animation.Stop();
         transitionStartBounds = Bounds;
         var point = new Point(Left + (Width - size.Width) / 2, Top);
-        transitionTargetBounds = new(PopupPlacement.Clamp(point, size, Screen.FromControl(this).WorkingArea), size);
+        transitionTargetBounds = new(PopupPlacement.Clamp(point, size, WorkingArea), size);
         startOpacity = opacity; targetOpacity = alpha; startExpansion = expansion; targetExpansion = expanded;
         if (animate && Visible && MotionAllowed())
         {
@@ -194,12 +223,13 @@ internal sealed class MonitorForm : Form
         if (progress >= 1 && !DesiredVisible && targetOpacity == 0) { Hide(); TopMost = false; expansion = 0; }
     }
     internal void CommitPosition() { transition.Stop(); animation.Stop(); KeepOnScreen(); PositionCommitted?.Invoke(); }
-    internal void KeepOnScreen() => Location = PopupPlacement.Clamp(Location, Size, Screen.FromControl(this).WorkingArea);
+    internal void KeepOnScreen() => Location = PopupPlacement.Clamp(Location, Size, WorkingArea);
     internal void SetExpanded(bool value, bool animate = true)
     {
         if (providerNames.Length == 0 || hovered == value || (Visible && !DesiredVisible)) return;
         hovered = value;
         BeginTransition(CurrentSize(hovered), 1, hovered ? 1 : 0, animate);
+        AccessibilityNotifyClients(AccessibleEvents.NameChange, -1);
     }
     protected override void OnDpiChanged(DpiChangedEventArgs e)
     { base.OnDpiChanged(e); transition.Stop(); animation.Stop(); ClientSize = CurrentSize(hovered); expansion = hovered ? 1 : 0; KeepOnScreen(); UpdateSurface(); }
@@ -255,22 +285,29 @@ internal sealed class MonitorForm : Form
         g.DrawPath(border, shape);
         using var animatedNumberFont = new Font("Segoe UI Semibold", 13 + 4 * expanded, FontStyle.Regular, GraphicsUnit.Pixel);
         var count = rows.Length;
-        var compactWidth = count > 1 ? 202f : 112f;
-        var expandedWidth = count > 1 ? 390f : 228f;
+        var compactWidth = Math.Min(count > 1 ? 202f : 112f, width);
+        var expandedWidth = Math.Min(count > 1 ? 390f : 228f, width);
         var contentWidth = compactWidth + (expandedWidth - compactWidth) * expanded;
         var offset = (width - contentWidth) / 2;
+        var detailLayout = DetailLayout(DeviceDpi, Height, rows.Select(r => r.Windows.Length).DefaultIfEmpty(0).Max());
+        var padding = Math.Min(18, expandedWidth / 10);
+        var gap = count > 1 ? Math.Min(37, Math.Max(0, expandedWidth - padding * 2 - count * 100)) : 0;
         for (var i = 0; i < count; i++)
         {
             var row = rows[i]; var ink = row.Stale ? Palette.Warning : Accent(row.Name);
             var compactX = count > 1 ? 16 + i * 96 : 20;
-            var columnWidth = (expandedWidth - 36 - (count - 1) * 37) / Math.Max(1, count);
-            var expandedX = 18 + i * (columnWidth + 37);
+            var columnWidth = Math.Max(1, (expandedWidth - padding * 2 - (count - 1) * gap) / Math.Max(1, count));
+            var expandedX = padding + i * (columnWidth + gap);
             var x = offset + compactX + (expandedX - compactX) * expanded;
-            var y = 7.5f + (18 - 7.5f) * expanded;
-            var markSize = 19 + 4 * expanded;
-            ProviderMark.Draw(g, row.Name, new(x, y, markSize, markSize), Ink);
-            Draw(g, row.Value, expanded is > 0 and < 1 ? animatedNumberFont : expanded == 1 ? expandedNumberFont : numberFont, ink, new(x + markSize + 7, y - 4, 58, 29));
-            if (row.Stale) { using var stale = new SolidBrush(ink); g.FillEllipse(stale, x + markSize + 61, y + 8, 4, 4); }
+            var headerExpansion = expanded >= .99 && detailLayout.CompactHeader ? 0 : expanded;
+            var y = 7.5f + (18 - 7.5f) * headerExpansion;
+            var markSize = 19 + 4 * headerExpansion;
+            if (expanded < .99 || detailLayout.HeaderVisible)
+            {
+                ProviderMark.Draw(g, row.Name, new(x, y, markSize, markSize), Ink);
+                Draw(g, row.Value, headerExpansion is > 0 and < 1 ? animatedNumberFont : headerExpansion == 1 ? expandedNumberFont : numberFont, ink, new(x + markSize + 7, y - 4, 58, 29));
+                if (row.Stale) { using var stale = new SolidBrush(ink); g.FillEllipse(stale, x + markSize + 61, y + 8, 4, 4); }
+            }
             if (i > 0)
             {
                 using var separator = new Pen(Color.FromArgb(110, Palette.Border));
@@ -278,7 +315,12 @@ internal sealed class MonitorForm : Form
             }
             if (expanded <= .01) continue;
             Color Detail(Color color) => Color.FromArgb((int)(255 * Math.Clamp((expanded - .2) / .8, 0, 1)), color);
-            if (count == 1) Draw(g, "remaining", bodyFont, Detail(Muted), new(x + 92, y - 1, 90, 25));
+            if (count == 1 && detailLayout.HeaderVisible) Draw(g, "remaining", bodyFont, Detail(Muted), new(x + 92, y - 1, 90, 25));
+            if (detailLayout.CompactHeader)
+            {
+                if (!detailLayout.CombinedStatus && row.Status != "Live") Draw(g, row.Status, bodyFont, Detail(ink), new(x, detailLayout.StatusY, columnWidth, 19));
+                continue;
+            }
             using var track = new SolidBrush(Detail(Palette.Track));
             using var trackShape = DrawingHelpers.RoundedRectangle(new(x, 53, columnWidth, 5), 2.5f);
             g.FillPath(track, trackShape);
@@ -290,15 +332,19 @@ internal sealed class MonitorForm : Form
             }
             if (row.Windows.Length > 0)
             {
-                for (var detailIndex = 0; detailIndex < row.Windows.Length; detailIndex++)
+                for (var detailIndex = 0; detailIndex < Math.Min(row.Windows.Length, detailLayout.VisibleRows); detailIndex++)
                 {
                     var detail = row.Windows[detailIndex]; var detailY = 65 + detailIndex * 54;
                     Draw(g, detail.Label, bodyFont, Detail(Muted), new(x, detailY, columnWidth, 17));
                     Draw(g, detail.Value + " remaining", bodyFont, Detail(Ink), new(x, detailY + 17, columnWidth, 17));
                     Draw(g, detail.Reset, bodyFont, Detail(Muted), new(x, detailY + 34, columnWidth, 17));
                 }
-                var statusY = 65 + rows.Max(r => r.Windows.Length) * 54;
-                if (row.Status != "Live") Draw(g, row.Status, bodyFont, Detail(ink), new(x, statusY, columnWidth, 19));
+                if (row.Status != "Live") Draw(g, row.Status, bodyFont, Detail(ink), new(x, detailLayout.StatusY, columnWidth, 19));
+                continue;
+            }
+            if (detailLayout.Overflow)
+            {
+                if (row.Status != "Live") Draw(g, row.Status, bodyFont, Detail(ink), new(x, detailLayout.StatusY, columnWidth, 19));
                 continue;
             }
             Draw(g, row.Window, bodyFont, Detail(Muted), new(x, 65, columnWidth, 19));
@@ -306,6 +352,19 @@ internal sealed class MonitorForm : Form
             using var resetBrush = new SolidBrush(Detail(Ink));
             g.DrawString(row.Reset, bodyFont, resetBrush, new RectangleF(x, 88, columnWidth, 33), resetFormat);
             if (row.Status != "Live") Draw(g, row.Status, bodyFont, Detail(ink), new(x, 121, columnWidth, 18));
+        }
+        if (expanded >= .99 && detailLayout.Overflow)
+        {
+            var omitted = rows.Sum(r => Math.Max(0, r.Windows.Length - detailLayout.VisibleRows));
+            var text = omitted > 0 ? $"Open Usage · {omitted} more" : "Open Usage";
+            if (detailLayout.CombinedStatus)
+            {
+                var statuses = rows.Select(r => r.Status).Where(s => s != "Live").Distinct().ToArray();
+                if (statuses.Length > 0) text += " · " + string.Join(" · ", statuses);
+            }
+            using var footerFont = new Font("Segoe UI", Math.Min(12, Math.Max(1, detailLayout.FooterHeight - 3)), FontStyle.Regular, GraphicsUnit.Pixel);
+            Draw(g, text, footerFont, rows.Any(r => r.Stale) && detailLayout.CombinedStatus ? Palette.Warning : Ink,
+                new(padding, detailLayout.UsageY, Math.Max(1, width - padding * 2), detailLayout.FooterHeight));
         }
         return image;
     }
@@ -333,7 +392,17 @@ internal sealed class MonitorForm : Form
     }
     private sealed class RowAccessibleObject(MonitorForm owner, AccessibleObject parent, int index) : AccessibleObject
     {
-        public override string? Name { get => owner.rows[index].Hint; set { } }
+        public override string? Name
+        {
+            get
+            {
+                var hint = owner.rows[index].Hint;
+                if (!owner.hovered || !owner.ExpandedLayout.Overflow) return hint;
+                var omitted = Math.Max(0, owner.rows[index].Windows.Length - owner.ExpandedLayout.VisibleRows);
+                return hint + $"\nOpen Usage for all limits ({omitted} more). Click, Enter or Control+1 opens Usage.";
+            }
+            set { }
+        }
         public override string? Value => owner.rows[index].Value;
         public override AccessibleRole Role => AccessibleRole.StaticText;
         public override AccessibleStates State => AccessibleStates.ReadOnly;

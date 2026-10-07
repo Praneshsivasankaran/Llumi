@@ -167,6 +167,23 @@ public sealed class CodexTests
         Assert.Equal(100, windows[1].RemainingPercent);
     }
 
+    [Fact]
+    public void CaseDistinctAdditionalBucketCannotHideGeneralAllowance()
+    {
+        var result = Parse("""{"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":100,"windowDurationMins":300}},"Codex":{"limitName":"Fixture additional","primary":{"usedPercent":0,"windowDurationMins":300}}}}""");
+        Assert.Equal(FailureKind.None, result.Failure);
+        var state = new ProviderState("Codex", ProviderStatus.Ready, result.Snapshot);
+        var windows = UsagePresentation.Windows(state);
+        Assert.Equal(2, windows.Length);
+        var primary = Assert.IsType<UsageWindow>(UsagePresentation.Primary(state));
+        Assert.Equal("codex/primary", primary.Id);
+        Assert.Equal(UsageScope.General, primary.Scope);
+        Assert.Equal("0%", PopupText.Remaining(primary));
+        Assert.Equal(UsageScope.Additional, windows.Single(w => w.Id == "Codex/primary").Scope);
+        Assert.Equal("100%", PopupText.Remaining(windows.Single(w => w.Id == "Codex/primary")));
+        Assert.Equal("Live", PopupText.Status(state, Observed));
+    }
+
     [Theory]
     [InlineData("{\"credits\":{\"balance\":3}}")]
     [InlineData("{\"rateLimits\":{\"spend\":{\"used\":0}}}")]

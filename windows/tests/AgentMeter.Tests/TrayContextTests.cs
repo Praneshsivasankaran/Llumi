@@ -465,7 +465,7 @@ public sealed class TrayContextTests
                 }
                 if (step != SetupStep.Done)
                 {
-                    var next = Descendants(setup).OfType<Button>().Single(b => b.AccessibleName == "Continue setup");
+                    var next = Assert.IsType<Button>(setup.AcceptButton);
                     Assert.True(next.Enabled); next.PerformClick();
                 }
             }

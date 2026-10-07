@@ -20,8 +20,8 @@ internal sealed class SetupForm : Form
     private readonly Panel welcomeGroup = new() { Name = "welcomeGroup" };
     private readonly Panel welcomeLogo = new() { Name = "welcomeLogo", AccessibleName = "Llumi logo" };
     private readonly Label welcomeName = new() { Text = "Llumi", AutoSize = true, TextAlign = ContentAlignment.MiddleCenter };
-    private readonly Button next = Palette.Button("Continue", "Continue setup");
-    private readonly Button back = Palette.Button("Back", "Previous setup step");
+    private readonly Button next = Palette.Button("Continue", "Continue");
+    private readonly Button back = Palette.Button("Back", "Back");
     private readonly Dictionary<string, Label> statusLabels = new();
     private readonly List<Button> retryButtons = [];
     private readonly Dictionary<string, CheckBox> providerSwitches = new();
@@ -33,6 +33,7 @@ internal sealed class SetupForm : Form
     private readonly Font headingFont = new("Segoe UI", 16, FontStyle.Bold);
     private readonly Font welcomeFont = new("Segoe UI", 24, FontStyle.Bold);
     private bool syncingProviders;
+    private bool syncingPreferences;
     private bool initialized;
 
     internal SetupForm(SetupFlow flow, Func<IReadOnlyList<ProviderState>> states, Action<string?> refresh,
@@ -53,7 +54,8 @@ internal sealed class SetupForm : Form
         welcomeLogo.Paint += (_, e) => { using var mark = AppIcon.Load(welcomeLogo.Width); e.Graphics.DrawIcon(mark, welcomeLogo.ClientRectangle); };
         welcome.SizeChanged += (_, _) => LayoutWelcome();
         welcomeName.SizeChanged += (_, _) => LayoutWelcome();
-        next.AutoSize = back.AutoSize = true; next.MinimumSize = back.MinimumSize = new Size(112, 38); navigation.Controls.Add(next); navigation.Controls.Add(back);
+        next.AutoSize = back.AutoSize = true; next.AutoSizeMode = back.AutoSizeMode = AutoSizeMode.GrowAndShrink;
+        next.MinimumSize = back.MinimumSize = new Size(112, 38); navigation.Controls.Add(next); navigation.Controls.Add(back);
         back.Click += (_, _) => { flow.Back(); RenderStep(); };
         next.Click += (_, _) =>
         {
@@ -97,6 +99,18 @@ internal sealed class SetupForm : Form
         catch (ExternalException) { Feedback("Clipboard is busy. Please try again."); }
     }
     private void Feedback(string text) { message.Text = text; message.Visible = !string.IsNullOrEmpty(text); body.PerformLayout(); }
+    private void NextCaption(string text) { next.Text = text; next.AccessibleName = text; }
+    private void SavePreference(Preferences requested, Action<Preferences> restore)
+    {
+        if (syncingPreferences) return;
+        savePreferences(requested);
+        var actual = preferences();
+        syncingPreferences = true;
+        try { restore(actual); }
+        finally { syncingPreferences = false; }
+        Feedback(actual == requested ? "" : "Settings could not be saved. Please try again.");
+        ApplyTheme();
+    }
     private static string Title(string provider) => provider == "Claude" ? "Claude Code" : provider;
     private ProviderState StateFor(string provider, IReadOnlyList<ProviderState> source, Preferences current)
     {
@@ -172,7 +186,11 @@ internal sealed class SetupForm : Form
         if (statusLabels.Count == 0) return;
         foreach (var (name, label) in statusLabels)
         {
-            label.Text = SetupDiagnostic.From(StateFor(name, states(), current)).Summary;
+            var state = StateFor(name, states(), current);
+            var diagnostic = SetupDiagnostic.From(state);
+            label.Text = diagnostic.Summary;
+            label.AccessibleDescription = diagnostic.Description + (state.Enabled && state.Snapshot is not null
+                ? "\n" + UsageAccessibility.Observation(state, DateTimeOffset.UtcNow) : "");
         }
         var selected = RelevantStates().Where(s => s.Enabled).ToArray();
         var at = DateTimeOffset.UtcNow;
@@ -181,8 +199,8 @@ internal sealed class SetupForm : Form
             .Where(x => x.Message is not null).Select(x => $"{(UsagePresentation.IsClaude(x.State.Name) ? "Claude Code" : x.State.Name)}: {x.Message}"));
         retryMessage.Visible = !string.IsNullOrEmpty(retryMessage.Text);
         if (flow.Step == SetupStep.Verify)
-            next.Text = states().Any(s => ((flow.Codex && s.Name == "Codex") || (flow.Claude && s.Name is "Claude" or "Claude Code"))
-                && s.Enabled && s.Authentication == AuthenticationStatus.Verified) ? "Continue" : "Finish Anyway";
+            NextCaption(states().Any(s => ((flow.Codex && s.Name == "Codex") || (flow.Claude && s.Name is "Claude" or "Claude Code"))
+                && s.Enabled && s.Authentication == AuthenticationStatus.Verified) ? "Continue" : "Finish Anyway");
     }
     private void RenderStep()
     {
@@ -202,7 +220,7 @@ internal sealed class SetupForm : Form
         body.Visible = navigation.Visible = !isWelcome;
         Controls.SetChildIndex(body, 0); Controls.SetChildIndex(navigation, 1);
         back.Visible = flow.Step != SetupStep.Welcome;
-        next.Text = flow.Step == SetupStep.Welcome ? "Get Started" : flow.Step == SetupStep.Done ? "Start Llumi" : "Continue";
+        NextCaption(flow.Step == SetupStep.Welcome ? "Get Started" : flow.Step == SetupStep.Done ? "Start Llumi" : "Continue");
         switch (flow.Step)
         {
             case SetupStep.Welcome:
@@ -221,23 +239,36 @@ internal sealed class SetupForm : Form
                     ? "https://learn.chatgpt.com/docs/codex/cli" : "https://code.claude.com/docs/en/setup"));
                 body.Controls.Add(help); break;
             case SetupStep.Verify:
-                TextLine("Check Setup", true); TextLine("Sign-in and monitoring are checked separately. You can also finish and set up later."); Statuses(switches: true); break;
+                TextLine("Check Setup", true); Statuses(switches: true); break;
             case SetupStep.Preferences:
-                TextLine("Preferences", true); TextLine("These use the same settings as the main application.");
+                TextLine("Preferences", true);
                 var p = preferences();
                 var compact = new CheckBox { Text = "Compact Monitor", Checked = p.CompactMonitor, AutoSize = true };
                 var tray = new CheckBox { Text = "Tray Icon", Checked = p.TrayIcon, AutoSize = true };
-                compact.CheckedChanged += (_, _) => { savePreferences(preferences() with { CompactMonitor = compact.Checked }); compact.Checked = preferences().CompactMonitor; ApplyTheme(); };
-                tray.CheckedChanged += (_, _) => { savePreferences(preferences() with { TrayIcon = tray.Checked }); tray.Checked = preferences().TrayIcon; ApplyTheme(); };
                 var available = startup.TryRead(out var enabled);
                 var launch = new CheckBox { Text = "Launch at Startup", Checked = enabled, Enabled = available, AutoSize = true };
-                launch.Click += (_, _) => { toggleStartup(); launch.Enabled = startup.TryRead(out var actual); launch.Checked = actual; };
+                launch.Click += (_, _) =>
+                {
+                    if (!launch.Enabled) return;
+                    var requested = launch.Checked;
+                    toggleStartup();
+                    launch.Enabled = startup.TryRead(out var actual);
+                    launch.Checked = actual;
+                    Feedback(!launch.Enabled ? "Startup setting is unavailable. Please try again." :
+                        actual == requested ? "" : "Startup setting could not be saved. Please try again.");
+                };
                 var appearance = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, AccessibleName = "Appearance", Width = 200 };
                 appearance.Items.AddRange(["System", "Light", "Dark"]); appearance.SelectedIndex = (int)p.Appearance;
-                appearance.SelectedIndexChanged += (_, _) => { savePreferences(preferences() with { Appearance = (Appearance)appearance.SelectedIndex }); appearance.SelectedIndex = (int)preferences().Appearance; ApplyTheme(); };
+                void Restore(Preferences actual)
+                {
+                    compact.Checked = actual.CompactMonitor; tray.Checked = actual.TrayIcon; appearance.SelectedIndex = (int)actual.Appearance;
+                }
+                compact.CheckedChanged += (_, _) => SavePreference(preferences() with { CompactMonitor = compact.Checked }, Restore);
+                tray.CheckedChanged += (_, _) => SavePreference(preferences() with { TrayIcon = tray.Checked }, Restore);
+                appearance.SelectedIndexChanged += (_, _) => SavePreference(preferences() with { Appearance = (Appearance)appearance.SelectedIndex }, Restore);
                 body.Controls.Add(compact); body.Controls.Add(tray); body.Controls.Add(launch); TextLine("Appearance"); body.Controls.Add(appearance); break;
             case SetupStep.Done:
-                TextLine("You’re all set", true); TextLine("Setup Llumi… remains available from the tray and app menu."); Statuses(); break;
+                TextLine("You’re all set", true); break;
         }
         body.Controls.Add(message); RefreshStatuses(); ApplyTheme(); body.ResumeLayout(true); PerformLayout(); FitBodyContent(); LayoutWelcome();
         AcceptButton = next;

@@ -93,7 +93,7 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
         var organization = Text(value, "orgId");
         var name = Text(value, "orgName");
         var plan = Text(value, "subscriptionType");
-        if (Text(value, "authMethod") is "apiKey" or "api_key" || Text(value, "apiProvider") is "bedrock" or "vertex" || plan == "payg")
+        if (Text(value, "authMethod") is "apiKey" or "api_key" || Text(value, "apiProvider") is "bedrock" or "vertex" or "foundry" || plan == "payg")
             throw new ProviderQueryException(FailureKind.UnsupportedBilling);
         if (Text(value, "authMethod") != "claude.ai" || Text(value, "apiProvider") != "firstParty" ||
             plan is not ("pro" or "max" or "team" or "enterprise") || Get(value, "analyticsDisabled").ValueKind != JsonValueKind.False ||
@@ -156,11 +156,10 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
         if (scoped.ValueKind is not (JsonValueKind.Null or JsonValueKind.Undefined))
         {
             if (scoped.ValueKind != JsonValueKind.Array || scoped.GetArrayLength() > 32) throw new ProviderQueryException(FailureKind.Malformed);
-            var seen = new HashSet<string>();
             foreach (var model in scoped.EnumerateArray())
             {
                 var label = Text(model, "display_name");
-                if (label is null || label.Length > 100 || !seen.Add(label)) throw new ProviderQueryException(FailureKind.Malformed);
+                if (label is null || label.Length > 100) { malformed = true; continue; }
                 MergeWindow(ReadWindow(model, "model:" + label, label, 10080, UsageScope.Model, label, ref malformed), windows);
             }
         }

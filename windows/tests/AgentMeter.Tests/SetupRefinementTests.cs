@@ -48,6 +48,7 @@ public sealed class SetupRefinementTests
                 var logo = Descendants(form).Single(c => c.Name == "welcomeLogo");
                 var name = Labels(form).Single(l => l.Text == "Llumi");
                 Assert.True(group.Visible); Assert.Equal("Get Started", next.Text); Assert.False(next.IsDisposed);
+                Assert.Equal(next.Text, next.AccessibilityObject.Name);
                 Assert.InRange(Math.Abs(group.Left * 2 + group.Width - group.Parent!.ClientSize.Width), 0, 1);
                 Assert.InRange(Math.Abs(group.Top * 2 + group.Height - group.Parent.ClientSize.Height), 0, 1);
                 Assert.InRange(Math.Abs(logo.Left * 2 + logo.Width - group.Width), 0, 1);
@@ -60,11 +61,14 @@ public sealed class SetupRefinementTests
                 next.PerformClick();
                 Assert.Contains(Labels(form), l => l.Visible && l.Text == "Choose your providers");
                 Assert.Same(next, form.AcceptButton); Assert.True(form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Bottom).Visible);
+                Assert.Equal(next.Text, next.AccessibilityObject.Name);
                 var navigation = form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Bottom);
                 Assert.Equal(sizeBeforeNavigation, form.ClientSize);
                 Assert.True(form.ClientRectangle.Contains(navigation.Bounds));
                 Assert.True(navigation.ClientRectangle.Contains(next.Bounds));
                 Assert.True(navigation.ClientRectangle.Contains(Button(form, "Back").Bounds));
+                Assert.Equal(Button(form, "Back").Height, next.Height);
+                Assert.Equal(Button(form, "Back").Top, next.Top);
                 Assert.True(form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Fill).Bottom <= navigation.Top);
                 Button(form, "Back").PerformClick(); Assert.Same(next, form.AcceptButton);
                 Assert.Equal(sizeBeforeNavigation, form.ClientSize);
@@ -244,14 +248,120 @@ public sealed class SetupRefinementTests
         }
     });
 
+    [Theory]
+    [InlineData("Compact Monitor")] [InlineData("Tray Icon")] [InlineData("Appearance")]
+    public Task RejectedPreferencesRestoreAuthoritativeControlsOnceAndCanRecover(string setting) => Sta(() =>
+    {
+        var preferences = new Preferences(); var reject = true; var writes = 0;
+        using var form = FormAt(SetupStep.Preferences, () => [], _ => { }, () => preferences,
+            requested => { writes++; if (!reject) preferences = requested; });
+        form.Show();
+        var appearance = Descendants(form).OfType<ComboBox>().Single();
+        var compact = Descendants(form).OfType<CheckBox>().Single(c => c.Text == "Compact Monitor");
+        var tray = Descendants(form).OfType<CheckBox>().Single(c => c.Text == "Tray Icon");
+        void Change()
+        {
+            if (setting == "Appearance") appearance.SelectedIndex = (int)Appearance.Dark;
+            else (setting == "Compact Monitor" ? compact : tray).Checked = false;
+        }
+        Change(); Assert.Equal(1, writes); Assert.Equal(new Preferences(), preferences);
+        Assert.True(compact.Checked); Assert.True(tray.Checked); Assert.Equal((int)Appearance.Light, appearance.SelectedIndex);
+        Assert.Contains(Labels(form), label => label.Visible && label.Text == "Settings could not be saved. Please try again.");
+        reject = false; Change(); Assert.Equal(2, writes);
+        Assert.Equal(setting != "Compact Monitor", preferences.CompactMonitor);
+        Assert.Equal(setting != "Tray Icon", preferences.TrayIcon);
+        Assert.Equal(setting == "Appearance" ? Appearance.Dark : Appearance.Light, preferences.Appearance);
+        Assert.DoesNotContain(Labels(form), label => label.Visible && label.Text.Contains("could not be saved", StringComparison.Ordinal));
+    });
+
+    [Fact]
+    public Task StartupRejectionAndUnavailableReadbackStayVisibleWithoutRepeatedWrites() => Sta(() =>
+    {
+        var startup = new RejectableStartup();
+        using var form = FormAt(SetupStep.Preferences, () => [], _ => { }, () => new(), _ => { }, startup,
+            () => { if (startup.TryRead(out var current)) startup.TrySet(!current); });
+        form.Show(); var launch = Descendants(form).OfType<CheckBox>().Single(c => c.Text == "Launch at Startup");
+        void Click() => typeof(CheckBox).GetMethod("OnClick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(launch, [EventArgs.Empty]);
+        Click(); Assert.Equal(1, startup.Writes); Assert.False(launch.Checked); Assert.False(startup.Enabled);
+        Assert.Contains(Labels(form), label => label.Visible && label.Text == "Startup setting could not be saved. Please try again.");
+        startup.Reject = false; Click(); Assert.Equal(2, startup.Writes); Assert.True(launch.Checked); Assert.True(startup.Enabled);
+        Assert.DoesNotContain(Labels(form), label => label.Visible && label.Text.Contains("could not be saved", StringComparison.Ordinal));
+        startup.BecomeUnavailable = true; Click(); Assert.Equal(3, startup.Writes); Assert.False(launch.Enabled);
+        Assert.False(launch.Checked);
+        Assert.Contains(Labels(form), label => label.Visible && label.Text == "Startup setting is unavailable. Please try again.");
+        form.RefreshStatuses(); Assert.Equal(3, startup.Writes);
+    });
+
+    [Fact]
+    public Task StartupPolicyTransitionPreservesEnabledAuthoritativeValueWhileDisablingControl() => Sta(() =>
+    {
+        var startup = new RejectableStartup { Reject = false, EnabledByPolicyAfterWrite = true };
+        using var form = FormAt(SetupStep.Preferences, () => [], _ => { }, () => new(), _ => { }, startup,
+            () => { if (startup.TryRead(out var current)) startup.TrySet(!current); });
+        form.Show(); var launch = Descendants(form).OfType<CheckBox>().Single(c => c.Text == "Launch at Startup");
+        Assert.False(launch.Checked); Assert.True(launch.Enabled);
+        typeof(CheckBox).GetMethod("OnClick", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.Invoke(launch, [EventArgs.Empty]);
+        Assert.Equal(1, startup.Writes); Assert.True(startup.Enabled); Assert.True(launch.Checked); Assert.False(launch.Enabled);
+        Assert.Contains(Labels(form), label => label.Visible && label.Text == "Startup setting is unavailable. Please try again.");
+    });
+
+    [Fact]
+    public Task VerificationAccessibilityFollowsReadinessAndRetainsSafeStaleDetails() => Sta(() =>
+    {
+        ProviderState[] states = [new("Codex", ProviderStatus.Error, Failure: FailureKind.Malformed), new("Claude Code", ProviderStatus.Unavailable, Enabled: false)];
+        using var form = FormAt(SetupStep.Verify, () => states, _ => { }, () => new(), _ => { });
+        form.Show(); var next = Assert.IsType<Button>(form.AcceptButton);
+        Assert.Equal("Finish Anyway", next.Text); Assert.Equal(next.Text, next.AccessibilityObject.Name);
+        var status = Labels(form).Single(label => label.AccessibleName == "Codex setup status");
+        Assert.Contains("Sign-in not verified", status.AccessibilityObject.Description);
+        Assert.Contains("Allowance format not supported", status.AccessibilityObject.Description);
+        var cached = Ready("Codex");
+        states[0] = cached with { Snapshot = cached.Snapshot! with { ObservedAt = DateTimeOffset.UtcNow.AddMinutes(-5), IsCached = true },
+            Failure = FailureKind.Network, Detail = "private@example.test" };
+        form.RefreshStatuses();
+        Assert.Equal("Continue", next.Text); Assert.Equal(next.Text, next.AccessibilityObject.Name);
+        Assert.Contains("Signed in", status.AccessibilityObject.Description); Assert.Contains("stale", status.AccessibilityObject.Description);
+        Assert.Contains("cached reading", status.AccessibilityObject.Description); Assert.Contains("last retrieval failed", status.AccessibilityObject.Description);
+        Assert.DoesNotContain("private@example.test", status.AccessibilityObject.Description);
+        states[0] = states[0] with { Status = ProviderStatus.Loading }; form.RefreshStatuses();
+        Assert.Equal("Checking…", status.Text); Assert.Contains("Signed in", status.AccessibilityObject.Description);
+        Assert.Contains("Checking allowances", status.AccessibilityObject.Description);
+        states[0] = states[0] with { Enabled = false }; form.RefreshStatuses();
+        Assert.Equal("Monitoring off", status.Text); Assert.Equal(status.Text, status.AccessibilityObject.Description);
+        Assert.Equal("Finish Anyway", next.AccessibilityObject.Name);
+    });
+
+    [Fact]
+    public Task CompletionDoesNotReadProviderStateAndRequiresSuccessfulSaveBeforeClosing() => Sta(() =>
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "Llumi-completion-fixture-" + Guid.NewGuid());
+        Directory.CreateDirectory(directory);
+        var blocker = Path.Combine(directory, "blocked"); File.WriteAllText(blocker, "fixture");
+        try
+        {
+            var completion = new SetupCompletionStore(Path.Combine(blocker, "setup.json"));
+            var flow = new SetupFlow(completion); while (flow.Step != SetupStep.Done) flow.Next();
+            var reads = 0; var checks = 0; var finished = 0;
+            using var form = new SetupForm(flow, () => { reads++; return []; }, _ => checks++, () => new(), _ => { }, new Startup(), () => { }, () => finished++);
+            form.Show(); var next = Assert.IsType<Button>(form.AcceptButton);
+            Assert.Equal("Start Llumi", next.AccessibilityObject.Name);
+            for (var pass = 0; pass < 3; pass++) form.RefreshStatuses();
+            Assert.Equal(0, reads); Assert.Equal(0, checks);
+            next.PerformClick(); Assert.False(completion.IsComplete()); Assert.Equal(0, finished); Assert.False(form.IsDisposed);
+            Assert.Contains(Labels(form), label => label.Visible && label.Text.Contains("Setup completion could not be saved", StringComparison.Ordinal));
+            File.Delete(blocker); next.PerformClick(); Assert.True(completion.IsComplete()); Assert.Equal(1, finished); Assert.True(form.IsDisposed);
+        }
+        finally { Directory.Delete(directory, true); }
+    });
+
     private static ProviderState Ready(string name) => new(name, ProviderStatus.Ready,
         new([new("five_hour", "synthetic", 20, DateTimeOffset.UtcNow.AddHours(5))], DateTimeOffset.UtcNow, "fixture"), Authentication: AuthenticationStatus.Verified);
     private static SetupForm FormAt(SetupStep step, Func<IReadOnlyList<ProviderState>> states, Action<string?> refresh,
-        Func<Preferences> preferences, Action<Preferences> save)
+        Func<Preferences> preferences, Action<Preferences> save, IStartupRegistration? startup = null, Action? toggleStartup = null)
     {
         var flow = new SetupFlow(new(Path.Combine(Path.GetTempPath(), "Llumi-setup-fixture-" + Guid.NewGuid(), "completion.json")));
         while (flow.Step != step) flow.Next();
-        return new(flow, states, refresh, preferences, save, new Startup(), () => { }, () => { });
+        return new(flow, states, refresh, preferences, save, startup ?? new Startup(), toggleStartup ?? (() => { }), () => { });
     }
     private static Button Button(Form form, string text) => Descendants(form).OfType<Button>().Single(b => b.Text == text);
     private static CheckBox Switch(Form form, string provider) => Descendants(form).OfType<CheckBox>().Single(c => c.AccessibleName == "Monitor " + provider);
@@ -261,6 +371,22 @@ public sealed class SetupRefinementTests
     {
         public bool TryRead(out bool enabled) { enabled = false; return true; }
         public bool TrySet(bool enabled) => true;
+    }
+    private sealed class RejectableStartup : IStartupRegistration
+    {
+        internal bool Enabled;
+        internal bool Reject = true;
+        internal bool Available = true;
+        internal bool BecomeUnavailable;
+        internal bool EnabledByPolicyAfterWrite;
+        internal int Writes;
+        public bool TryRead(out bool enabled) { enabled = Enabled; return Available; }
+        public bool TrySet(bool enabled)
+        {
+            Writes++; if (BecomeUnavailable) Available = false;
+            if (EnabledByPolicyAfterWrite) { Enabled = true; Available = false; return false; }
+            if (Reject) return false; Enabled = enabled; return true;
+        }
     }
     private static async Task Sta(Action action)
     {

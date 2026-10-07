@@ -102,6 +102,22 @@ public sealed class ProductPassTests : IDisposable
         Assert.Equal("verified", diagnostic.Authentication); Assert.NotEqual("available", diagnostic.Usage);
         Assert.NotEqual("Signed in", SetupDiagnostic.From(new("Claude", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "fixture"))).Status);
     }
+    [Theory]
+    [InlineData(FailureKind.Malformed, "unsupported-format")]
+    [InlineData(FailureKind.Unsupported, "unsupported-format")]
+    [InlineData(FailureKind.UnsupportedBilling, "unsupported-billing")]
+    [InlineData(FailureKind.Timeout, "unavailable")]
+    public void FailedChecksPreserveAllowanceStateWithoutGuessingSignIn(FailureKind failure, string usage)
+    {
+        var state = new ProviderState("Codex", ProviderStatus.Error, Failure: failure);
+        var diagnostic = SetupDiagnostic.From(state);
+        Assert.Equal(usage, diagnostic.Usage); Assert.Equal("unknown", diagnostic.Authentication);
+        Assert.NotEqual("Signed in", diagnostic.Status);
+        Assert.Equal("checking", SetupDiagnostic.From(state with { Status = ProviderStatus.Loading }).Usage);
+        Assert.Equal("off", SetupDiagnostic.From(state with { Enabled = false }).Usage);
+        var cached = State(new UsageWindow("five_hour", "fixture", 30, DateTimeOffset.UtcNow.AddHours(3))) with { Failure = failure };
+        Assert.Equal("stale", SetupDiagnostic.From(cached).Usage);
+    }
     [Fact]
     public void RetryCountdownUsesCollectorDeadlineAndDisabledProvidersCannotRetry()
     {
@@ -146,7 +162,7 @@ public sealed class SetupFormTests
             refreshes++; states = [new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "fixture"), Authentication: AuthenticationStatus.Verified)];
         }, () => new(), _ => { }, new Startup(), () => { }, () => { });
         form.Show(); form.RefreshStatuses();
-        Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text.Contains("Checking allowances"));
+        Assert.Contains(Descendants(form).OfType<Label>(), l => l.AccessibleName == "Codex setup status" && l.Text == "Checking…");
         Button(form, "Retry").PerformClick(); form.RefreshStatuses();
         Assert.Equal(1, refreshes);
         Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text.Contains("Signed in") && l.Text.Contains("Allowances not reported"));

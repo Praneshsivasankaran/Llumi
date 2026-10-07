@@ -6,7 +6,7 @@ public static class UsagePresentation
         provider.Equals("Claude Code", StringComparison.OrdinalIgnoreCase);
 
     public static UsageWindow[] Windows(ProviderState state) => !state.Enabled ? [] :
-        (state.Snapshot?.Windows ?? []).Where(w => w.IsSupported).GroupBy(w => w.Id, StringComparer.OrdinalIgnoreCase)
+        (state.Snapshot?.Windows ?? []).Where(w => w.IsSupported).GroupBy(w => w.Id, StringComparer.Ordinal)
         .Select(g => g.All(w => w == g.First()) ? g.First() : null).OfType<UsageWindow>()
         .OrderBy(w => w.Scope == UsageScope.General ? 0 : 1).ThenBy(Rank).ThenBy(w => w.DurationMinutes ?? long.MaxValue)
         .ThenBy(w => w.Bucket, StringComparer.Ordinal).ThenBy(w => w.Id, StringComparer.Ordinal).ToArray();

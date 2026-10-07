@@ -68,19 +68,22 @@ internal sealed record SetupDiagnostic(string Detected, string Authentication, s
             state.Authentication is AuthenticationStatus.Verified or AuthenticationStatus.SignedOut or AuthenticationStatus.UnsupportedBilling || state.Snapshot is not null ? "yes" : "unknown";
         if (state.Status == ProviderStatus.Loading) return new(detected, authentication, "checking", failure, "pending");
         if (state.IsStale(DateTimeOffset.UtcNow)) return new(detected, authentication, "stale", failure, "failure");
-        var usage = state.Failure == FailureKind.UnsupportedBilling ? "unsupported-billing" : state.Snapshot is null ? "unavailable" : state.Availability switch {
+        var usage = state.Failure == FailureKind.UnsupportedBilling ? "unsupported-billing" :
+            state.Failure is FailureKind.Malformed or FailureKind.Unsupported ? "unsupported-format" :
+            state.Snapshot is null ? "unavailable" : state.Availability switch {
             AllowanceAvailability.Reported => "available", AllowanceAvailability.NotReported => "not-reported",
             AllowanceAvailability.UnsupportedFormat => "unsupported-format", AllowanceAvailability.UnsupportedBilling => "unsupported-billing", _ => "unavailable" };
         return new(detected, authentication, usage, failure, state.Snapshot is not null && state.Failure == FailureKind.None ? "success" : "failure");
     }
-    internal string Status => Usage == "off" ? "Monitoring off" : Usage == "checking" ? "Checking…" :
-        Authentication == "verified" ? "Signed in" : Detected == "no" ? "Not installed" :
+    private string SignIn => Authentication == "verified" ? "Signed in" : Detected == "no" ? "Not installed" :
         Authentication == "signed-out" ? "Sign in required" : Authentication == "mode-detected" ? "Other billing mode detected" : "Sign-in not verified";
+    internal string Status => Usage == "off" ? "Monitoring off" : Usage == "checking" ? "Checking…" : SignIn;
     internal string Monitoring => Usage switch {
         "available" => "Available", "not-reported" => "Allowances not reported", "unsupported-format" => "Allowance format not supported",
         "unsupported-billing" => "This billing mode can’t be monitored", "stale" => "Last known allowances · stale",
         "checking" => "Checking allowances…", "off" => "Off", _ => "Allowances unavailable" };
-    internal string Summary => $"{Status}\nMonitoring: {Monitoring}";
+    internal string Description => Usage == "off" ? Status : $"{SignIn}\nMonitoring: {Monitoring}";
+    internal string Summary => Usage is "off" or "checking" ? Status : Description;
 }
 
 internal static class SetupRetryPresentation
@@ -89,15 +92,14 @@ internal static class SetupRetryPresentation
         (state.RetryAt is null || state.RetryAt <= now);
     internal static string? Message(ProviderState state, DateTimeOffset now)
     {
-        if (!state.Enabled) return null;
-        if (state.Status == ProviderStatus.Loading) return "Checking…";
+        if (!state.Enabled || state.Status == ProviderStatus.Loading) return null;
         var manual = state.RetryAt is { } retry && retry > now ? retry : (DateTimeOffset?)null;
         if (manual is { } embargo && state.Failure == FailureKind.RateLimited)
-            return "Rate limited. Retry " + When(embargo, now) + ".";
+            return "Rate limited · Retry " + When(embargo, now);
         if (state.AutomaticRetryAt is { } automatic && automatic > now)
-            return "Automatic retry available " + When(automatic, now) + ". " +
-                (manual is { } ready ? "Retry available " + When(ready, now) + "." : "You can retry now.");
-        return manual is { } next ? "Retry available " + When(next, now) + "." : null;
+            return "Automatic retry " + When(automatic, now) +
+                (manual is { } ready ? " · Retry " + When(ready, now) : "");
+        return manual is { } next ? "Retry " + When(next, now) : null;
     }
     private static string When(DateTimeOffset retry, DateTimeOffset now)
     {
