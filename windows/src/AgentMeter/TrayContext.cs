@@ -222,8 +222,8 @@ internal sealed class TrayContext : ApplicationContext
             // Moving the existing hidden HWND first lets Windows apply the destination DPI.
             monitor.Location = screen.WorkingArea.Location;
             monitor.Render(coordinator.States);
-            var location = MonitorPosition.Restore(saved, screen.DeviceName, screen.WorkingArea, monitor.Size, monitor.DeviceDpi);
-            monitor.ShowMonitor(location);
+            monitor.RestorePosition(saved, screen.DeviceName);
+            monitor.ShowMonitor(monitor.Location, monitor.SavedPosition);
             log.Write("panel.pinned");
         }
         catch (Win32Exception) { MonitorFailed(); }
@@ -256,8 +256,7 @@ internal sealed class TrayContext : ApplicationContext
     private void SavePosition()
     {
         if (!monitor.Visible || monitor.IsDisposed) return;
-        var screen = Screen.FromControl(monitor);
-        positions.Save(MonitorPosition.Capture(monitor.RestingLocation, screen.DeviceName, screen.WorkingArea, monitor.DeviceDpi));
+        positions.Save(monitor.SavedPosition);
     }
 
     internal void ResetMonitorPosition()
@@ -272,8 +271,7 @@ internal sealed class TrayContext : ApplicationContext
         {
             monitor.SetExpanded(false, false);
             monitor.Location = screen.WorkingArea.Location;
-            monitor.Location = MonitorPosition.Restore(position, screen.DeviceName, screen.WorkingArea, monitor.Size, monitor.DeviceDpi);
-            monitor.CommitPosition();
+            monitor.RestorePosition(position, screen.DeviceName);
         }
         catch (Win32Exception) { MonitorFailed(); }
     }
@@ -283,7 +281,15 @@ internal sealed class TrayContext : ApplicationContext
         var replacement = AppIcon.LoadTray(SystemInformation.SmallIconSize.Width);
         tray.Icon = replacement;
         trayIcon.Dispose(); trayIcon = replacement;
-        if (monitor.Visible) { monitor.KeepOnScreen(); SavePosition(); }
+        if (monitor.Visible)
+        {
+            var saved = monitor.SavedPosition;
+            var screen = Screen.AllScreens.FirstOrDefault(s => string.Equals(s.DeviceName, saved.Display, StringComparison.OrdinalIgnoreCase))
+                ?? Screen.FromControl(monitor);
+            monitor.Location = screen.WorkingArea.Location;
+            monitor.RestorePosition(saved, screen.DeviceName);
+            SavePosition();
+        }
         if (popup.Visible)
         {
             popup.Render(coordinator.States, coordinator.IsRefreshing, log.WriteFailed);

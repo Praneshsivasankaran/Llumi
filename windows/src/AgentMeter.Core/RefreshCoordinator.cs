@@ -18,7 +18,7 @@ public sealed class RefreshCoordinator
     {
         public ProviderState State = new(name, ProviderStatus.Loading);
         public bool Active;
-        public int Generation, Failures;
+        public int Generation, Failures, RateLimitFailures;
         public long? LastStart, LastReset;
         public Deadline? Background, Embargo;
         public CancellationTokenSource? Cancellation;
@@ -70,7 +70,7 @@ public sealed class RefreshCoordinator
             ++e.Generation; cancellation = e.Cancellation;
             e.State = new(name, ProviderStatus.Unavailable,
                 Failure: enabled && Left(e.Embargo) > TimeSpan.Zero ? FailureKind.RateLimited : FailureKind.None, Enabled: enabled);
-            // A toggle never shortens a provider rate-limit embargo.
+            // A toggle never shortens a provider rate-limit embargo or resets its escalation.
             e.Background = null; e.Failures = 0; e.LastReset = null;
         }
         try { cancellation?.Cancel(); } catch (ObjectDisposedException) { }
@@ -197,11 +197,19 @@ public sealed class RefreshCoordinator
                 e.Failures = success ? 0 : Math.Min(e.Failures + 1, 10);
                 var delay = success ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(Math.Min(900, 30 * Math.Pow(2, e.Failures - 1)));
                 e.Background = new(stamp, delay);
-                if (result.Failure == FailureKind.RateLimited || result.RetryAfter is not null)
+                if (result.Failure == FailureKind.RateLimited || result.RateLimitObserved || result.RetryAfter is not null)
                 {
-                    var requested = result.RetryAfter ?? delay;
+                    e.RateLimitFailures = Math.Min(e.RateLimitFailures + 1, 5);
+                    var fallback = TimeSpan.FromSeconds(Math.Min(900, 60 * Math.Pow(2, e.RateLimitFailures - 1)));
+                    var requested = result.RetryAfter is { } supplied && supplied > TimeSpan.Zero && supplied <= TimeSpan.FromDays(1)
+                        ? supplied : fallback;
                     var embargo = TimeSpan.FromSeconds(Math.Clamp(requested.TotalSeconds, 10, 86400));
                     e.Embargo = new(stamp, Max(Left(e.Embargo), embargo));
+                }
+                else if (success)
+                {
+                    e.RateLimitFailures = 0;
+                    e.Embargo = null;
                 }
             }
             log($"provider.{provider.Name}.{(success ? "succeeded" : "failed")}.{result.Failure}");

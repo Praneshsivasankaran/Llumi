@@ -34,13 +34,15 @@ the application output. Their packages retain their upstream licenses:
 [xUnit](https://github.com/xunit/xunit/blob/main/LICENSE) and
 [Visual Studio runner](https://github.com/xunit/visualstudio.xunit/blob/main/License.txt).
 
-Windows uses the same provider vectors as macOS: the OpenAI blossom from
+Windows uses the official OpenAI blossom from
 [official OpenAI artwork](https://cdn.openai.com/brand/OpenAI-Logos-2025.zip) and
-the [Claude mark](https://claude.ai/favicon.svg). Geometry is unchanged; foreground
-color follows the application appearance. These marks remain vendor property
-under their respective artwork and trademark terms, including
-[OpenAI's brand guidance](https://openai.com/brand/). The three ascending bars are
-original Llumi artwork. No external font files are bundled.
+the Claude Code pixel mascot from Anthropic's [Claude Code extension](https://marketplace.visualstudio.com/items?itemName=anthropic.claude-code),
+version 2.1.289, `extension/resources/clawd.svg`. Geometry is unchanged; the
+OpenAI blossom follows the surface appearance and the mascot retains its original
+color. Exact sources and hashes are recorded in the [Windows artwork provenance](docs/windows/PROVIDER-ARTWORK.md).
+These marks remain vendor property under their respective artwork and trademark
+terms, including [OpenAI's brand guidance](https://openai.com/brand/).
+The Llumi Raspberry gauge is original Llumi artwork. No external font files are bundled.
 
 The local build produces a per-file dependency inventory. That inventory and
 these notices do not constitute approval of a future binary: review the exact

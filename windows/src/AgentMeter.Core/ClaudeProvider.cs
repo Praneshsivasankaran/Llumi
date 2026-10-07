@@ -52,6 +52,7 @@ public sealed class ClaudeProvider : IUsageProvider
             return resolution.Result with
             {
                 RetryAfter = results.Select(r => r.Usage.RetryAfter).Where(d => d is not null).DefaultIfEmpty(resolution.Result.RetryAfter).Max(),
+                RateLimitObserved = results.Any(r => r.Usage.RateLimitObserved || r.Usage.Failure == FailureKind.RateLimited),
                 VerifiedBinding = resolution.Binding is { IsComplete: true } binding ? new AccountBinding(Convert.ToHexString(
                     SHA256.HashData(Encoding.UTF8.GetBytes(binding.AccountId + "\n" + binding.OrganizationId)))) : null,
                 Authentication = resolution.Binding is { IsComplete: true } ? AuthenticationStatus.Verified : resolution.Result.Failure switch

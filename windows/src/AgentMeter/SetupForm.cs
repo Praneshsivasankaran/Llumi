@@ -398,14 +398,23 @@ internal sealed class SetupForm : Form
     private static IEnumerable<Control> Descendants(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(Descendants(c)));
     internal void ApplyTheme()
     {
+        // Setup stays Light independently of the saved application appearance.
+        // Never apply the global palette here: Usage and the monitor may be open.
+        var background = Color.FromArgb(245, 245, 245);
+        var foreground = Color.FromArgb(28, 28, 28);
+        var buttonColor = Color.FromArgb(228, 231, 235);
         void Theme(Control root, Color background) {
-            if (root.Name == "setupCard") background = Palette.IsLight ? Color.White : Palette.Card;
-            root.BackColor = background; root.ForeColor = Palette.Foreground;
-            if (root is Button button) { button.BackColor = Palette.Card; Palette.StyleButton(button); }
-            if (root is LinkLabel link) { link.LinkColor = Palette.IsLight ? Color.FromArgb(0, 103, 192) : Palette.Accent;
+            if (root.Name == "setupCard") background = Color.White;
+            root.BackColor = background; root.ForeColor = foreground;
+            if (root is Button button) {
+                button.BackColor = buttonColor; button.FlatAppearance.BorderSize = 0;
+                button.FlatAppearance.MouseOverBackColor = Color.FromArgb(213, 220, 228);
+                button.FlatAppearance.MouseDownBackColor = Color.FromArgb(204, 210, 218);
+            }
+            if (root is LinkLabel link) { link.LinkColor = Color.FromArgb(0, 103, 192);
                 link.ActiveLinkColor = link.VisitedLinkColor = link.LinkColor; }
             foreach (Control child in root.Controls) Theme(child, background); }
-        Theme(this, Palette.Background);
+        Theme(this, background);
         next.BackColor = Color.FromArgb(0, 103, 192); next.ForeColor = Color.White;
         next.FlatAppearance.MouseOverBackColor = Color.FromArgb(0, 86, 160);
         next.FlatAppearance.MouseDownBackColor = Color.FromArgb(0, 70, 130);

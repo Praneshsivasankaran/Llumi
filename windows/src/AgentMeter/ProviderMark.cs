@@ -10,7 +10,7 @@ internal sealed class ProviderArtwork(string provider) : Control
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e); e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        ProviderMark.Draw(e.Graphics, provider, ClientRectangle, Palette.Foreground);
+        ProviderMark.Draw(e.Graphics, provider, ClientRectangle, ForeColor);
     }
 }
 

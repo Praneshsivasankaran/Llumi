@@ -53,8 +53,8 @@ public sealed class MonitorFormTests
         int S(int n) => (int)Math.Round(n * form.DeviceDpi / 96d);
         Assert.Equal(MonitorForm.TransparencyAllowed ? 242 : 255, image.GetPixel(S(8), S(50)).A);
         Assert.Equal(0, image.GetPixel(0, 0).A);
-        Assert.Equal(255, image.GetPixel(S(20), S(55)).A);
-        Assert.Equal(MonitorForm.Accent("Codex").ToArgb(), image.GetPixel(S(20), S(55)).ToArgb());
+        Assert.Equal(255, image.GetPixel(S(20), S(68)).A);
+        Assert.Equal(MonitorForm.Accent("Codex").ToArgb(), image.GetPixel(S(20), S(68)).ToArgb());
         Assert.True(form.Expanded);
         form.SetExpanded(false, false);
         Assert.Equal(MonitorForm.SizeForDpi(form.DeviceDpi), form.ClientSize);
@@ -201,15 +201,17 @@ public sealed class MonitorFormTests
     [Fact]
     public Task DragReleaseClampsPositionAndCommitsOnlyOnce() => RunSta(() =>
     {
-        using var form = NewForm();
+        var pointer = new Point(50, 50);
+        using var form = new MonitorForm(["Codex", "Claude"], SystemIcons.Application, pointerPosition: () => pointer);
         form.ShowMonitor(Screen.PrimaryScreen!.WorkingArea.Location + new Size(24, 24));
         var commits = 0;
         form.PositionCommitted += () => commits++;
         Invoke(form, "OnMouseDown", new MouseEventArgs(MouseButtons.Left, 1, 50, 18, 0));
         Assert.True(form.Capture);
-        // Position is changed by the application-level fixture; no desktop input is injected.
+        // A synthetic pointer drives the native event handlers without desktop input.
         var area = Screen.FromControl(form).WorkingArea;
-        form.Location = new Point(area.Right - 4, area.Bottom - 4);
+        pointer = new Point(area.Right + 100, area.Bottom + 100);
+        Invoke(form, "OnMouseMove", new MouseEventArgs(MouseButtons.Left, 0, 50, 18, 0));
         Invoke(form, "OnMouseUp", new MouseEventArgs(MouseButtons.Left, 1, 50, 18, 0));
         Assert.False(form.Capture); Assert.Equal(1, commits);
         Assert.True(Screen.FromControl(form).WorkingArea.Contains(form.Bounds));
@@ -218,20 +220,30 @@ public sealed class MonitorFormTests
     [Fact]
     public Task NativeRepaintsAndPreviewDisposalDoNotLeakGdiObjects() => RunSta(() =>
     {
-        using var form = NewForm();
+        using var form = NewForm(); form.MotionAllowed = () => false;
         form.Render(States(), Now);
         form.ShowMonitor(Screen.PrimaryScreen!.WorkingArea.Location + new Size(24, 24));
-        var process = System.Diagnostics.Process.GetCurrentProcess();
-        var before = GetGuiResources(process.Handle, 0);
-        for (var i = 0; i < 50; i++)
+        void Repaint(int i)
         {
+            form.SetExpanded(i % 2 == 0, false);
             using var image = form.CreatePreviewBitmap();
             var states = States();
             states[0] = states[0] with { Snapshot = states[0].Snapshot! with { Windows = [new("codex/primary", "5 hours", i, Now.AddHours(5), 300)] } };
             form.Render(states, Now);
         }
+        // Warm both render paths and drain finalizers from earlier UI fixtures before
+        // taking this process-wide counter. Do not collect after the measured loop:
+        // relying on finalizers to release our repaint resources must still fail.
+        for (var i = 0; i < 10; i++) Repaint(i);
+        Application.DoEvents();
+        GC.Collect(); GC.WaitForPendingFinalizers(); GC.Collect();
+        using var process = System.Diagnostics.Process.GetCurrentProcess();
+        var before = GetGuiResources(process.Handle, 0);
+        Assert.True(before > 0, "The process GDI counter must be available.");
+        for (var i = 0; i < 50; i++) Repaint(i);
         var after = GetGuiResources(process.Handle, 0);
-        Assert.InRange((long)after - before, -5, 5);
+        Assert.True(after > 0, "The process GDI counter must remain available.");
+        Assert.True((long)after - before <= 5, $"Repaints retained {(long)after - before} extra GDI objects.");
     });
 
     [Fact]

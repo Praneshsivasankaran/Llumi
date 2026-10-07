@@ -9,8 +9,8 @@ public sealed class MonitorOverflowTests
     private static readonly DateTimeOffset Now = new(2026, 10, 7, 10, 0, 0, TimeSpan.Zero);
 
     [Theory]
-    [InlineData(96, 248, 3, 3, false)]
-    [InlineData(96, 246, 20, 2, true)]
+    [InlineData(96, 286, 3, 3, false)]
+    [InlineData(96, 246, 20, 1, true)]
     [InlineData(144, 300, 20, 1, true)]
     [InlineData(192, 416, 20, 1, true)]
     [InlineData(192, 128, 20, 0, true)]
@@ -20,10 +20,15 @@ public sealed class MonitorOverflowTests
         var layout = MonitorForm.DetailLayout(dpi, pixels, count); var height = pixels * 96f / dpi;
         Assert.Equal(visible, layout.VisibleRows); Assert.Equal(overflow, layout.Overflow);
         for (var index = 0; index < visible; index++)
-            Assert.True(65 + index * 54 + 51 <= layout.StatusY);
+            Assert.True(layout.AllowanceY + index * 54 + 51 <= layout.StatusY);
         if (!overflow) return;
         Assert.True(layout.UsageY >= 0); Assert.True(layout.UsageY + layout.FooterHeight <= height);
-        if (!layout.CombinedStatus) Assert.True(layout.StatusY + 19 <= layout.UsageY);
+        if (!layout.CombinedStatus)
+        {
+            Assert.True(layout.StatusY + 19 <= layout.ObservationY);
+            Assert.True(layout.ObservationY + 19 <= layout.UsageY);
+            Assert.True(layout.NameY >= 0);
+        }
         if (height < 55) Assert.False(layout.HeaderVisible);
     }
 
@@ -48,7 +53,7 @@ public sealed class MonitorOverflowTests
         var states = DenseStates(); form.Render(states, Now); form.ShowMonitor(area.Location); form.SetExpanded(true, false);
         Assert.True(area.Contains(form.Bounds)); Assert.False(form.ShowInTaskbar); Assert.False(form.IsAnimating);
         var layout = form.ExpandedLayout;
-        Assert.True(layout.Overflow); Assert.Equal(veryShort ? 0 : 2, layout.VisibleRows);
+        Assert.True(layout.Overflow); Assert.Equal(veryShort ? 0 : 1, layout.VisibleRows);
         Assert.Equal(new[] { layout.VisibleRows, layout.VisibleRows }, form.ExpandedAllowanceCounts);
         foreach (var index in new[] { 0, 1 })
         {
@@ -68,11 +73,11 @@ public sealed class MonitorOverflowTests
             Directory.CreateDirectory(output);
             image.Save(Path.Combine(output, veryShort ? "monitor-overflow-short.png" : "monitor-overflow-dense.png"));
         }
-        var few = states.Select(s => s with { Snapshot = s.Snapshot! with { Windows = s.Snapshot.Windows.Take(2).ToArray() } }).ToArray();
+        var few = states.Select(s => s with { Snapshot = s.Snapshot! with { Windows = s.Snapshot.Windows.Take(1).ToArray() } }).ToArray();
         if (!veryShort)
         {
             form.Render(few, Now); Assert.False(form.ExpandedLayout.Overflow);
-            Assert.Equal(new[] { 2, 2 }, form.ExpandedAllowanceCounts);
+            Assert.Equal(new[] { 1, 1 }, form.ExpandedAllowanceCounts);
             Assert.DoesNotContain("Open Usage for all limits", form.AccessibilityObject.GetChild(0)!.Name!);
         }
     });

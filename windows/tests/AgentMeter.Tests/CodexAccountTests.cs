@@ -54,21 +54,25 @@ public sealed class CodexAccountTests
     }
 
     [Theory]
-    [InlineData("signed-out")]
-    [InlineData("different-account")]
-    [InlineData("failed-auth")]
-    public async Task RateEmbargoSurvivesFailedPostQueryContinuityCheck(string change)
+    [InlineData("signed-out", true)]
+    [InlineData("different-account", true)]
+    [InlineData("failed-auth", true)]
+    [InlineData("signed-out", false)]
+    [InlineData("different-account", false)]
+    [InlineData("failed-auth", false)]
+    public async Task RateEmbargoSurvivesFailedPostQueryContinuityCheck(string change, bool suppliedDuration)
     {
         var session = new Session
         {
-            QuotaFailure = FailureKind.RateLimited, QuotaRetry = TimeSpan.FromMinutes(4),
+            QuotaFailure = FailureKind.RateLimited, QuotaRetry = suppliedDuration ? TimeSpan.FromMinutes(4) : null,
             After = change == "signed-out" ? Json("""{"account":null}""") : Account(Second),
             AfterFailure = change == "failed-auth" ? FailureKind.Network : null
         };
         var result = await Provider(() => session).QueryAsync(default);
         Assert.Null(result.Snapshot);
         Assert.Null(result.VerifiedBinding);
-        Assert.Equal(TimeSpan.FromMinutes(4), result.RetryAfter);
+        Assert.Equal(suppliedDuration ? TimeSpan.FromMinutes(4) : (TimeSpan?)null, result.RetryAfter);
+        Assert.True(result.RateLimitObserved);
         Assert.Equal(change switch { "signed-out" => FailureKind.LoggedOut, "failed-auth" => FailureKind.Network, _ => FailureKind.AccountChanged }, result.Failure);
     }
 
@@ -87,6 +91,22 @@ public sealed class CodexAccountTests
         var result = await Provider(() => session).QueryAsync(CancellationToken.None);
         Assert.Null(result.Snapshot);
         Assert.NotEqual(FailureKind.None, result.Failure);
+    }
+
+    [Theory]
+    [InlineData(30)]
+    [InlineData(480)]
+    public async Task PostQueryRateLimitNeverShortensQuotaEmbargo(int laterSeconds)
+    {
+        var session = new Session
+        {
+            QuotaFailure = FailureKind.RateLimited, QuotaRetry = TimeSpan.FromMinutes(4),
+            AfterFailure = FailureKind.RateLimited, AfterRetry = TimeSpan.FromSeconds(laterSeconds)
+        };
+        var result = await Provider(() => session).QueryAsync(default);
+        Assert.Equal(TimeSpan.FromSeconds(Math.Max(240, laterSeconds)), result.RetryAfter);
+        Assert.True(result.RateLimitObserved);
+        Assert.Null(result.VerifiedBinding); Assert.Null(result.Snapshot);
     }
 
     [Theory]
@@ -160,6 +180,7 @@ public sealed class CodexAccountTests
         public FailureKind? AccountFailure { get; init; }
         public FailureKind? AfterFailure { get; init; }
         public TimeSpan? QuotaRetry { get; init; }
+        public TimeSpan? AfterRetry { get; init; }
         public string? Version { get; private set; }
         public List<string> Methods { get; } = [];
         public bool Disposed { get; private set; }
@@ -179,7 +200,7 @@ public sealed class CodexAccountTests
             cancellationToken.ThrowIfCancellationRequested();
             if (id == 2 && AccountFailure is { } auth) throw new ProviderQueryException(auth);
             if (id == 3 && QuotaFailure is { } quota) throw new ProviderQueryException(quota, QuotaRetry);
-            if (id == 4 && AfterFailure is { } after) throw new ProviderQueryException(after);
+            if (id == 4 && AfterFailure is { } after) throw new ProviderQueryException(after, AfterRetry);
             return Task.FromResult(id switch { 2 => Before, 3 => Quota, 4 => After, _ => Json("{}") });
         }
         public ValueTask DisposeAsync() { Disposed = true; return ValueTask.CompletedTask; }

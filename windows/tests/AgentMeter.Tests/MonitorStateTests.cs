@@ -81,7 +81,7 @@ public sealed class MonitorStateTests
     public void LogicalPositionRestoresAcrossDpi(int dpi)
     {
         var work = new Rectangle(-2400, -100, 2400, 1500);
-        var saved = MonitorPosition.Capture(new Point(-2200, 100), "second", work, 96);
+        var saved = new MonitorPosition(1, "second", 200, 200);
         var restored = MonitorPosition.Restore(saved, "second", work, new Size(350 * dpi / 96, 112 * dpi / 96), dpi);
         Assert.Equal(new Point(work.Left + 200 * dpi / 96, work.Top + 200 * dpi / 96), restored);
     }
@@ -125,6 +125,31 @@ public sealed class MonitorStateTests
         Assert.Single(Directory.GetFiles(directory.Path));
         Assert.DoesNotContain("pinned", File.ReadAllText(path), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("provider", File.ReadAllText(path), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(96)] [InlineData(144)] [InlineData(192)]
+    public void NormalizedAnchorPreservesRelativePositionAcrossResolutionAndDpi(int dpi)
+    {
+        var oldWork = new Rectangle(-2400, -100, 2400, 1500);
+        var saved = MonitorPosition.Capture(new Point(-1900, 500), "second", oldWork, new Size(200, 34));
+        Assert.Equal(2, saved.Version); Assert.Equal(.25, saved.Left); Assert.Equal(.4, saved.Top);
+        var newWork = new Rectangle(-1600, 80, 1600, 1000);
+        var size = MonitorForm.SizeForDpi(dpi);
+        var restored = MonitorPosition.Restore(saved, "second", newWork, size, dpi);
+        Assert.InRange(Math.Abs(restored.X + size.Width / 2d - (-1200)), 0, .5);
+        Assert.Equal(480, restored.Y);
+    }
+
+    [Fact]
+    public void NormalizedPositionRoundTripsWhileLegacySchemaStillLoads()
+    {
+        using var directory = new TempDirectory(); var path = Path.Combine(directory.Path, "position.json");
+        var store = new MonitorPositionStore(path);
+        var saved = MonitorPosition.Capture(new(100, 80), "screen", new(0, 0, 1000, 800), new(200, 34));
+        Assert.True(store.Save(saved)); Assert.Equal(saved, store.Load());
+        File.WriteAllText(path, """{"Version":1,"Display":"screen","Left":12.5,"Top":18}""");
+        Assert.Equal(new MonitorPosition(1, "screen", 12.5, 18), store.Load());
     }
 
     [Theory]

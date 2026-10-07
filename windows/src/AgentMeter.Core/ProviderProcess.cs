@@ -7,7 +7,9 @@ namespace AgentMeter.Core;
 public sealed class ProviderQueryException(FailureKind failure, TimeSpan? retryAfter = null) : Exception("Provider query failed")
 {
     public FailureKind Failure { get; } = failure;
-    public TimeSpan? RetryAfter { get; } = retryAfter ?? (failure == FailureKind.RateLimited ? TimeSpan.FromSeconds(30) : null);
+    // No server duration is different from an explicit duration. The scheduler
+    // owns the escalating fallback, including when authentication changes later.
+    public TimeSpan? RetryAfter { get; } = retryAfter;
 }
 
 public interface IProviderRpcProcess : IAsyncDisposable
@@ -132,7 +134,7 @@ public sealed class ProviderProcess : IProviderRpcProcess
             if (message.TryGetProperty("error", out var error) && error.ValueKind != JsonValueKind.Null)
             {
                 var code = error.ValueKind == JsonValueKind.Object && error.TryGetProperty("code", out var property) && property.TryGetInt32Safe(out var number) ? number : 0;
-                var rateLimited = code is 429 or -32005;
+                var rateLimited = code is 429 or -32005 or -32001;
                 throw new ProviderQueryException(rateLimited ? FailureKind.RateLimited :
                     code is -32601 or -32602 ? FailureKind.Unsupported : FailureKind.Network,
                     rateLimited ? RetryDelay(error, ClaudeControlTransport.Get(error, "data")) : null);

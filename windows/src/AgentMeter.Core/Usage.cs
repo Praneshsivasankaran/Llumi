@@ -53,6 +53,8 @@ public sealed record ProviderResult(UsageSnapshot? Snapshot, FailureKind Failure
     [JsonIgnore] public AccountBinding? VerifiedBinding { get; init; }
     public AuthenticationStatus Authentication { get; init; } = AuthenticationStatus.Unknown;
     [JsonIgnore] public TimeSpan? RetryAfter { get; init; }
+    // Preserve a throttle observed before a subsequent authentication failure.
+    [JsonIgnore] public bool RateLimitObserved { get; init; }
     public static ProviderResult Fail(FailureKind kind, string? safeDetail = null) => new(null, kind, safeDetail);
     public override string ToString() => $"Provider result: {Failure}; {Authentication}";
 }

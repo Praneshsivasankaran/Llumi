@@ -52,6 +52,7 @@ internal sealed class Review : Form
         monitor = new MonitorForm(["Codex", "Claude Code"], icon) { AllowExit = true, MotionAllowed = () => false };
         Button("Usage", () => { usage.Show(); usage.ShowUsage(); usage.Activate(); });
         Button("Settings", () => { usage.Show(); usage.ShowSettings(); usage.Activate(); });
+        Button("About", () => { usage.Show(); usage.ShowAbout(); usage.Activate(); });
         Button("Setup", ShowSetup);
         usage.PreferencesChanged += value => { preferences = value; Apply(); };
         usage.RefreshRequested += Apply;
@@ -74,9 +75,8 @@ internal sealed class Review : Form
     {
         var screen = monitor.Visible ? Screen.FromControl(monitor) : Screen.PrimaryScreen!;
         monitor.SetExpanded(false, false);
-        monitor.Location = MonitorPosition.Restore(new(1, screen.DeviceName, 20, 20), screen.DeviceName,
-            screen.WorkingArea, monitor.Size, monitor.DeviceDpi);
-        monitor.KeepOnScreen(); monitor.UpdateSurface();
+        monitor.RestorePosition(new(1, screen.DeviceName, 20, 20), screen.DeviceName);
+        monitor.UpdateSurface();
     }
     private void Apply()
     {
@@ -130,6 +130,8 @@ internal sealed class Review : Form
                 monitor.SetExpanded(false, false); using var compact = monitor.CreatePreviewBitmap(); compact.Save(Path.Combine(directory, "monitor-compact.png"), ImageFormat.Png);
                 CaptureOverflowMonitors(directory);
                 usage.ShowSettings(); Application.DoEvents(); Save(usage, Path.Combine(directory, "settings.png"));
+                usage.ShowAbout(); Application.DoEvents(); Save(usage, Path.Combine(directory, "about.png"));
+                usage.ShowReleaseNotes(); Application.DoEvents(); Save(usage, Path.Combine(directory, "release-notes.png"));
                 CaptureSetupSteps(directory);
                 theme.SelectedIndex = 1; Apply(); usage.ShowUsage(); Application.DoEvents(); Save(usage, Path.Combine(directory, "usage-dark.png")); theme.SelectedIndex = 0;
             }
@@ -184,7 +186,7 @@ internal sealed class Review : Form
                 if (index == 2)
                 {
                     Palette.Apply(AppAppearance.Dark); form.ApplyTheme(); Application.DoEvents();
-                    Save(form, Path.Combine(directory, "setup-codex-dark.png"));
+                    Save(form, Path.Combine(directory, "setup-codex-with-dark-app.png"));
                     Palette.Apply(preferences.Appearance); form.ApplyTheme(); Application.DoEvents();
                 }
             }
@@ -193,9 +195,9 @@ internal sealed class Review : Form
                 Save(form, Path.Combine(directory, "setup-welcome.png"));
                 var originalSize = form.ClientSize;
                 Palette.Apply(AppAppearance.Dark); form.ApplyTheme(); Application.DoEvents();
-                Save(form, Path.Combine(directory, "setup-welcome-dark.png"));
+                Save(form, Path.Combine(directory, "setup-welcome-with-dark-app.png"));
                 form.ClientSize = new Size(544, 442); Application.DoEvents();
-                Save(form, Path.Combine(directory, "setup-welcome-minimum-dark.png"));
+                Save(form, Path.Combine(directory, "setup-welcome-minimum-with-dark-app.png"));
                 form.ClientSize = originalSize; Palette.Apply(preferences.Appearance); form.ApplyTheme(); Application.DoEvents();
             }
             if (flow.Step == SetupStep.Verify)

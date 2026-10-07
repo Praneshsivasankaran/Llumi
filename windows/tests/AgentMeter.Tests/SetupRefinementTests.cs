@@ -6,6 +6,81 @@ namespace AgentMeter.Tests;
 public sealed class SetupRefinementTests
 {
     [Theory]
+    [InlineData(0, false)] [InlineData(0, true)] [InlineData(2, false)] [InlineData(2, true)]
+    public Task ReopenedSetupStaysLightAtEveryStepWithoutChangingSavedOrOtherWindowAppearance(int appearance, bool systemLight) => Sta(() =>
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "Llumi-setup-theme-fixture-" + Guid.NewGuid());
+        try
+        {
+            var path = Path.Combine(directory, "preferences.json"); var store = new PreferenceStore(path);
+            var choice = new Preferences(Appearance: (Appearance)appearance); Assert.True(store.Save(choice));
+            var original = File.ReadAllText(path); var saves = 0;
+            Palette.Apply(choice.Appearance, systemLight);
+            var paletteBefore = (Palette.IsLight, Palette.Background, Palette.Foreground, Palette.Card, Palette.Secondary,
+                Palette.Border, Palette.Muted, Palette.Track, Palette.Live, Palette.Warning);
+            using var icon = AppIcon.Load();
+            using var usage = new UsageForm(["Codex", "Claude Code"], icon);
+            usage.SetPreferences(choice); usage.Show();
+            using var monitor = new MonitorForm(["Codex", "Claude Code"], icon) { MotionAllowed = () => false };
+            monitor.Render([Ready("Codex"), Ready("Claude Code")]);
+            Color MonitorBackground()
+            {
+                using var bitmap = monitor.CreatePreviewBitmap();
+                return bitmap.GetPixel(bitmap.Width / 2, bitmap.Height - Math.Max(4, monitor.DeviceDpi / 24));
+            }
+            var monitorBefore = MonitorBackground(); var appBackground = usage.BackColor;
+            using var form = FormAt(SetupStep.Welcome, () => [Ready("Codex"), Ready("Claude Code")], _ => { }, store.Load, _ => saves++);
+            form.Show();
+            void AssertUnchanged()
+            {
+                form.ApplyTheme();
+                Assert.Equal(Color.FromArgb(245, 245, 245), form.BackColor);
+                Assert.Equal(Color.FromArgb(28, 28, 28), form.ForeColor);
+                Assert.All(Descendants(form).Where(c => c.Visible && c is not System.Windows.Forms.Button), c => Assert.Equal(form.ForeColor, c.ForeColor));
+                Assert.All(Descendants(form).OfType<FlowLayoutPanel>().Where(c => c.Name == "setupCard"), c => Assert.Equal(Color.White, c.BackColor));
+                Assert.All(Descendants(form).OfType<ProviderArtwork>(), artwork => Assert.Equal(form.ForeColor, artwork.ForeColor));
+                Assert.Equal(paletteBefore, (Palette.IsLight, Palette.Background, Palette.Foreground, Palette.Card, Palette.Secondary,
+                    Palette.Border, Palette.Muted, Palette.Track, Palette.Live, Palette.Warning));
+                Assert.Equal(choice, store.Load()); Assert.Equal(original, File.ReadAllText(path)); Assert.Equal(0, saves);
+                usage.ApplyTheme(); monitor.UpdateSurface();
+                Assert.Equal(appBackground, usage.BackColor); Assert.Equal(monitorBefore, MonitorBackground());
+            }
+            for (var step = 0; step < 7; step++)
+            {
+                AssertUnchanged();
+                if ((SetupStep)step == SetupStep.Preferences)
+                    Assert.Equal(appearance, Descendants(form).OfType<ComboBox>().Single().SelectedIndex);
+                if (step < 6) Assert.IsType<Button>(form.AcceptButton).PerformClick();
+            }
+            for (var step = 5; step >= 0; step--) { Button(form, "Back").PerformClick(); AssertUnchanged(); }
+        }
+        finally { Palette.Apply(Appearance.System); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
+    });
+
+    [Fact]
+    public Task ExplicitAppearanceChangesFromSetupAffectTheAppWhileSetupRemainsLight() => Sta(() =>
+    {
+        try
+        {
+            var saved = new Preferences(); Palette.Apply(saved.Appearance);
+            using var usage = new UsageForm(["Codex"], SystemIcons.Application); usage.Show();
+            using var form = FormAt(SetupStep.Preferences, () => [], _ => { }, () => saved,
+                requested => { saved = requested; Palette.Apply(saved.Appearance, false); usage.SetPreferences(saved); });
+            form.Show(); var picker = Descendants(form).OfType<ComboBox>().Single();
+            foreach (var appearance in new[] { Appearance.Dark, Appearance.System, Appearance.Light })
+            {
+                picker.SelectedIndex = (int)appearance;
+                Assert.Equal(appearance, saved.Appearance);
+                Assert.Equal(appearance == Appearance.Light, Palette.IsLight);
+                Assert.Equal(Palette.Background, usage.BackColor);
+                Assert.Equal(Color.FromArgb(245, 245, 245), form.BackColor);
+                Assert.Equal(Color.FromArgb(28, 28, 28), form.ForeColor);
+            }
+        }
+        finally { Palette.Apply(Appearance.System); }
+    });
+
+    [Theory]
     [InlineData(0)] [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)] [InlineData(5)] [InlineData(6)]
     public Task InitialWindowUsesScaledPreferredSizeAndFitsWorkAreaAtEveryStep(int step) => Sta(() =>
     {

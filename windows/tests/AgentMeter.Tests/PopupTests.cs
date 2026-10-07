@@ -494,7 +494,7 @@ public sealed class PopupTests
             var measured = TextRenderer.MeasureText(graphics, label.Text, label.Font,
                 new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
             Assert.True(measured.Width <= label.ClientSize.Width,
-                $"Label '{label.Text}' requires {measured.Width}px, has {label.ClientSize.Width}px.");
+                $"Label '{label.Text}' in {label.Parent?.Name}/{label.Parent?.GetType().Name} at {label.DeviceDpi} DPI requires {measured.Width}px, has {label.ClientSize.Width}px.");
             Assert.True(measured.Height <= label.ClientSize.Height,
                 $"Label '{label.Text}' requires {measured.Height}px height, has {label.ClientSize.Height}px.");
             Assert.True(label.Parent!.ClientRectangle.Contains(label.Bounds),

@@ -21,6 +21,7 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets/Llumi.ico" />
     <EmbeddedResource Include="Assets/*.svg" />
+    <EmbeddedResource Include="../../../site/windows-2.1.3-preview.json" LogicalName="AgentMeter.ReleaseNotes.json" />
     <ProjectReference Include="../AgentMeter.Core/AgentMeter.Core.csproj" />
   </ItemGroup>
 </Project>

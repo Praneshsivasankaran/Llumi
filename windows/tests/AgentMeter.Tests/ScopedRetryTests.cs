@@ -241,6 +241,81 @@ public sealed class ScopedRetryTests
         Assert.Equal(FailureKind.Network, coordinator.States[0].Failure);
     }
 
+    [Fact]
+    public async Task MissingRateLimitDurationEscalatesAcrossManualRetryToggleAndSleepAndCapsAtFifteenMinutes()
+    {
+        var clock = new Clock();
+        var provider = new Provider("Codex", _ => Task.FromResult(ProviderResult.Fail(FailureKind.RateLimited)));
+        var coordinator = new RefreshCoordinator([provider], clock: clock);
+        var delays = new[] { 60, 120, 240, 480, 900, 900, 900 };
+        foreach (var delay in delays)
+        {
+            Assert.True(await coordinator.RefreshAsync());
+            Assert.Equal(clock.UtcNow.AddSeconds(delay), coordinator.States[0].RetryAt);
+            coordinator.SetEnabled("Codex", false); coordinator.SetEnabled("Codex", true);
+            coordinator.Suspend(); coordinator.Resume();
+            clock.UtcNow += TimeSpan.FromDays(1); // Wall time cannot expire a monotonic embargo.
+            clock.Advance(delay - 1);
+            foreach (var reason in Enum.GetValues<RefreshReason>())
+                Assert.False(await coordinator.RefreshAsync(reason: reason));
+            clock.Advance(1);
+            Assert.Null(coordinator.States[0].RetryAt);
+        }
+        Assert.Equal(delays.Length, provider.Calls);
+    }
+
+    [Fact]
+    public async Task ExplicitRateLimitDurationTakesPrecedenceAndSuccessfulCheckResetsFallback()
+    {
+        var clock = new Clock(); var result = ProviderResult.Fail(FailureKind.RateLimited);
+        var provider = new Provider("Codex", _ => Task.FromResult(result));
+        var coordinator = new RefreshCoordinator([provider], clock: clock);
+        await coordinator.RefreshAsync(); clock.Advance(60);
+        result = result with { RetryAfter = TimeSpan.FromHours(1) };
+        Assert.True(await coordinator.RefreshAsync());
+        Assert.Equal(clock.UtcNow.AddHours(1), coordinator.States[0].RetryAt);
+        clock.Advance(3599); Assert.False(await coordinator.RefreshAsync()); clock.Advance(1);
+        result = Good(clock);
+        Assert.True(await coordinator.RefreshAsync());
+        Assert.Null(coordinator.States[0].AutomaticRetryAt);
+        clock.Advance(10);
+        Assert.Null(coordinator.States[0].RetryAt);
+        result = ProviderResult.Fail(FailureKind.RateLimited);
+        Assert.True(await coordinator.RefreshAsync());
+        Assert.Equal(clock.UtcNow.AddSeconds(60), coordinator.States[0].RetryAt);
+    }
+
+    [Fact]
+    public async Task GenericFailureDoesNotResetAnUnrecoveredRateLimitSequence()
+    {
+        var clock = new Clock(); var result = ProviderResult.Fail(FailureKind.RateLimited);
+        var coordinator = new RefreshCoordinator([new Provider("Codex", _ => Task.FromResult(result))], clock: clock);
+        await coordinator.RefreshAsync(); clock.Advance(60);
+        result = ProviderResult.Fail(FailureKind.Network);
+        Assert.True(await coordinator.RefreshAsync()); clock.Advance(10);
+        result = ProviderResult.Fail(FailureKind.RateLimited);
+        Assert.True(await coordinator.RefreshAsync());
+        Assert.Equal(clock.UtcNow.AddSeconds(120), coordinator.States[0].RetryAt);
+    }
+
+    [Theory]
+    [InlineData(FailureKind.LoggedOut)]
+    [InlineData(FailureKind.AccountChanged)]
+    [InlineData(FailureKind.Network)]
+    public async Task LostAuthenticationStillProtectsAnObservedRateLimitWithoutServerDuration(FailureKind failure)
+    {
+        var clock = new Clock();
+        var result = ProviderResult.Fail(failure) with { RateLimitObserved = true };
+        var coordinator = new RefreshCoordinator([new Provider("Codex", _ => Task.FromResult(result))], clock: clock);
+        await coordinator.RefreshAsync();
+        Assert.Equal(failure, coordinator.States[0].Failure);
+        Assert.Null(coordinator.States[0].Snapshot);
+        Assert.Equal(clock.UtcNow.AddSeconds(60), coordinator.States[0].RetryAt);
+        clock.Advance(59); Assert.False(await coordinator.RefreshAsync());
+        clock.Advance(1); Assert.True(await coordinator.RefreshAsync());
+        Assert.Equal(clock.UtcNow.AddSeconds(120), coordinator.States[0].RetryAt);
+    }
+
     private sealed class Clock : TimeProvider
     {
         public DateTimeOffset UtcNow { get; set; } = Now;

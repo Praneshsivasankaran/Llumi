@@ -35,6 +35,7 @@ public sealed class CodexProvider : IUsageProvider
         deadline.CancelAfter(timeout);
         string? verifiedBinding = null;
         TimeSpan? rateEmbargo = null;
+        var rateLimitObserved = false;
         ProviderResult result;
         try
         {
@@ -56,15 +57,17 @@ public sealed class CodexProvider : IUsageProvider
             }
             catch (ProviderQueryException error)
             {
-                if (error.Failure == FailureKind.RateLimited) rateEmbargo = error.RetryAfter;
+                if (error.Failure == FailureKind.RateLimited) { rateLimitObserved = true; rateEmbargo = error.RetryAfter; }
                 usage = ProviderResult.Fail(error.Failure) with { RetryAfter = error.RetryAfter };
             }
             // Revalidate within this same session, including after a rate-limit RPC error.
             // An account switch must never attach another account's quota to this observation.
             var after = await ReadAccountAsync(process, 4, token).ConfigureAwait(false);
-            if (after.Failure != FailureKind.None) return Complete(ProviderResult.Fail(after.Failure) with { RetryAfter = rateEmbargo }, null);
+            if (after.Failure != FailureKind.None) return Complete(ProviderResult.Fail(after.Failure) with
+                { RetryAfter = rateEmbargo, RateLimitObserved = rateLimitObserved }, null);
             if (before.Binding != after.Binding)
-                return Complete(ProviderResult.Fail(FailureKind.AccountChanged) with { RetryAfter = rateEmbargo }, null);
+                return Complete(ProviderResult.Fail(FailureKind.AccountChanged) with
+                    { RetryAfter = rateEmbargo, RateLimitObserved = rateLimitObserved }, null);
             verifiedBinding = after.Binding;
             result = usage;
         }
@@ -77,7 +80,9 @@ public sealed class CodexProvider : IUsageProvider
         catch (IOException) { result = ProviderResult.Fail(FailureKind.ProcessExited); }
         catch (InvalidOperationException) { result = ProviderResult.Fail(FailureKind.ProcessExited); }
         catch (Exception) { result = ProviderResult.Fail(FailureKind.Unexpected); }
-        return Complete(result with { RetryAfter = result.RetryAfter ?? rateEmbargo }, verifiedBinding);
+        return Complete(result with { RetryAfter = result.RetryAfter is { } latest && rateEmbargo is { } earlier
+                ? (latest > earlier ? latest : earlier) : result.RetryAfter ?? rateEmbargo,
+            RateLimitObserved = rateLimitObserved || result.Failure == FailureKind.RateLimited }, verifiedBinding);
     }
 
     private ProviderResult Complete(ProviderResult result, string? binding)

@@ -5,7 +5,7 @@ namespace AgentMeter.Tests;
 
 public sealed class ClaudeControlTransportTests
 {
-    private const string Auth = """{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":"fixture@example.invalid","orgId":"00000000-0000-0000-0000-000000000042","orgName":"Fixture","subscriptionType":"pro","analyticsDisabled":false}""";
+    private const string Auth = """{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":"fixture@example.invalid","orgId":"00000000-0000-0000-0000-000000000042","orgName":"Fixture","subscriptionType":"pro","analyticsDisabled":true}""";
     private const string Usage = """{"rate_limits_available":true,"behaviors":null,"subscription_type":"pro","session":{"total_cost_usd":0,"total_api_duration_ms":0,"model_usage":{}},"rate_limits":{"five_hour":{"utilization":12,"resets_at":"2030-01-01T12:30:00Z"},"seven_day":{"utilization":0,"resets_at":null}}}""";
     private static JsonElement J(string value) => JsonDocument.Parse(value).RootElement.Clone();
     private static JsonElement WithModels(string models) => J(Usage.Replace("\"rate_limits\":{", "\"rate_limits\":{\"model_scoped\":" + models + ","));
@@ -163,19 +163,82 @@ public sealed class ClaudeControlTransportTests
     }
 
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task KnownRateEmbargoSurvivesLostOrChangedPostQueryAuthentication(bool signedOut)
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task KnownRateEmbargoSurvivesLostOrChangedPostQueryAuthentication(bool signedOut, bool suppliedDuration)
     {
         var calls = 0;
         var source = new ClaudeControlTransport(() => "fixture.exe", (_, _) => Task.FromResult((J(++calls == 1 ? Auth :
             signedOut ? "{\"loggedIn\":false}" : Auth.Replace("fixture@example.invalid", "changed@example.invalid")), 0)),
-            (_, _, _) => throw new ProviderQueryException(FailureKind.RateLimited, TimeSpan.FromMinutes(3)));
+            (_, _, _) => throw new ProviderQueryException(FailureKind.RateLimited, suppliedDuration ? TimeSpan.FromMinutes(3) : null));
         var result = await new ClaudeProvider([source]).QueryAsync(default);
         Assert.Null(result.VerifiedBinding);
         Assert.Null(result.Snapshot);
         Assert.Equal(signedOut ? FailureKind.LoggedOut : FailureKind.AccountChanged, result.Failure);
-        Assert.Equal(TimeSpan.FromMinutes(3), result.RetryAfter);
+        Assert.Equal(suppliedDuration ? TimeSpan.FromMinutes(3) : (TimeSpan?)null, result.RetryAfter);
+        Assert.True(result.RateLimitObserved);
+    }
+
+    [Theory]
+    [InlineData("false")]
+    [InlineData("null")]
+    [InlineData("\"true\"")]
+    [InlineData("1")]
+    public async Task UsageNeverStartsUnlessChildConfirmsTelemetryDisabled(string analytics)
+    {
+        var usageCalls = 0;
+        var source = new ClaudeControlTransport(() => "fixture.exe",
+            (_, _) => Task.FromResult((J(Auth.Replace("\"analyticsDisabled\":true", "\"analyticsDisabled\":" + analytics)), 0)),
+            (_, _, _) => { usageCalls++; return Task.FromResult(J(Usage)); });
+        var result = await source.QueryAsync(default);
+        Assert.Equal(FailureKind.Unsupported, result.Usage.Failure);
+        Assert.Null(result.Binding); Assert.Null(result.Usage.Snapshot);
+        Assert.Equal(0, usageCalls);
+    }
+
+    [Theory]
+    [InlineData(30)]
+    [InlineData(480)]
+    public async Task PostQueryRateLimitNeverShortensUsageEmbargo(int laterSeconds)
+    {
+        var calls = 0;
+        var source = new ClaudeControlTransport(() => "fixture.exe", (_, _) => ++calls == 1
+            ? Task.FromResult((J(Auth), 0))
+            : throw new ProviderQueryException(FailureKind.RateLimited, TimeSpan.FromSeconds(laterSeconds)),
+            (_, _, _) => throw new ProviderQueryException(FailureKind.RateLimited, TimeSpan.FromMinutes(4)));
+        var result = await new ClaudeProvider([source]).QueryAsync(default);
+        Assert.Equal(TimeSpan.FromSeconds(Math.Max(240, laterSeconds)), result.RetryAfter);
+        Assert.True(result.RateLimitObserved);
+        Assert.Null(result.VerifiedBinding); Assert.Null(result.Snapshot);
+    }
+
+    [Fact]
+    public void MissingOrDuplicateTelemetryEvidenceFailsClosed()
+    {
+        Assert.Throws<ProviderQueryException>(() => ClaudeControlTransport.ParseIdentity(J(Auth.Replace(",\"analyticsDisabled\":true", "")), 0));
+        Assert.Throws<ProviderQueryException>(() => ClaudeControlTransport.ParseIdentity(J(Auth.Replace("\"analyticsDisabled\":true", "\"analyticsDisabled\":true,\"analyticsDisabled\":false")), 0));
+    }
+
+    [Theory]
+    [InlineData("DISABLE_TELEMETRY", "1")]
+    [InlineData("DISABLE_TELEMETRY", "0")]
+    [InlineData("CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "1")]
+    [InlineData("DO_NOT_TRACK", "true")]
+    public async Task RealOwnedControlChildrenKeepPrivacyAndUsageOnlyProtocol(string inheritedFlag, string value)
+    {
+        var parentValue = Environment.GetEnvironmentVariable(inheritedFlag);
+        var executable = Path.Combine(AppContext.BaseDirectory, "AgentMeter.ProcessHost.exe");
+        await using var process = ProviderProcess.Start(executable, ["--claude-control-query"],
+            new Dictionary<string, string> { [inheritedFlag] = value });
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+        var (result, exitCode) = await process.ReadJsonOutputAsync(timeout.Token);
+        Assert.Equal(0, exitCode);
+        Assert.True(result.GetProperty("success").GetBoolean());
+        Assert.True(result.GetProperty("parentEnvironmentUnchanged").GetBoolean());
+        Assert.Equal(88, result.GetProperty("remaining").GetDouble());
+        Assert.Equal(parentValue, Environment.GetEnvironmentVariable(inheritedFlag));
     }
 
     [Fact]

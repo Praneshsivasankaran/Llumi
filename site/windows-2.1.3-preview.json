@@ -1,0 +1,44 @@
+{
+  "platform": "windows",
+  "version": "2.1.3",
+  "build": 1,
+  "status": "preview",
+  "published_at": null,
+  "title": "A clearer Windows experience.",
+  "summary": "Simpler setup, complete allowance details and a steadier compact monitor.",
+  "sections": [
+    {
+      "title": "Getting started",
+      "items": [
+        "A clean setup with the Llumi icon and simpler provider instructions.",
+        "Setup always uses Light. Existing preferences move to Light once; your later appearance choices stay saved.",
+        "Turn Codex and Claude Code monitoring on or off during setup and in Settings."
+      ]
+    },
+    {
+      "title": "Usage and allowances",
+      "items": [
+        "See every supported allowance, with clear labels, remaining percentages and reset times when reported.",
+        "Sign-in readiness is separate from missing, unsupported, unavailable and stale allowance readings.",
+        "Retry respects provider limits, with longer waits after repeated rate-limit responses."
+      ]
+    },
+    {
+      "title": "Your monitor",
+      "items": [
+        "Drag without triggering hover expansion, with a movement threshold that follows display scaling.",
+        "Keep a stable position when expanding details or changing displays. Reset Position returns it to its default location.",
+        "Expanded details include provider names and observation age. Open Usage shows additional limits when space is limited."
+      ]
+    },
+    {
+      "title": "About Llumi",
+      "items": [
+        "Find the installed version and read its release notes inside Llumi, even offline.",
+        "Open Microsoft Store from About. Windows updates continue to be managed by Microsoft Store."
+      ]
+    }
+  ],
+  "notice": "Unreleased local preview. Microsoft Store publication is pending owner approval.",
+  "source_documents": ["docs/windows/LOCAL-2.1.3.md", "docs/product-spec/windows-213.md"]
+}

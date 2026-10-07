@@ -17,6 +17,10 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
     private readonly Func<string, CancellationToken, Task<(JsonElement Output, int ExitCode)>> auth;
     private readonly Func<string, Identity, CancellationToken, Task<JsonElement>> usage;
     private readonly TimeSpan timeout;
+    // Apply only to Llumi's owned children. Never change the user's CLI settings
+    // or unset an inherited privacy preference to retrieve subscription usage.
+    private static readonly IReadOnlyDictionary<string, string> ChildEnvironment = new Dictionary<string, string>
+        { ["DISABLE_TELEMETRY"] = "1" };
 
     public ClaudeControlTransport(Func<string?>? locate = null,
         Func<string, CancellationToken, Task<(JsonElement Output, int ExitCode)>>? auth = null,
@@ -36,19 +40,24 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
         deadline.CancelAfter(timeout);
         var token = deadline.Token;
         TimeSpan? rateEmbargo = null;
+        var rateLimitObserved = false;
         ClaudeSourceResult Failed(FailureKind kind, ClaudeAccountBinding? binding = null, TimeSpan? retryAfter = null)
-            => Fail(kind, binding, retryAfter ?? rateEmbargo);
+            => Fail(kind, binding, retryAfter is { } latest && rateEmbargo is { } earlier
+                ? (latest > earlier ? latest : earlier) : retryAfter ?? rateEmbargo, rateLimitObserved);
         try
         {
             var executable = locate();
             if (executable is null) return Failed(FailureKind.NotInstalled);
-            if (PrivacyOptOut()) return Failed(FailureKind.Unsupported);
             var beforeResult = await auth(executable, token).ConfigureAwait(false);
             var before = ParseIdentity(beforeResult.Output, beforeResult.ExitCode);
             JsonElement response = default;
             ProviderQueryException? queryFailure = null;
             try { response = await usage(executable, before, token).ConfigureAwait(false); }
-            catch (ProviderQueryException e) { queryFailure = e; if (e.Failure == FailureKind.RateLimited) rateEmbargo = e.RetryAfter; }
+            catch (ProviderQueryException e)
+            {
+                queryFailure = e;
+                if (e.Failure == FailureKind.RateLimited) { rateLimitObserved = true; rateEmbargo = e.RetryAfter; }
+            }
             catch (JsonException) { queryFailure = new(FailureKind.Malformed); }
             var afterResult = await auth(executable, token).ConfigureAwait(false);
             var after = ParseIdentity(afterResult.Output, afterResult.ExitCode);
@@ -96,7 +105,7 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
         if (Text(value, "authMethod") is "apiKey" or "api_key" || Text(value, "apiProvider") is "bedrock" or "vertex" or "foundry" || plan == "payg")
             throw new ProviderQueryException(FailureKind.UnsupportedBilling);
         if (Text(value, "authMethod") != "claude.ai" || Text(value, "apiProvider") != "firstParty" ||
-            plan is not ("pro" or "max" or "team" or "enterprise") || Get(value, "analyticsDisabled").ValueKind != JsonValueKind.False ||
+            plan is not ("pro" or "max" or "team" or "enterprise") || Get(value, "analyticsDisabled").ValueKind != JsonValueKind.True ||
             email is null || !email.Contains('@') || email.Any(char.IsWhiteSpace) || !Guid.TryParseExact(organization, "D", out var id) || name is null)
             throw new ProviderQueryException(FailureKind.Unsupported);
         return new(email.ToLowerInvariant(), id.ToString("D"), name, plan);
@@ -201,12 +210,12 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
 
     private static async Task<(JsonElement, int)> ReadAuth(string executable, CancellationToken token)
     {
-        await using var process = ProviderProcess.Start(executable, ["auth", "status"]);
+        await using var process = ProviderProcess.Start(executable, ["auth", "status"], ChildEnvironment);
         return await process.ReadJsonOutputAsync(token).ConfigureAwait(false);
     }
     private static async Task<JsonElement> ReadUsage(string executable, Identity identity, CancellationToken token)
     {
-        await using var process = ProviderProcess.Start(executable, Arguments);
+        await using var process = ProviderProcess.Start(executable, Arguments, ChildEnvironment);
         await process.SendAsync(new { type = "control_request", request_id = "init", request = new { subtype = "initialize", hooks = new { } } }, token).ConfigureAwait(false);
         var initialized = await process.ReadControlResultAsync("init", token).ConfigureAwait(false);
         VerifySession(Get(initialized, "account"), identity);
@@ -232,10 +241,9 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
         return !string.IsNullOrWhiteSpace(text) && text == text.Trim() && text.Length <= 320 && !text.Any(char.IsControl) ? text : null;
     }
     private static bool Zero(JsonElement value) => value.ValueKind == JsonValueKind.Number && value.TryGetDouble(out var n) && n == 0;
-    private static bool PrivacyOptOut() => new[] { "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DISABLE_TELEMETRY" }
-        .Any(key => !string.IsNullOrEmpty(Environment.GetEnvironmentVariable(key))) ||
-        Environment.GetEnvironmentVariable("DO_NOT_TRACK") is "1" or "true";
-    private static ClaudeSourceResult Fail(FailureKind kind, ClaudeAccountBinding? binding = null, TimeSpan? retryAfter = null) => new(ClaudeClient.Code,
+    private static ClaudeSourceResult Fail(FailureKind kind, ClaudeAccountBinding? binding = null, TimeSpan? retryAfter = null,
+        bool rateLimitObserved = false) => new(ClaudeClient.Code,
         kind == FailureKind.LoggedOut ? ClaudeAuthentication.SignedOut : kind == FailureKind.NotInstalled ? ClaudeAuthentication.Missing :
-        binding is null ? ClaudeAuthentication.Unknown : ClaudeAuthentication.Authenticated, binding, ProviderResult.Fail(kind) with { RetryAfter = retryAfter });
+        binding is null ? ClaudeAuthentication.Unknown : ClaudeAuthentication.Authenticated, binding,
+        ProviderResult.Fail(kind) with { RetryAfter = retryAfter, RateLimitObserved = rateLimitObserved || kind == FailureKind.RateLimited });
 }

@@ -8,7 +8,7 @@ public sealed class ClaudePresentationTests
     private const string Five = "\"five_hour\":{\"utilization\":20,\"resets_at\":null}";
     private const string Week = "\"seven_day\":{\"utilization\":30,\"resets_at\":null}";
     private const string Internal = "\"iguana_necktie\":{\"utilization\":1,\"resets_at\":null}";
-    private const string Auth = """{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":"fixture@example.invalid","orgId":"00000000-0000-0000-0000-000000000042","orgName":"Fixture","subscriptionType":"pro","analyticsDisabled":false}""";
+    private const string Auth = """{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":"fixture@example.invalid","orgId":"00000000-0000-0000-0000-000000000042","orgName":"Fixture","subscriptionType":"pro","analyticsDisabled":true}""";
     private static JsonElement J(string text) => JsonDocument.Parse(text).RootElement.Clone();
 
     private static ProviderState Parse(string limits, string provider = "Claude Code")

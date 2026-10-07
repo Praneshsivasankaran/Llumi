@@ -4,18 +4,28 @@ namespace AgentMeter;
 
 internal sealed record MonitorPosition(int Version, string Display, double Left, double Top)
 {
-    internal bool IsValid => Version == 1 && !string.IsNullOrWhiteSpace(Display) && Display.Length <= 256 &&
+    internal bool IsValid => Version is 1 or 2 && !string.IsNullOrWhiteSpace(Display) && Display.Length <= 256 &&
         !Display.Any(char.IsControl) && double.IsFinite(Left) && double.IsFinite(Top) &&
-        Math.Abs(Left) <= 100_000 && Math.Abs(Top) <= 100_000;
+        (Version == 1 ? Math.Abs(Left) <= 100_000 && Math.Abs(Top) <= 100_000 : Left is >= 0 and <= 1 && Top is >= 0 and <= 1);
 
-    internal static MonitorPosition Capture(Point location, string display, Rectangle workArea, int dpi) =>
-        new(1, display, ((double)location.X - workArea.Left) * 96 / SafeDpi(dpi),
-            ((double)location.Y - workArea.Top) * 96 / SafeDpi(dpi));
+    // Version 1 stores logical offsets. Version 2 stores the horizontal center and top
+    // relative to the display's work area, independent of window size and display DPI.
+    internal static MonitorPosition Capture(Point location, string display, Rectangle workArea, Size size)
+    {
+        var point = PopupPlacement.Clamp(location, size, workArea);
+        return new(2, display,
+            Math.Clamp((point.X + size.Width / 2d - workArea.Left) / Math.Max(1, workArea.Width), 0, 1),
+            Math.Clamp(((double)point.Y - workArea.Top) / Math.Max(1, workArea.Height), 0, 1));
+    }
 
     internal static Point Restore(MonitorPosition? saved, string display, Rectangle workArea, Size size, int dpi)
     {
         var scale = SafeDpi(dpi) / 96d;
         var sameDisplay = saved is { IsValid: true } && string.Equals(saved.Display, display, StringComparison.OrdinalIgnoreCase);
+        if (sameDisplay && saved!.Version == 2)
+            return PopupPlacement.Clamp(new Point(
+                SafeCoordinate(workArea.Left + Math.Round(saved.Left * workArea.Width - size.Width / 2d)),
+                SafeCoordinate(workArea.Top + Math.Round(saved.Top * workArea.Height))), size, workArea);
         var x = sameDisplay ? saved!.Left : 20;
         var y = sameDisplay ? saved!.Top : 20;
         return PopupPlacement.Clamp(new Point(

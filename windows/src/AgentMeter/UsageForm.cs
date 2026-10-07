@@ -10,6 +10,8 @@ internal sealed class UsageForm : Form
     private readonly Label footer = new() { AutoEllipsis = true };
     private readonly Button usageTab = Palette.Button("Usage", "Usage");
     private readonly Button settingsTab = Palette.Button("Settings", "Settings");
+    private readonly Button aboutTab = Palette.Button("About", "About Llumi");
+    private readonly AboutView about = new();
     private readonly GlyphButton refresh = new(Glyph.Refresh, "Refresh usage", "Refresh");
     private readonly GlyphButton menu = new(Glyph.Menu, "Llumi menu");
     private readonly Panel content = new() { AutoScroll = true };
@@ -44,7 +46,7 @@ internal sealed class UsageForm : Form
     private readonly Font bodyFont = new("Segoe UI", 10);
     private Icon headerIdentity = AppIcon.Load();
     private IReadOnlyList<ProviderState> lastStates = [];
-    private bool loading, logFailed, rendering, syncing, settingsShown;
+    private bool loading, logFailed, rendering, syncing, settingsShown, aboutShown;
     private Preferences preferences = new();
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] internal bool AllowExit { get; set; }
     internal event Action? SetupRequested;
@@ -63,9 +65,9 @@ internal sealed class UsageForm : Form
         StartPosition = FormStartPosition.Manual; AutoScaleMode = AutoScaleMode.None;
         DoubleBuffered = true;
         title.Font = headingFont; title.TextAlign = ContentAlignment.MiddleLeft;
-        header.Controls.AddRange([title, usageTab, settingsTab, refresh, menu]);
+        header.Controls.AddRange([title, usageTab, settingsTab, aboutTab, refresh, menu]);
         header.Paint += (_, e) => e.Graphics.DrawIcon(headerIdentity, new Rectangle(S(18), S(14), S(24), S(24)));
-        Controls.AddRange([header, content, settings, footer]);
+        Controls.AddRange([header, content, settings, about, footer]);
         foreach (var name in names) { var card = new ProviderCard(hints); cards[name] = card; content.Controls.Add(card); }
         content.Controls.AddRange([offMessage, offSettings]);
         appearance.Items.AddRange(["System", "Light", "Dark"]);
@@ -82,11 +84,12 @@ internal sealed class UsageForm : Form
         };
         launch.Location = new(S(20), S(24)); compact.Location = new(S(20), S(68)); tray.Location = new(S(20), S(112));
         appearanceLabel.Location = new(S(20), S(164)); appearance.SetBounds(S(20), S(194), S(200), S(30));
-        usageTab.Click += (_, _) => ShowUsage(); settingsTab.Click += (_, _) => ShowSettings();
+        usageTab.Click += (_, _) => ShowUsage(); settingsTab.Click += (_, _) => ShowSettings(); aboutTab.Click += (_, _) => ShowAbout();
         refresh.Click += (_, _) => RefreshRequested?.Invoke();
         actions.Items.Add("Open Llumi", null, (_, _) => ShowUsage());
         actions.Items.Add("Refresh", null, (_, _) => RefreshRequested?.Invoke());
         actions.Items.Add("Settings", null, (_, _) => ShowSettings());
+        actions.Items.Add("About Llumi", null, (_, _) => ShowAbout());
         actions.Items.Add("Setup Llumi…", null, (_, _) => SetupRequested?.Invoke());
         actions.Items.Add("Quit", null, (_, _) => ExitRequested?.Invoke());
         menu.Click += (_, _) => { MenuOpening?.Invoke(); actions.Show(menu, new Point(0, menu.Height)); };
@@ -143,22 +146,24 @@ internal sealed class UsageForm : Form
     {
         void Theme(Control root)
         {
-            if (root is ProviderCard) return; // Cards own their pale surface and transparent label backgrounds.
+            if (root is ProviderCard or AboutView) return; // Cards own their pale surface and transparent label backgrounds.
             root.BackColor = Palette.Background; root.ForeColor = Palette.Foreground;
             foreach (Control child in root.Controls) Theme(child);
         }
         Theme(this); footer.ForeColor = Palette.Muted; settingsMessage.ForeColor = Palette.Muted;
         providerHint.ForeColor = diagnosticMessage.ForeColor = retryMessage.ForeColor = offMessage.ForeColor = Palette.Muted;
         foreach (var status in new[] { codexSetup, claudeSetup }) { status.BackColor = Palette.Card; status.Padding = new Padding(S(14)); }
-        foreach (var button in new[] { usageTab, settingsTab, checkAgain, copyDiagnostics, resetPosition, offSettings })
-        { if (button != usageTab && button != settingsTab) button.BackColor = Palette.Card; Palette.StyleButton(button); }
-        Render(lastStates, loading, logFailed); Invalidate(true);
+        foreach (var button in new[] { usageTab, settingsTab, aboutTab, checkAgain, copyDiagnostics, resetPosition, offSettings })
+        { if (button != usageTab && button != settingsTab && button != aboutTab) button.BackColor = Palette.Card; Palette.StyleButton(button); }
+        about.ApplyTheme(); Render(lastStates, loading, logFailed); Invalidate(true);
     }
     internal string DiagnosticReport() => SetupDiagnostics.Report(lastStates,
         typeof(UsageForm).Assembly.GetName().Version?.ToString(3), typeof(UsageForm).Assembly.GetName().Version?.ToString());
     internal void SetStartupState(bool enabled, bool available) { syncing = true; launch.Checked = enabled; launch.Enabled = available; syncing = false; }
-    internal void ShowUsage() { settingsShown = false; Render(lastStates, loading, logFailed); }
-    internal void ShowSettings() { settingsShown = true; MenuOpening?.Invoke(); Render(lastStates, loading, logFailed); }
+    internal void ShowUsage() { settingsShown = aboutShown = false; Render(lastStates, loading, logFailed); }
+    internal void ShowSettings() { aboutShown = false; settingsShown = true; MenuOpening?.Invoke(); Render(lastStates, loading, logFailed); }
+    internal void ShowAbout() { settingsShown = false; aboutShown = true; about.ShowOverview(); Render(lastStates, loading, logFailed); }
+    internal void ShowReleaseNotes() { ShowAbout(); about.ShowReleaseNotes(); }
     internal void ShowPanel(Point anchor)
     {
         if (!Visible) Location = PopupPlacement.NearTray(Screen.FromPoint(anchor).Bounds, Screen.FromPoint(anchor).WorkingArea, Size, S(16));
@@ -177,11 +182,12 @@ internal sealed class UsageForm : Form
             if (availableWorkArea is { } work) FitInitialWindow(work);
             var width = ClientSize.Width; var height = ClientSize.Height;
             header.SetBounds(0, 0, width, S(103));
-            title.SetBounds(S(52), S(7), width - S(96), S(38));
+            title.SetBounds(S(52), S(7), width - S(224), S(38));
             usageTab.SetBounds(S(16), S(56), S(95), S(32)); settingsTab.SetBounds(S(120), S(56), S(95), S(32));
-            menu.SetBounds(width - S(46), S(12), S(28), S(28)); refresh.SetBounds(width - S(136), S(57), S(120), S(30));
+            aboutTab.SetBounds(S(224), S(56), S(95), S(32));
+            menu.SetBounds(width - S(46), S(12), S(28), S(28)); refresh.SetBounds(width - S(176), S(12), S(120), S(30));
             content.SetBounds(S(12), S(105), width - S(24), Math.Max(S(60), height - S(150)));
-            settings.Bounds = content.Bounds; settings.Visible = settingsShown; content.Visible = !settingsShown;
+            settings.Bounds = about.Bounds = content.Bounds; settings.Visible = settingsShown; about.Visible = aboutShown; content.Visible = !settingsShown && !aboutShown;
             var settingsScroll = settings.AutoScrollPosition;
             settings.AutoScrollPosition = Point.Empty;
             var settingsWidth = Math.Max(S(240), settings.ClientSize.Width - S(40) - SystemInformation.VerticalScrollBarWidth);
@@ -220,11 +226,11 @@ internal sealed class UsageForm : Form
             }
             codexSetup.Text = SetupText("Codex", "Codex"); claudeSetup.Text = SetupText("Claude", "Claude Code");
             UpdateRetry();
-            refresh.Visible = !settingsShown; refresh.Text = loading ? "Refreshing…" : "Refresh";
+            refresh.Visible = !settingsShown && !aboutShown; refresh.Text = loading ? "Refreshing…" : "Refresh";
             footer.SetBounds(S(24), height - S(39), width - S(48), S(30));
             var observed = states.Where(s => s.Enabled && s.Snapshot is not null).Select(s => s.Snapshot!.ObservedAt).DefaultIfEmpty().Min();
-            footer.Visible = !settingsShown || logFailed;
-            footer.Text = logFailed ? "Diagnostic log unavailable" : settingsShown ? string.Empty : observed == default ? "Connect your tools to see remaining allowance." : $"Last updated {observed.ToLocalTime():HH:mm} · Refreshes automatically";
+            footer.Visible = !settingsShown && !aboutShown || logFailed;
+            footer.Text = logFailed ? "Diagnostic log unavailable" : settingsShown || aboutShown ? string.Empty : observed == default ? "Connect your tools to see remaining allowance." : $"Last updated {observed.ToLocalTime():HH:mm} · Refreshes automatically";
             var scroll = content.AutoScrollPosition;
             content.AutoScrollPosition = Point.Empty;
             var y = 0;
