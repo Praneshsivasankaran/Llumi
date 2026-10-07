@@ -89,21 +89,29 @@ public sealed class MonitorInteractionTests
     });
 
     [Fact]
-    public Task ExpandedNamesAndAgeArePaintedAndAgeChangesRepaintWithoutChangingObservation() => Sta(() =>
+    public Task ExpandedCalendarLabelStaysQuietWhileAccessibleAgeChangesWithoutRepainting() => Sta(() =>
     {
         using var form = new MonitorForm(["Codex", "Claude"], SystemIcons.Application) { MotionAllowed = () => false };
-        var states = States(); form.Render(states, Now); form.SetExpanded(true, false);
+        var at = new DateTimeOffset(new DateTime(2026, 10, 7, 12, 0, 0, DateTimeKind.Local));
+        var observed = at.AddMinutes(-3).AddSeconds(-59);
+        var states = new[] { "Codex", "Claude" }.Select(name => new ProviderState(name, ProviderStatus.Ready,
+            new UsageSnapshot([new(name == "Codex" ? "codex/primary" : "five_hour", "fixture", 50, at.AddHours(2), 300)], observed, "synthetic"))).ToArray();
+        form.Render(states, at); form.SetExpanded(true, false);
         Assert.Equal(new[] { "Codex", "Claude Code" }, form.ExpandedProviderNames);
-        Assert.Equal(new[] { "Updated 3m ago", "Updated 3m ago" }, form.ExpandedObservations);
+        Assert.Equal(new[] { "Today", "Today" }, form.ExpandedObservations);
+        Assert.Contains("Updated 3m ago", form.AccessibilityObject.GetChild(0)!.Name);
         using var before = form.CreatePreviewBitmap(); var layout = form.ExpandedLayout;
         int S(float value) => (int)Math.Round(value * form.DeviceDpi / 96d);
         var ink = Palette.Foreground; var stale = Palette.Warning;
         Assert.True(ContainsColor(before, ink, S(layout.NameY), S(layout.NameY + 18)));
         Assert.True(ContainsColor(before, stale, S(layout.ObservationY), S(layout.ObservationY + 19)));
         var version = form.RenderVersion;
-        form.Render(states, Now.AddMinutes(1)); Assert.True(form.RenderVersion > version);
-        Assert.Equal(new[] { "Updated 4m ago", "Updated 4m ago" }, form.ExpandedObservations);
-        Assert.All(states, state => Assert.Equal(Now.AddMinutes(-3), state.Snapshot!.ObservedAt));
+        form.Render(states, at.AddSeconds(1)); Assert.Equal(version, form.RenderVersion);
+        Assert.Equal(new[] { "Today", "Today" }, form.ExpandedObservations);
+        Assert.Contains("Updated 4m ago", form.AccessibilityObject.GetChild(0)!.Name);
+        Assert.All(states, state => Assert.Equal(observed, state.Snapshot!.ObservedAt));
+        form.Render(states, at.AddDays(1)); Assert.True(form.RenderVersion > version);
+        Assert.Equal(new[] { "Yesterday", "Yesterday" }, form.ExpandedObservations);
     });
 
     private static bool ContainsColor(Bitmap bitmap, Color expected, int top, int bottom)

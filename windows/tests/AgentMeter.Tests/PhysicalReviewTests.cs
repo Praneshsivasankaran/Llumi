@@ -99,7 +99,7 @@ public sealed class PhysicalReviewTests
         Assert.DoesNotContain("Model:", accessible); Assert.DoesNotContain("Additional:", accessible);
     });
     [Fact]
-    public Task SettingsContainsLiveChecksAndSanitizedDiagnostics() => Sta(() =>
+    public Task SettingsRetainsLiveChecksWithoutDiagnosticsOrSetupActions() => Sta(() =>
     {
         using var icon = AppIcon.Load(); using var form = new UsageForm(["Codex", "Claude Code"], icon);
         form.Show(); form.ShowSettings();
@@ -110,11 +110,29 @@ public sealed class PhysicalReviewTests
         Assert.Contains(controls.OfType<Label>(), c => c.Visible && c.Text.Contains("Signed in") && c.Text.Contains("Allowances not reported"));
         Assert.Contains(controls.OfType<Label>(), c => c.Visible && c.Text.Contains("Sign in required"));
         controls.OfType<Button>().Single(b => b.Text == "Retry").PerformClick(); Assert.Equal(1, refreshes);
-        Assert.Contains(controls.OfType<Button>(), b => b.Text == "Copy Diagnostics" && b.Parent?.Name == "settings");
-        Assert.DoesNotContain("private", form.DiagnosticReport()); Assert.DoesNotContain("secret", form.DiagnosticReport());
+        Assert.DoesNotContain(controls.OfType<Button>(), b => b.Text == "Copy Diagnostics");
+        Assert.DoesNotContain(controls, c => c.Text.Contains("private") || c.Text.Contains("secret"));
+        var menu = (ContextMenuStrip)typeof(UsageForm).GetField("actions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(form)!;
+        Assert.DoesNotContain(menu.Items.Cast<ToolStripItem>(), item => item.Text?.Contains("Setup Llumi") == true);
         form.Render([new("Codex", ProviderStatus.Error, Failure: FailureKind.Timeout)], false, false);
         Assert.DoesNotContain(controls.OfType<Label>(), c => c.Text.Contains("Signed in"));
-        form.ShowUsage(); Assert.False(controls.OfType<Button>().Single(b => b.Text == "Copy Diagnostics").Visible);
+        form.ShowUsage(); Assert.DoesNotContain(Controls(form), c => c.Text.Contains("Diagnostics copied"));
+    });
+    [Fact]
+    public Task UsageExpandsIntoRemovedFooterAndKeepsErrorNotice() => Sta(() =>
+    {
+        using var form = new UsageForm(["Codex"], SystemIcons.Application);
+        var state = new ProviderState("Codex", ProviderStatus.Ready,
+            new([new("five_hour", "raw", 25, DateTimeOffset.UtcNow.AddHours(5))], DateTimeOffset.UtcNow, "fixture"));
+        form.Show(); form.Render([state], false, false);
+        var content = Controls(form).OfType<ProviderCard>().Single().Parent!;
+        var cleanHeight = content.Height;
+        Assert.DoesNotContain(Controls(form).OfType<Label>(), c => c.Text.Contains("Last updated") || c.Text.Contains("Refreshes automatically"));
+        form.Render([state], false, true);
+        Assert.True(content.Height < cleanHeight);
+        Assert.Contains(Controls(form).OfType<Label>(), c => c.Visible && c.Text == "Diagnostic log unavailable");
+        form.Render([state], false, false); Assert.Equal(cleanHeight, content.Height);
+        Assert.DoesNotContain(Controls(form).OfType<Label>(), c => c.Visible && c.Text == "Diagnostic log unavailable");
     });
     [Fact]
     public Task SettingsActionsRemainReachableOnShortAndNarrowWindows() => Sta(() =>

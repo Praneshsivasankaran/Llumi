@@ -17,7 +17,7 @@ public sealed class RefreshCoordinator
     private sealed class Entry(string name)
     {
         public ProviderState State = new(name, ProviderStatus.Loading);
-        public bool Active;
+        public bool Active, PendingReset;
         public int Generation, Failures, RateLimitFailures;
         public long? LastStart, LastReset;
         public Deadline? Background, Embargo;
@@ -71,7 +71,7 @@ public sealed class RefreshCoordinator
             e.State = new(name, ProviderStatus.Unavailable,
                 Failure: enabled && Left(e.Embargo) > TimeSpan.Zero ? FailureKind.RateLimited : FailureKind.None, Enabled: enabled);
             // A toggle never shortens a provider rate-limit embargo or resets its escalation.
-            e.Background = null; e.Failures = 0; e.LastReset = null;
+            e.Background = null; e.Failures = 0; e.LastReset = null; e.PendingReset = false;
         }
         try { cancellation?.Cancel(); } catch (ObjectDisposedException) { }
         Changed?.Invoke();
@@ -85,6 +85,7 @@ public sealed class RefreshCoordinator
             foreach (var e in entries.Values)
             {
                 ++e.Generation;
+                e.PendingReset = false;
                 if (e.Active) e.State = e.State with { Status = e.State.Snapshot is null ? ProviderStatus.Unavailable : ProviderStatus.Ready };
             }
             cancellations = entries.Values.Select(e => e.Cancellation).OfType<CancellationTokenSource>().ToArray();
@@ -108,7 +109,7 @@ public sealed class RefreshCoordinator
         string? providerName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var selected = new List<(IUsageProvider Provider, ProviderState Previous, int Generation, CancellationTokenSource Cancellation)>();
+        var selected = new List<(IUsageProvider Provider, ProviderState Previous, int Generation, CancellationTokenSource Cancellation, DateTimeOffset? InFlightReset)>();
         lock (stateLock)
         {
             if (suspended) return false;
@@ -118,7 +119,7 @@ public sealed class RefreshCoordinator
                 var e = entries[provider.Name];
                 if (!e.State.Enabled || e.Active || e.Pending is { IsCompleted: false } || ManualWait(e) > TimeSpan.Zero) continue;
                 var at = clock.GetUtcNow(); var stamp = clock.GetTimestamp();
-                var resetDue = UsagePresentation.Windows(e.State).Any(w => w.ResetsAt <= at);
+                var resetDue = e.PendingReset || UsagePresentation.Windows(e.State).Any(w => w.ResetsAt <= at);
                 var resetWait = e.LastReset is { } lastReset && clock.GetElapsedTime(lastReset, stamp) < TimeSpan.FromSeconds(30);
                 if (reason is RefreshReason.Background or RefreshReason.Reset)
                 {
@@ -128,19 +129,25 @@ public sealed class RefreshCoordinator
                 }
                 e.Active = true; e.LastStart = stamp;
                 if (resetDue || reason == RefreshReason.Reset) e.LastReset = stamp;
+                // Keep a reset known before this query independent of the result's new
+                // reset timestamp. The regular poll can consume one follow-up after
+                // completion, through these same single-flight and cadence gates.
+                var inFlightReset = e.State.Snapshot?.Binding is not null ? UsagePresentation.Windows(e.State)
+                    .Where(w => w.UsedPercent is not null && w.ResetsAt > at).Select(w => w.ResetsAt).Min() : null;
+                e.PendingReset = false;
                 var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 e.Cancellation = cancellation;
-                selected.Add((provider, e.State, e.Generation, cancellation));
+                selected.Add((provider, e.State, e.Generation, cancellation, inFlightReset));
                 e.State = e.State with { Status = ProviderStatus.Loading };
             }
         }
         if (selected.Count == 0) return false;
         log("refresh.started"); Changed?.Invoke();
-        await Task.WhenAll(selected.Select(item => RefreshProviderAsync(item.Provider, item.Previous, item.Generation, item.Cancellation, cancellationToken))).ConfigureAwait(false);
+        await Task.WhenAll(selected.Select(item => RefreshProviderAsync(item.Provider, item.Previous, item.Generation, item.Cancellation, cancellationToken, item.InFlightReset))).ConfigureAwait(false);
         log("refresh.completed"); return true;
     }
     private async Task RefreshProviderAsync(IUsageProvider provider, ProviderState previous, int generation,
-        CancellationTokenSource cancellation, CancellationToken lifetime)
+        CancellationTokenSource cancellation, CancellationToken lifetime, DateTimeOffset? inFlightReset)
     {
         try
         {
@@ -160,7 +167,7 @@ public sealed class RefreshCoordinator
                 {
                     var e = entries[provider.Name];
                     if (e.Generation != generation || suspended) return;
-                    if (lifetime.IsCancellationRequested) { e.State = previous; return; }
+                    if (lifetime.IsCancellationRequested) { e.State = previous; e.PendingReset = false; return; }
                 }
                 result = ProviderResult.Fail(FailureKind.Timeout);
             }
@@ -175,6 +182,7 @@ public sealed class RefreshCoordinator
             {
                 var e = entries[provider.Name];
                 if (e.Generation != generation || !e.State.Enabled || suspended) return;
+                if (lifetime.IsCancellationRequested) { e.State = previous; e.PendingReset = false; return; }
                 var auth = result.Failure switch
                 {
                     FailureKind.LoggedOut => AuthenticationStatus.SignedOut,
@@ -193,6 +201,9 @@ public sealed class RefreshCoordinator
                         ? ProviderStatus.Unavailable : ProviderStatus.Error,
                     success ? result.Snapshot! with { Binding = result.VerifiedBinding } : retained,
                     result.Failure, result.Detail, clock.GetUtcNow(), Authentication: auth);
+                e.PendingReset = inFlightReset <= clock.GetUtcNow() && auth == AuthenticationStatus.Verified &&
+                    previous.Snapshot?.Binding is { } resetBinding && resetBinding == result.VerifiedBinding &&
+                    UsagePresentation.Windows(e.State).Any(w => w.UsedPercent is not null);
                 var stamp = clock.GetTimestamp();
                 e.Failures = success ? 0 : Math.Min(e.Failures + 1, 10);
                 var delay = success ? TimeSpan.FromSeconds(30) : TimeSpan.FromSeconds(Math.Min(900, 30 * Math.Pow(2, e.Failures - 1)));

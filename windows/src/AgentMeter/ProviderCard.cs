@@ -10,7 +10,7 @@ internal sealed class ProviderCard : Panel
     private readonly Label summary = new();
     private readonly Label primary = new();
     private readonly UsageBar primaryBar = new();
-    private readonly Font primaryFont = new("Segoe UI", 20, FontStyle.Bold);
+    private readonly Font primaryFont = new("Segoe UI Semibold", 20, FontStyle.Regular);
     private string providerName = "Codex";
     private readonly LinkLabel setup = new() { Text = "Set up →", LinkColor = Palette.Foreground,
         ActiveLinkColor = Palette.Codex, VisitedLinkColor = Palette.Foreground, BackColor = Color.Transparent,
@@ -19,10 +19,10 @@ internal sealed class ProviderCard : Panel
     private readonly List<WindowRow> rows = [];
     private readonly ToolTip hints;
     private string[] ids = [];
-    private readonly Font titleFont = new("Segoe UI", 10.5f, FontStyle.Bold);
-    private readonly Font numberFont = new("Segoe UI", 11.5f, FontStyle.Bold);
+    private readonly Font titleFont = new("Segoe UI Semibold", 11, FontStyle.Regular);
+    private readonly Font numberFont = new("Segoe UI Semibold", 10.5f, FontStyle.Regular);
     private readonly Font bodyFont = new("Segoe UI", 10);
-    private readonly Font smallFont = new("Segoe UI", 8.5f);
+    private readonly Font smallFont = new("Segoe UI", 9);
     private Color accent = Palette.Codex;
     private Color? statusDot;
     private float currentScale = 1;
@@ -32,6 +32,7 @@ internal sealed class ProviderCard : Panel
     {
         this.hints = hints;
         BackColor = Palette.Card;
+        TabStop = false;
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
         foreach (var label in new[] { title, status, summary })
         {
@@ -62,6 +63,8 @@ internal sealed class ProviderCard : Panel
         currentScale = scale;
         providerName = state.Name;
         BackColor = Palette.Card; title.ForeColor = Palette.Foreground; summary.ForeColor = Palette.Muted;
+        setup.LinkColor = setup.VisitedLinkColor = Palette.Foreground;
+        setup.ActiveLinkColor = Palette.HighContrast ? SystemColors.WindowText : Palette.Codex;
         accent = Palette.ProviderAccent(state.Name);
         title.Text = UsagePresentation.IsClaude(state.Name) ? "Claude Code" : state.Name;
         status.Text = PopupText.Status(state, now);
@@ -69,6 +72,7 @@ internal sealed class ProviderCard : Panel
         statusDot = status.Text == "Live" ? Palette.Live : status.Text == "Refreshing…" ? accent : stale ? Palette.Warning : null;
         status.ForeColor = statusDot ?? Palette.Muted;
         summary.Text = PopupText.Summary(state, now);
+        summary.AccessibleName = UsageAccessibility.Observation(state, now);
         setupDestination = ProviderSetup.For(state);
         setup.Text = setupDestination is null ? "" : "Set up →";
         setup.Visible = setupDestination is not null;
@@ -78,7 +82,7 @@ internal sealed class ProviderCard : Panel
             summary.Text = "Install Claude Code";
         var detail = state.Detail ?? FailureText.For(state.Failure);
         hints.SetToolTip(status, detail);
-        hints.SetToolTip(summary, state.Snapshot is { } source ? $"{source.ObservedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss zzz}\n{source.Source}" : detail);
+        hints.SetToolTip(summary, state.Snapshot is { } source ? $"{UsageAccessibility.Observation(state, now)}\n{source.Source}" : detail);
         var selected = MonitorSelection.Select(state);
         primary.Text = selected is null ? "" : PopupText.Remaining(selected) + " remaining";
         primary.Visible = selected is not null; primaryBar.Visible = selected is not null;
@@ -118,7 +122,7 @@ internal sealed class ProviderCard : Panel
         }
         AccessibleName = $"{title.Text}, {status.Text}";
         AccessibleDescription = UsageAccessibility.Observation(state, now) + "; " + string.Join("; ", windows.Select(w => $"{PopupText.AccessibleWindowName(state.Name, w)}: {PopupText.Remaining(w)} remaining, {PopupText.Reset(w, now)}"));
-        LogicalHeight = windows.Length == 0 ? 116 : 144 + windows.Length * 50;
+        LogicalHeight = windows.Length == 0 ? 132 : 170 + windows.Length * 56;
         LayoutRows(scale);
         Invalidate();
     }
@@ -126,21 +130,21 @@ internal sealed class ProviderCard : Panel
     private void LayoutRows(float scale)
     {
         int S(int n) => (int)Math.Round(n * scale);
-        var innerWidth = Width - S(28);
-        title.SetBounds(S(44), S(9), innerWidth - S(30), S(23));
-        status.SetBounds(S(statusDot is null ? 14 : 26), S(36), innerWidth - S(12), S(22));
+        var innerWidth = Width - S(40);
+        title.SetBounds(S(50), S(17), innerWidth - S(30), S(25));
+        status.SetBounds(S(statusDot is null ? 20 : 32), S(49), innerWidth - S(12), S(22));
         summary.AutoEllipsis = true;
-        summary.SetBounds(S(14), S(62), innerWidth - (setupDestination is null ? 0 : S(74)), S(20));
-        setup.SetBounds(Width - S(84), S(62), S(70), S(20));
-        primary.SetBounds(S(14), S(87), innerWidth, S(38));
-        primaryBar.SetBounds(S(14), S(130), innerWidth, S(5));
+        summary.SetBounds(S(20), S(73), innerWidth - (setupDestination is null ? 0 : S(74)), S(20));
+        setup.SetBounds(Width - S(90), S(73), S(70), S(20));
+        primary.SetBounds(S(20), S(100), innerWidth, S(38));
+        primaryBar.SetBounds(S(20), S(144), innerWidth, S(5));
         for (var i = 0; i < rows.Count; i++)
         {
-            var row = rows[i]; var top = 144 + i * 50;
-            row.Name.SetBounds(S(14), S(top), innerWidth - S(69), S(23));
-            row.Value.SetBounds(Width - S(83), S(top - 1), S(69), S(24));
+            var row = rows[i]; var top = 162 + i * 56;
+            row.Name.SetBounds(S(20), S(top), innerWidth - S(69), S(23));
+            row.Value.SetBounds(Width - S(89), S(top - 1), S(69), S(24));
             row.Bar.SetBounds(0, 0, 0, 0);
-            row.Reset.SetBounds(S(14), S(top + 24), innerWidth, S(20));
+            row.Reset.SetBounds(S(20), S(top + 24), innerWidth, S(20));
         }
     }
 
@@ -150,24 +154,20 @@ internal sealed class ProviderCard : Panel
         // Graphics.Clear ignores that clip and erases adjacent labels during refresh.
         using var background = new SolidBrush(Palette.Background);
         e.Graphics.FillRectangle(background, e.ClipRectangle);
-        using var card = new SolidBrush(Palette.Card);
-        using var shape = DrawingHelpers.RoundedRectangle(new RectangleF(.5f, .5f, Math.Max(1, Width - 1), Math.Max(1, Height - 1)), 12 * currentScale);
-        e.Graphics.FillPath(card, shape);
+        SurfaceDrawing.Card(e.Graphics, new RectangleF(3 * currentScale, 3 * currentScale,
+            Math.Max(1, Width - 6 * currentScale), Math.Max(1, Height - 8 * currentScale)), currentScale);
     }
 
     protected override void OnPaint(PaintEventArgs e)
     {
         base.OnPaint(e);
-        ProviderMark.Draw(e.Graphics, providerName, new RectangleF(14 * currentScale, 11 * currentScale, 21 * currentScale, 21 * currentScale), Palette.Foreground);
+        ProviderMark.Draw(e.Graphics, providerName, new RectangleF(20 * currentScale, 19 * currentScale, 22 * currentScale, 22 * currentScale), Palette.Foreground);
         var s = currentScale;
         e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var border = new Pen(Palette.Border);
-        using var outline = DrawingHelpers.RoundedRectangle(new RectangleF(.5f, .5f, Math.Max(1, Width - 1), Math.Max(1, Height - 1)), 12 * s);
-        e.Graphics.DrawPath(border, outline);
         if (statusDot is { } dotColor)
         {
             using var dot = new SolidBrush(dotColor);
-            e.Graphics.FillEllipse(dot, 14 * s, 44 * s, 6 * s, 6 * s);
+            e.Graphics.FillEllipse(dot, 20 * s, 57 * s, 6 * s, 6 * s);
         }
     }
 

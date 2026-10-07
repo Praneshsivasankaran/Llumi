@@ -67,10 +67,9 @@ internal static class GlyphDrawing
 }
 
 // A real Button retains keyboard navigation, accessible names and native Click semantics.
-internal sealed class GlyphButton : Button
+internal sealed class GlyphButton : RoundedButton
 {
     private readonly Glyph glyph;
-    private bool hovered, pressed;
 
     public GlyphButton(Glyph glyph, string accessibleName, string text = "")
     {
@@ -82,35 +81,17 @@ internal sealed class GlyphButton : Button
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
     }
 
-    protected override void OnMouseEnter(EventArgs e) { hovered = true; Invalidate(); base.OnMouseEnter(e); }
-    protected override void OnMouseLeave(EventArgs e) { hovered = false; pressed = false; Invalidate(); base.OnMouseLeave(e); }
-    protected override void OnMouseDown(MouseEventArgs e) { if (e.Button == MouseButtons.Left) pressed = true; Invalidate(); base.OnMouseDown(e); }
-    protected override void OnMouseUp(MouseEventArgs e) { pressed = false; Invalidate(); base.OnMouseUp(e); }
-    protected override void OnGotFocus(EventArgs e) { Invalidate(); base.OnGotFocus(e); }
-    protected override void OnLostFocus(EventArgs e) { Invalidate(); base.OnLostFocus(e); }
-
-    protected override void OnPaint(PaintEventArgs e)
+    protected override void PaintContent(Graphics graphics, Color ink)
     {
         var scale = DeviceDpi / 96f;
-        e.Graphics.Clear(BackColor);
-        e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-        using var shape = DrawingHelpers.RoundedRectangle(new RectangleF(.5f, .5f, Width - 1, Height - 1), 7 * scale);
-        using var fill = new SolidBrush(pressed ? Palette.Track : hovered ? Palette.Secondary : string.IsNullOrEmpty(Text) ? BackColor : Palette.Card);
-        e.Graphics.FillPath(fill, shape);
-        if (!string.IsNullOrEmpty(Text) || Focused)
-        {
-            using var border = new Pen(Focused ? Palette.Codex : Palette.Border);
-            e.Graphics.DrawPath(border, shape);
-        }
-        var ink = Enabled ? ForeColor : Palette.Muted;
         var iconSize = (int)Math.Round(18 * scale);
         var hasText = !string.IsNullOrEmpty(Text);
         var iconX = hasText ? (int)Math.Round(9 * scale) : (Width - iconSize) / 2;
-        GlyphDrawing.Draw(e.Graphics, glyph, new(iconX, (Height - iconSize) / 2, iconSize, iconSize), ink);
+        GlyphDrawing.Draw(graphics, glyph, new(iconX, (Height - iconSize) / 2, iconSize, iconSize), ink);
         if (hasText)
         {
             var textBounds = new Rectangle(iconX + iconSize + (int)Math.Round(5 * scale), 0, Width - iconX - iconSize - (int)Math.Round(9 * scale), Height);
-            TextRenderer.DrawText(e.Graphics, Text, Font, textBounds, ink, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
+            TextRenderer.DrawText(graphics, Text, Font, textBounds, ink, TextFormatFlags.VerticalCenter | TextFormatFlags.Left | TextFormatFlags.NoPrefix | TextFormatFlags.SingleLine);
         }
     }
 }

@@ -4,22 +4,20 @@ namespace AgentMeter;
 
 internal sealed class AboutView : Panel
 {
-    internal static readonly Uri StoreUri = new("https://apps.microsoft.com/detail/9NV153Q5K5MQ");
+    internal static readonly Uri ReleaseNotesUri = new("https://tryllumi.com/releases/");
     private readonly FlowLayoutPanel body = new() { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true };
     private readonly Action<Uri> openExternal;
     private readonly PictureBox identity = new() { SizeMode = PictureBoxSizeMode.Zoom, AccessibleName = "Llumi" };
-    private readonly Font heading = new("Segoe UI", 19, FontStyle.Bold);
-    private readonly Font sectionHeading = new("Segoe UI", 11, FontStyle.Bold);
+    private readonly Font heading = new("Segoe UI Semibold", 21, FontStyle.Regular);
+    private readonly Font compactHeading = new("Segoe UI Semibold", 17, FontStyle.Regular);
+    private readonly Font descriptionFont = new("Segoe UI", 11);
     private readonly Label feedback = new() { AutoSize = true, Visible = false, UseCompatibleTextRendering = false };
-    private readonly ReleaseNotes? notes = ReleaseNotes.Load();
-    private bool showingNotes;
-    internal bool ShowingNotes => showingNotes;
 
     internal AboutView(Action<Uri>? openExternal = null)
     {
         Name = "about"; AutoScroll = true;
         this.openExternal = openExternal ?? (uri => { using var process = Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); });
-        using var icon = AppIcon.Load(64); identity.Image = icon.ToBitmap();
+        using var icon = AppIcon.Load(128); identity.Image = icon.ToBitmap();
         Controls.Add(body);
         Resize += (_, _) => Arrange();
         ShowOverview();
@@ -48,42 +46,29 @@ internal sealed class AboutView : Panel
     }
     internal void ShowOverview()
     {
-        showingNotes = false; ClearBody();
-        var identityRow = new Panel { Name = "aboutIdentity", Height = S(56), Margin = new Padding(0, 0, 0, S(12)) };
-        identity.Size = new(S(48), S(48)); identity.Location = Point.Empty;
-        var name = TextLine("Llumi", true); name.Location = new(S(64), 0);
-        var version = TextLine($"Version {ReleaseNotes.AppVersion}"); version.Location = new(S(64), S(34));
+        ClearBody();
+        var identityRow = new Panel { Name = "aboutIdentity", Height = S(128), Margin = new Padding(0, 0, 0, S(6)) };
+        identity.Size = new(S(56), S(56)); identity.Location = Point.Empty;
+        var name = TextLine("Llumi", true); name.Name = "aboutName";
+        var version = TextLine($"Version {ReleaseNotes.AppVersion}"); version.Name = "aboutVersion";
         identityRow.Controls.AddRange([identity, name, version]); body.Controls.Add(identityRow);
-        var description = TextLine("Track your AI coding usage."); description.Margin = new Padding(0, 0, 0, S(12));
+        var description = TextLine("Track your AI coding usage."); description.Font = descriptionFont; description.Margin = new Padding(0, 0, 0, S(18));
         body.Controls.Add(description);
-        body.Controls.Add(ActionButton("Release notes", ShowReleaseNotes));
-        body.Controls.Add(ActionButton("Open Microsoft Store", () =>
+        body.Controls.Add(ActionButton("Release notes", () =>
         {
-            try { openExternal(StoreUri); }
+            try
+            {
+                openExternal(ReleaseNotesUri);
+                feedback.Visible = false;
+                feedback.Text = string.Empty;
+                Arrange();
+            }
             catch (Exception exception) when (exception is System.ComponentModel.Win32Exception or InvalidOperationException or System.Security.SecurityException)
-            { feedback.Text = "Microsoft Store could not be opened. Please try again."; feedback.Visible = true; Arrange(); }
+            { feedback.Text = "Release notes could not be opened. Please try again."; feedback.Visible = true; Arrange(); }
         }));
         foreach (var button in body.Controls.OfType<Button>())
-        { button.Height = S(34); button.Margin = new Padding(0, 0, 0, S(8)); }
+        { button.Height = S(36); button.Margin = new Padding(0, 0, 0, S(8)); }
         body.Controls.Add(feedback);
-        body.ResumeLayout(); ApplyTheme();
-    }
-    internal void ShowReleaseNotes()
-    {
-        showingNotes = true; ClearBody();
-        body.Controls.Add(ActionButton("Back to About", ShowOverview));
-        body.Controls.Add(TextLine($"What’s new in {ReleaseNotes.AppVersion}", true));
-        if (notes is null) body.Controls.Add(TextLine("Release notes are unavailable for this version."));
-        else
-        {
-            if (notes.Preview) body.Controls.Add(TextLine("Local preview"));
-            body.Controls.Add(TextLine(notes.Summary));
-            foreach (var section in notes.Sections)
-            {
-                var label = TextLine(section.Title); label.Font = sectionHeading; body.Controls.Add(label);
-                foreach (var item in section.Items) body.Controls.Add(TextLine("• " + item));
-            }
-        }
         body.ResumeLayout(); ApplyTheme();
     }
     internal void ApplyTheme()
@@ -96,36 +81,55 @@ internal sealed class AboutView : Panel
             foreach (Control nested in child.Controls) Theme(nested);
         }
         foreach (Control child in body.Controls) Theme(child);
+        foreach (var label in body.Controls.OfType<Label>()) label.ForeColor = Palette.Muted;
+        foreach (var label in body.Controls.OfType<Panel>().SelectMany(p => p.Controls.OfType<Label>()).Where(l => l.Name == "aboutVersion")) label.ForeColor = Palette.Muted;
         feedback.ForeColor = Palette.Muted;
         Arrange();
     }
     protected override void OnDpiChangedAfterParent(EventArgs e)
     {
         base.OnDpiChangedAfterParent(e);
-        if (showingNotes) ShowReleaseNotes(); else ShowOverview();
+        ShowOverview();
     }
     private void Arrange()
     {
         if (IsDisposed) return;
         var scroll = AutoScrollPosition;
+        var compact = ClientSize.Height < S(300);
         var width = Math.Max(S(160), Math.Min(S(500), ClientSize.Width - S(40) - SystemInformation.VerticalScrollBarWidth));
         body.SuspendLayout();
         body.Width = width;
-        foreach (var label in body.Controls.OfType<Label>()) label.MaximumSize = new(width, 0);
-        foreach (var button in body.Controls.OfType<Button>()) button.Width = Math.Min(width, S(218));
+        foreach (var label in body.Controls.OfType<Label>())
+        {
+            label.MaximumSize = new(width, 0); label.TextAlign = ContentAlignment.MiddleCenter;
+            label.MinimumSize = new(width, 0);
+            if (label != feedback) label.Margin = new Padding(0, 0, 0, S(compact ? 10 : 18));
+        }
+        foreach (var button in body.Controls.OfType<Button>())
+        {
+            button.Width = Math.Min(width, S(170)); button.Margin = new Padding((width - button.Width) / 2, 0, 0, S(8));
+        }
         foreach (var row in body.Controls.OfType<Panel>())
         {
-            row.Width = width;
-            foreach (var label in row.Controls.OfType<Label>()) label.MaximumSize = new(Math.Max(1, width - S(64)), 0);
+            row.Width = width; row.Height = S(compact ? 100 : 128);
+            identity.Size = new(S(compact ? 40 : 56), S(compact ? 40 : 56));
+            identity.Location = new((width - identity.Width) / 2, 0);
+            foreach (var label in row.Controls.OfType<Label>())
+            {
+                label.MaximumSize = new(width, 0);
+                if (label.Name == "aboutName") label.Font = compact ? compactHeading : heading;
+                label.Location = new((width - label.PreferredWidth) / 2,
+                    S(label.Name == "aboutName" ? compact ? 45 : 62 : compact ? 80 : 106));
+            }
         }
         body.ResumeLayout(true);
-        var padding = showingNotes ? S(24) : S(16);
-        body.Location = new(Math.Max(S(20), (ClientSize.Width - width) / 2), padding + scroll.Y);
+        var padding = S(16);
+        body.Location = new(Math.Max(S(20), (ClientSize.Width - width) / 2), Math.Max(padding, (ClientSize.Height - body.Height) / 2) + scroll.Y);
         AutoScrollMinSize = new(0, body.Height + padding * 2);
     }
     protected override void Dispose(bool disposing)
     {
-        if (disposing) { identity.Image?.Dispose(); identity.Dispose(); feedback.Dispose(); heading.Dispose(); sectionHeading.Dispose(); }
+        if (disposing) { identity.Image?.Dispose(); identity.Dispose(); feedback.Dispose(); heading.Dispose(); compactHeading.Dispose(); descriptionFont.Dispose(); }
         base.Dispose(disposing);
     }
 }

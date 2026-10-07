@@ -121,7 +121,7 @@ internal sealed class MonitorForm : Form
         if (height + .51f * 96 / Math.Clamp(dpi, 48, 768) >= Math.Max(178, 124 + count * 54))
             return new(count, false, false, true, false, 78 + Math.Max(1, count) * 54,
                 97 + Math.Max(1, count) * 54, 8, 78, 0, 0);
-        // Names, observation age, status and Open Usage stay visible before choosing
+        // Names, observation date, status and Open Usage stay visible before choosing
         // complete allowance rows. Tiny work areas fall back to the accessible footer.
         if (height >= 145)
         {
@@ -161,7 +161,7 @@ internal sealed class MonitorForm : Form
             var windows = allowances.Select(w => new MonitorDetail(PopupText.WindowName(name, w), PopupText.Remaining(w), PopupText.Reset(w, at))).ToArray();
             var details = string.Join("\n", windows.Select(w => $"{w.Label} · {w.Value} remaining\n{w.Reset}"));
             var accessibleDetails = string.Join("\n", allowances.Select(w => $"{PopupText.AccessibleWindowName(name, w)} · {PopupText.Remaining(w)} remaining\n{PopupText.Reset(w, at)}"));
-            var observation = state.Snapshot is { } snapshot ? $"Updated {PopupText.Age(snapshot.ObservedAt, at)}" : "Not yet updated";
+            var observation = state.Snapshot is { } snapshot ? PopupText.ObservationDate(snapshot.ObservedAt, at) : "Not yet updated";
             return new MonitorRow(name, value, window?.RemainingPercent, stale, status, reset, observation,
                 window is null ? "Allowance unavailable" : PopupText.WindowName(name, window), hint + "\n" + accessibleDetails, details, windows);
         }).ToArray();
@@ -341,11 +341,18 @@ internal sealed class MonitorForm : Form
         var expanded = (float)expansion;
         var radius = Math.Min(height / 2, 17 + expanded);
         using var shape = DrawingHelpers.RoundedRectangle(new(.5f, .5f, Math.Max(1, width - 1), Math.Max(1, height - 1)), radius);
+        if (!SystemInformation.HighContrast)
+        {
+            using var shadow = new Pen(Color.FromArgb(Palette.IsLight ? 20 : 40, Color.Black), 3);
+            g.TranslateTransform(0, 1);
+            g.DrawPath(shadow, shape);
+            g.TranslateTransform(0, -1);
+        }
         // Native per-pixel translucent HUD: no captured desktop pixels, private blur APIs,
         // or forced backdrop incompatible with a nonactivating layered window.
         var alpha = TransparencyAllowed ? 242 : 255;
-        var top = SystemInformation.HighContrast ? SystemColors.Window : Palette.IsLight ? Color.FromArgb(252, 253, 255) : Color.FromArgb(34, 38, 46);
-        var bottom = SystemInformation.HighContrast ? SystemColors.Window : Palette.IsLight ? Color.FromArgb(235, 239, 245) : Color.FromArgb(17, 20, 26);
+        var top = SystemInformation.HighContrast ? SystemColors.Window : Palette.IsLight ? Color.FromArgb(253, 253, 254) : Color.FromArgb(43, 44, 48);
+        var bottom = SystemInformation.HighContrast ? SystemColors.Window : Palette.IsLight ? Color.FromArgb(246, 247, 249) : Color.FromArgb(34, 35, 39);
         using var background = new LinearGradientBrush(new RectangleF(0, 0, width, Math.Max(1, height)), Color.FromArgb(alpha, top), Color.FromArgb(alpha, bottom), 90);
         g.FillPath(background, shape);
         using var border = new Pen(SystemInformation.HighContrast ? SystemColors.WindowText : Color.FromArgb(150, Palette.Border), SystemInformation.HighContrast ? 1.5f : .75f);
@@ -367,14 +374,16 @@ internal sealed class MonitorForm : Form
             var expandedX = padding + i * (columnWidth + gap);
             var x = offset + compactX + (expandedX - compactX) * expanded;
             var headerExpansion = expanded >= .99 && detailLayout.CompactHeader ? 0 : expanded;
-            var headerY = detailLayout.CompactHeader ? 26 : 31;
+            var headerY = detailLayout.CompactHeader ? 26 : 8;
             var y = 7.5f + (headerY - 7.5f) * expanded;
             var markSize = 19 + 4 * headerExpansion;
             if (expanded < .99 || detailLayout.HeaderVisible)
             {
                 ProviderMark.Draw(g, row.Name, new(x, y, markSize, markSize), Ink);
-                Draw(g, row.Value, headerExpansion is > 0 and < 1 ? animatedNumberFont : headerExpansion == 1 ? expandedNumberFont : numberFont, ink, new(x + markSize + 7, y - 4, 58, 29));
-                if (row.Stale) { using var stale = new SolidBrush(ink); g.FillEllipse(stale, x + markSize + 61, y + 8, 4, 4); }
+                var valueX = x + (markSize + 7) * (1 - headerExpansion);
+                var valueY = (y - 4) * (1 - headerExpansion) + 34 * headerExpansion;
+                Draw(g, row.Value, headerExpansion is > 0 and < 1 ? animatedNumberFont : headerExpansion == 1 ? expandedNumberFont : numberFont, ink, new(valueX, valueY, 58, 29));
+                if (row.Stale) { using var stale = new SolidBrush(ink); g.FillEllipse(stale, valueX + 54, valueY + 12, 4, 4); }
             }
             if (i > 0)
             {
@@ -384,8 +393,10 @@ internal sealed class MonitorForm : Form
             if (expanded <= .01) continue;
             Color Detail(Color color) => Color.FromArgb((int)(255 * Math.Clamp((expanded - .2) / .8, 0, 1)), color);
             if (detailLayout.NameY >= 0)
-                Draw(g, row.Name == "Claude" ? "Claude Code" : row.Name, numberFont, Detail(Ink), new(x, detailLayout.NameY, columnWidth, 18));
-            if (count == 1 && detailLayout.HeaderVisible) Draw(g, "remaining", bodyFont, Detail(Muted), new(x + 92, y - 1, 90, 25));
+                Draw(g, row.Name == "Claude" ? "Claude Code" : row.Name, numberFont, Detail(Ink),
+                    new(x + (detailLayout.CompactHeader ? 0 : 31), detailLayout.NameY + (detailLayout.CompactHeader ? 0 : 2), Math.Max(1, columnWidth - (detailLayout.CompactHeader ? 0 : 31)), 18));
+            if (!detailLayout.CompactHeader && detailLayout.HeaderVisible)
+                Draw(g, "remaining", bodyFont, Detail(Muted), new(x + 62, 37, Math.Max(1, columnWidth - 62), 23));
             if (!detailLayout.CombinedStatus)
             {
                 if (row.Status != "Live") Draw(g, row.Status, bodyFont, Detail(ink), new(x, detailLayout.StatusY, columnWidth, 19));
@@ -409,7 +420,7 @@ internal sealed class MonitorForm : Form
                 for (var detailIndex = 0; detailIndex < Math.Min(row.Windows.Length, detailLayout.VisibleRows); detailIndex++)
                 {
                     var detail = row.Windows[detailIndex]; var detailY = detailLayout.AllowanceY + detailIndex * 54;
-                    Draw(g, detail.Label, bodyFont, Detail(Muted), new(x, detailY, columnWidth, 17));
+                    Draw(g, detail.Label, numberFont, Detail(Ink), new(x, detailY, columnWidth, 17));
                     Draw(g, detail.Value + " remaining", bodyFont, Detail(Ink), new(x, detailY + 17, columnWidth, 17));
                     Draw(g, detail.Reset, bodyFont, Detail(Muted), new(x, detailY + 34, columnWidth, 17));
                 }

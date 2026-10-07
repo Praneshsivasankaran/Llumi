@@ -4,6 +4,18 @@ namespace AgentMeter.Tests;
 
 public sealed class MonitorStateTests
 {
+    [Theory]
+    [InlineData("removed", "primary")]
+    [InlineData(null, "primary")]
+    [InlineData("SECONDARY", "secondary")]
+    public void SavedDisplayWinsWhenPresentAndMissingDisplayFallsBackToPrimary(string? saved, string expected)
+    {
+        Assert.Equal(expected, MonitorPosition.SelectDisplay(saved, "primary", ["secondary", "primary"]));
+        if (expected == "primary")
+            Assert.Equal(new Point(20, 60), MonitorPosition.Restore(new(2, saved ?? "removed", .8, .5),
+                expected, new(0, 40, 1600, 900), new(202, 34), 96));
+    }
+
     private static UsageWindow W(string id, double? used = 30) => new(id, "Localized arbitrary label", used, null, id == "codex/secondary" ? 10080 : 300);
     private static ProviderState State(string name, params UsageWindow[] windows) => new(name, ProviderStatus.Ready,
         new UsageSnapshot(windows, DateTimeOffset.UtcNow, "test"));

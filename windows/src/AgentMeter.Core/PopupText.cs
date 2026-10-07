@@ -29,7 +29,7 @@ public static class PopupText
     {
         if (!state.Enabled) return "Enable in Settings to monitor allowance";
         if (state.Snapshot is { } snapshot)
-            return $"Updated {Age(snapshot.ObservedAt, now)}" + (state.Detail is null ? "" : " · provider notice");
+            return ObservationDate(snapshot.ObservedAt, now);
         if (state.Status == ProviderStatus.Loading) return "Checking local provider";
         return state.Failure switch
         {
@@ -39,6 +39,15 @@ public static class PopupText
             FailureKind.Unsupported => "Usage format is unsupported", FailureKind.RateLimited => "Waiting for provider rate limit",
             FailureKind.AccountChanged => "Account verification failed; allowance cleared", _ => "Try Retry"
         };
+    }
+
+    public static string ObservationDate(DateTimeOffset observed, DateTimeOffset now)
+    {
+        var date = observed.ToLocalTime().Date;
+        var today = now.ToLocalTime().Date;
+        if (date == today) return "Today";
+        if (date == today.AddDays(-1)) return "Yesterday";
+        return date.ToString("d", CultureInfo.CurrentCulture);
     }
 
     public static string Age(DateTimeOffset observed, DateTimeOffset now)

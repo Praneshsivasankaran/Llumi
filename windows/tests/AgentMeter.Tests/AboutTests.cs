@@ -17,7 +17,7 @@ public sealed class AboutTests
     }
 
     [Fact]
-    public void AboutNavigationReusesMainWindowAndReleasesNotesAreOffline() => RunSta(() =>
+    public void AboutNavigationReusesMainWindowAndShowsBrandWithoutInlineNotes() => RunSta(() =>
     {
         using var icon = AppIcon.Load();
         using var form = new UsageForm(["Codex", "Claude Code"], icon) { AllowExit = true };
@@ -25,32 +25,56 @@ public sealed class AboutTests
         form.ShowAbout();
         var about = Assert.Single(form.Controls.OfType<AboutView>());
         Assert.True(about.Visible);
+        Assert.Contains(Descendants(about), c => c.Text == "Llumi");
+        Assert.Contains(Descendants(about), c => c.Text == "Track your AI coding usage.");
         Assert.Contains(Descendants(about), c => c.Text == $"Version {ReleaseNotes.AppVersion}");
+        Assert.NotNull(Assert.Single(Descendants(about).OfType<PictureBox>()).Image);
+        Assert.Equal("Release notes", Assert.Single(Descendants(about).OfType<Button>()).Text);
+        Assert.DoesNotContain(Descendants(about), c => c.Text.Contains("Microsoft Store") || c.Text.Contains("What’s new") || c.Text == "Local preview");
         Assert.False(form.Controls.Find("settings", true).Single().Visible);
-        form.ShowReleaseNotes();
-        Assert.True(about.ShowingNotes);
-        Assert.Contains(Descendants(about), c => c.Text == "Local preview");
         form.ShowSettings(); Assert.False(about.Visible);
-        form.ShowAbout(); Assert.False(about.ShowingNotes);
+        form.ShowAbout(); Assert.True(about.Visible);
         form.ShowUsage(); Assert.False(about.Visible);
         Assert.Single(form.Controls.OfType<AboutView>());
     });
 
     [Fact]
-    public void StoreActionIsExplicitFixedDestinationAndFailureIsRecoverable() => RunSta(() =>
+    public void ReleaseNotesOpensOnlyCanonicalWebsiteOnExplicitClick() => RunSta(() =>
     {
         var opened = new List<Uri>();
         using var host = new Form();
-        using var view = new AboutView(uri => { opened.Add(uri); throw new Win32Exception("private failure detail"); }) { Dock = DockStyle.Fill };
+        using var view = new AboutView(opened.Add) { Dock = DockStyle.Fill };
         host.Controls.Add(view); host.Show();
         Assert.Empty(opened);
-        view.ShowReleaseNotes(); Assert.Empty(opened);
-        view.ShowOverview();
-        Descendants(view).OfType<Button>().Single(b => b.Text == "Open Microsoft Store").PerformClick();
-        Assert.Equal([AboutView.StoreUri], opened);
-        Assert.Equal("https://apps.microsoft.com/detail/9NV153Q5K5MQ", opened[0].AbsoluteUri);
-        Assert.Contains(Descendants(view), c => c.Text == "Microsoft Store could not be opened. Please try again.");
+        Descendants(view).OfType<Button>().Single(b => b.Text == "Release notes").PerformClick();
+        Assert.Equal([AboutView.ReleaseNotesUri], opened);
+        Assert.Equal("https://tryllumi.com/releases/", opened[0].AbsoluteUri);
+        Assert.Contains(Descendants(view), c => c.Text == $"Version {ReleaseNotes.AppVersion}");
+        Assert.DoesNotContain(Descendants(view), c => c.Text.Contains("What’s new") || c.Text == "Back to About");
+    });
+
+    [Fact]
+    public void BrowserFailureIsFriendlyAndRetryClearsFeedback() => RunSta(() =>
+    {
+        var opened = new List<Uri>();
+        using var host = new Form();
+        using var view = new AboutView(uri =>
+        {
+            opened.Add(uri);
+            if (opened.Count == 1) throw new Win32Exception("private failure detail");
+        }) { Dock = DockStyle.Fill };
+        host.Controls.Add(view); host.Show();
+        Assert.Empty(opened);
+        var button = Descendants(view).OfType<Button>().Single(b => b.Text == "Release notes");
+        button.PerformClick();
+        Assert.Equal([AboutView.ReleaseNotesUri], opened);
+        var feedback = Assert.Single(Descendants(view), c => c.Text == "Release notes could not be opened. Please try again.");
+        Assert.True(feedback.Visible);
         Assert.DoesNotContain(Descendants(view), c => c.Text.Contains("private failure"));
+        button.PerformClick();
+        Assert.Equal([AboutView.ReleaseNotesUri, AboutView.ReleaseNotesUri], opened);
+        Assert.False(feedback.Visible);
+        Assert.Empty(feedback.Text);
     });
 
     [Theory]
@@ -70,20 +94,22 @@ public sealed class AboutTests
     [Theory]
     [InlineData(380, 320)]
     [InlineData(640, 440)]
-    public void NotesWrapAndRemainScrollableInSmallWindows(int width, int height) => RunSta(() =>
+    public void AboutFitsSmallWindowsAndRetainsThemeWithoutOpeningBrowser(int width, int height) => RunSta(() =>
     {
         using var host = new Form { ClientSize = new(width, height) };
         using var view = new AboutView(_ => throw new InvalidOperationException("No action requested")) { Dock = DockStyle.Fill };
-        host.Controls.Add(view); host.Show(); view.ShowReleaseNotes(); Application.DoEvents();
-        Assert.True(view.AutoScrollMinSize.Height > view.ClientSize.Height);
+        host.Controls.Add(view); host.Show(); Application.DoEvents();
         var body = Assert.Single(view.Controls.OfType<FlowLayoutPanel>());
         Assert.True(body.Right <= view.ClientSize.Width);
         Assert.All(Descendants(view).OfType<Label>(), label => Assert.True(label.Width <= body.Width));
         var original = Palette.IsLight;
-        Palette.Apply(Appearance.Dark); view.ApplyTheme();
-        Assert.Equal(Palette.Background, view.BackColor);
-        Assert.True(view.ShowingNotes);
-        Palette.Apply(original ? Appearance.Light : Appearance.Dark);
+        try
+        {
+            Palette.Apply(Appearance.Dark); view.ApplyTheme();
+            Assert.Equal(Palette.Background, view.BackColor);
+            Assert.Equal("Release notes", Assert.Single(Descendants(view).OfType<Button>()).Text);
+        }
+        finally { Palette.Apply(original ? Appearance.Light : Appearance.Dark); }
     });
 
     private static IEnumerable<Control> Descendants(Control parent)

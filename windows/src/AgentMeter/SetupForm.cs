@@ -1,4 +1,5 @@
 using System.Runtime.InteropServices;
+using System.Drawing.Drawing2D;
 using AgentMeter.Core;
 
 namespace AgentMeter;
@@ -14,7 +15,8 @@ internal sealed class SetupForm : Form
     private readonly IStartupRegistration startup;
     private readonly Action toggleStartup;
     private readonly Action finished;
-    private readonly FlowLayoutPanel body = new() { Name = "setupViewport", Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true };
+    private readonly SetupViewport body = new() { Name = "setupViewport", AutoScroll = true };
+    private readonly Panel fixedNavigation = new() { Name = "setupFixedNavigation", Visible = false };
     private readonly FlowLayoutPanel page = new() { Name = "setupPage", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = Padding.Empty };
     private readonly FlowLayoutPanel content = new() { Name = "setupContent", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, FlowDirection = FlowDirection.TopDown, WrapContents = false, Margin = Padding.Empty };
     private readonly FlowLayoutPanel navigation = new() { Name = "setupNavigation", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, FlowDirection = FlowDirection.RightToLeft };
@@ -34,6 +36,7 @@ internal sealed class SetupForm : Form
     private readonly Font bodyFont = new("Segoe UI", 10);
     private readonly Font headingFont = new("Segoe UI", 16, FontStyle.Bold);
     private readonly Font welcomeFont = new("Segoe UI", 24, FontStyle.Bold);
+    private readonly Font commandFont = new("Consolas", 10);
     private bool syncingProviders;
     private bool syncingPreferences;
     private bool initialized;
@@ -53,7 +56,8 @@ internal sealed class SetupForm : Form
         Text = "Setup Llumi"; Font = bodyFont; Icon = AppIcon.Load();
         AutoScaleDimensions = new SizeF(96, 96); AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(620, 580);
         MinimumSize = new Size(560, 480); StartPosition = FormStartPosition.CenterScreen;
-        Controls.Add(body); Controls.Add(welcome); body.Controls.Add(page); page.Controls.Add(content); page.Controls.Add(navigation);
+        Controls.Add(body); Controls.Add(welcome); Controls.Add(fixedNavigation);
+        body.Controls.Add(page); page.Controls.Add(content); page.Controls.Add(navigation);
         welcome.Controls.Add(welcomeGroup); welcomeGroup.Controls.Add(welcomeLogo); welcomeGroup.Controls.Add(welcomeName);
         welcomeName.Font = welcomeFont;
         welcomeLogo.Paint += (_, e) => { using var mark = AppIcon.Load(welcomeLogo.Width); e.Graphics.DrawIcon(mark, welcomeLogo.ClientRectangle); };
@@ -74,7 +78,6 @@ internal sealed class SetupForm : Form
         };
         countdown.Tick += (_, _) => RefreshStatuses();
         VisibleChanged += (_, _) => { if (Visible) countdown.Start(); else countdown.Stop(); };
-        body.SizeChanged += (_, _) => FitBodyContent();
         content.SizeChanged += (_, _) => FitBodyContent();
         AcceptButton = next; RenderStep(); ResumeLayout(true); initialized = true; FitBodyContent(); LayoutWelcome();
         Load += (_, _) => FitInitialWindow();
@@ -88,7 +91,7 @@ internal sealed class SetupForm : Form
     }
     private FlowLayoutPanel Card(int minimumHeight = 0)
     {
-        var card = new FlowLayoutPanel { Name = "setupCard", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
+        var card = new SetupCard { Name = "setupCard", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink,
             FlowDirection = FlowDirection.TopDown, WrapContents = false, Padding = new Padding(S(18)),
             Margin = new Padding(0, 0, 0, S(14)), MinimumSize = new Size(0, S(minimumHeight)) };
         content.Controls.Add(card); return card;
@@ -99,12 +102,14 @@ internal sealed class SetupForm : Form
         button.Margin = parent is null ? new Padding(0, 0, 0, S(8)) : new Padding(0, 0, S(12), 0);
         button.Click += (_, _) => action(); (parent ?? content).Controls.Add(button); return button;
     }
-    private void Command(string title, string command)
+    private void Command(string title, string command, string? instruction = null)
     {
-        var card = Card(96);
-        TextLine(title, spacing: 12, parent: card);
+        var card = Card(80);
+        TextLine(title, spacing: 8, parent: card);
+        if (instruction is not null) TextLine(instruction, spacing: 8, parent: card);
         var row = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
-        var box = new TextBox { Text = command, ReadOnly = true, Width = S(370), AccessibleName = title, ShortcutsEnabled = true, Margin = new Padding(0, S(4), S(12), 0) };
+        var box = new TextBox { Text = command, ReadOnly = true, Width = S(370), AccessibleName = title, ShortcutsEnabled = true,
+            Font = commandFont, BorderStyle = BorderStyle.None, Margin = new Padding(0, S(7), S(12), 0) };
         var copy = Palette.Button("Copy", "Copy " + title + " command"); copy.AutoSize = true; copy.MinimumSize = new Size(S(72), S(32)); copy.Margin = Padding.Empty;
         copy.Click += (_, _) => Copy(command); row.Controls.Add(box); row.Controls.Add(copy); card.Controls.Add(row);
         commandRows.Add((row, box, copy));
@@ -148,8 +153,9 @@ internal sealed class SetupForm : Form
     private void ProviderSwitch(string provider, FlowLayoutPanel row)
     {
         var current = preferences();
-        var control = new CheckBox { Text = "Monitor " + Title(provider), AutoSize = true, AccessibleName = "Monitor " + Title(provider),
-            Checked = provider == "Codex" ? current.CodexEnabled : current.ClaudeEnabled, Margin = new Padding(0, S(8), 0, 0) };
+        var control = new ToggleSwitch { Text = "Monitor " + Title(provider), AccessibleName = "Monitor " + Title(provider),
+            LightAppearanceOverride = true, Size = new Size(S(432), S(38)),
+            Checked = provider == "Codex" ? current.CodexEnabled : current.ClaudeEnabled, Margin = Padding.Empty };
         providerSwitches[provider] = control;
         control.CheckedChanged += (_, _) =>
         {
@@ -192,13 +198,12 @@ internal sealed class SetupForm : Form
         }
         var actions = new FlowLayoutPanel { Name = "setupActions", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, MaximumSize = new Size(S(520), 0), Margin = new Padding(0, 0, 0, S(12)) };
         retryButtons.Add(ActionButton("Retry", Retry, actions));
-        ActionButton("Copy Diagnostics", () => Copy(SetupDiagnostics.Report(states(),
-            typeof(SetupForm).Assembly.GetName().Version?.ToString(3), typeof(SetupForm).Assembly.GetName().Version?.ToString())), actions);
         content.Controls.Add(actions);
         content.Controls.Add(retryMessage);
     }
     internal void RefreshStatuses()
     {
+        var scroll = body.AutoScrollPosition;
         var current = preferences(); flow.Codex = current.CodexEnabled; flow.Claude = current.ClaudeEnabled;
         syncingProviders = true;
         foreach (var (provider, control) in providerSwitches)
@@ -224,7 +229,7 @@ internal sealed class SetupForm : Form
         if (flow.Step == SetupStep.Verify)
             NextCaption(states().Any(s => ((flow.Codex && s.Name == "Codex") || (flow.Claude && s.Name is "Claude" or "Claude Code"))
                 && s.Enabled && s.Authentication == AuthenticationStatus.Verified) ? "Continue" : "Finish Anyway");
-        FitBodyContent();
+        FitBodyContent(scroll);
     }
     private void RenderStep()
     {
@@ -234,6 +239,8 @@ internal sealed class SetupForm : Form
         content.Controls.Clear(); statusLabels.Clear(); retryButtons.Clear(); providerSwitches.Clear(); commandRows.Clear(); message.Text = ""; message.Visible = false; retryMessage.Text = "";
         body.AutoScrollPosition = Point.Empty;
         var isWelcome = flow.Step == SetupStep.Welcome;
+        fixedNavigation.Visible = false;
+        if (navigation.Parent != page) page.Controls.Add(navigation);
         welcome.Visible = isWelcome;
         if (isWelcome) { welcomeGroup.Controls.Add(next); next.AutoSize = false; }
         else
@@ -258,32 +265,41 @@ internal sealed class SetupForm : Form
                 TextLine(isCodex ? "Set up Codex" : "Set up Claude Code", true);
                 TextLine("Run these in PowerShell.");
                 Command("1. Install", isCodex ? "npm install -g @openai/codex" : "irm https://claude.ai/install.ps1 | iex");
-                Command("2. Sign in", isCodex ? "codex login" : "claude auth login");
+                Command("2. Sign in", isCodex ? "codex login" : "claude auth login", isCodex ? null : "Open a new PowerShell window.");
                 var help = new LinkLabel { Text = "Setup help", AccessibleName = (isCodex ? "Codex" : "Claude Code") + " setup help",
                     AutoSize = true, TabStop = true, LinkBehavior = LinkBehavior.HoverUnderline, Margin = new Padding(0, 8, 0, 0) };
                 help.LinkClicked += (_, _) => ProviderSetup.Open(new Uri(isCodex
                     ? "https://learn.chatgpt.com/docs/codex/cli" : "https://code.claude.com/docs/en/setup"));
-                content.Controls.Add(help); break;
+                content.Controls.Add(help);
+                content.Controls.Add(new SetupAnimation(isCodex ? "Codex" : "Claude Code")
+                { Size = new Size(S(520), S(292)), Margin = new Padding(0, S(18), 0, 0) }); break;
             case SetupStep.Verify:
                 TextLine("Check Setup", true); Statuses(switches: true); break;
             case SetupStep.Preferences:
                 TextLine("Preferences", true);
                 var p = preferences();
-                var compact = new CheckBox { Text = "Compact Monitor", Checked = p.CompactMonitor, AutoSize = true };
-                var tray = new CheckBox { Text = "Tray Icon", Checked = p.TrayIcon, AutoSize = true };
+                var compact = new ToggleSwitch { Text = "Compact Monitor", Checked = p.CompactMonitor, LightAppearanceOverride = true };
+                var tray = new ToggleSwitch { Text = "Tray Icon", Checked = p.TrayIcon, LightAppearanceOverride = true };
                 var available = startup.TryRead(out var enabled);
-                var launch = new CheckBox { Text = "Launch at Startup", Checked = enabled, Enabled = available, AutoSize = true };
+                var launch = new ToggleSwitch { Text = "Launch at Startup", Checked = enabled, Enabled = available, LightAppearanceOverride = true };
+                var syncingStartup = false;
                 void ChangeStartup()
                 {
-                    if (!launch.Enabled) return;
+                    if (!launch.Enabled || syncingStartup) return;
                     var requested = launch.Checked;
-                    toggleStartup();
-                    launch.Enabled = startup.TryRead(out var actual);
-                    launch.Checked = actual;
+                    bool actual;
+                    syncingStartup = true;
+                    try
+                    {
+                        toggleStartup();
+                        launch.Enabled = startup.TryRead(out actual);
+                        launch.Checked = actual;
+                    }
+                    finally { syncingStartup = false; }
                     Feedback(!launch.Enabled ? "Startup setting is unavailable. Please try again." :
                         actual == requested ? "" : "Startup setting could not be saved. Please try again.");
                 }
-                launch.Click += (_, _) => ChangeStartup();
+                launch.CheckedChanged += (_, _) => ChangeStartup();
                 var appearance = new ComboBox { DropDownStyle = ComboBoxStyle.DropDownList, AccessibleName = "Appearance", Width = 200 };
                 appearance.Items.AddRange(["System", "Light", "Dark"]); appearance.SelectedIndex = (int)p.Appearance;
                 void Restore(Preferences actual)
@@ -302,7 +318,6 @@ internal sealed class SetupForm : Form
                     {
                         if (!setting.Enabled) return;
                         setting.Focus(); setting.Checked = !setting.Checked;
-                        if (setting == launch) ChangeStartup();
                     };
                 }
                 var appearanceRow = Card(66); appearanceRow.FlowDirection = FlowDirection.LeftToRight;
@@ -337,15 +352,18 @@ internal sealed class SetupForm : Form
         welcomeGroup.Size = new Size(width, next.Bottom);
         welcomeGroup.Location = new Point((welcome.ClientSize.Width - width) / 2, (welcome.ClientSize.Height - welcomeGroup.Height) / 2);
     }
-    private void FitBodyContent()
+    private void FitBodyContent(Point? preservedScroll = null)
     {
         if (!initialized || fitting || rendering || flow.Step == SetupStep.Welcome) return;
+        // Auto-sized labels and footer changes can temporarily shrink the scroll
+        // extent. Capture the user's position before any of those layouts run.
+        var scroll = preservedScroll ?? body.AutoScrollPosition;
         fitting = true;
         try
         {
             // Reserve a scrollbar gutter consistently so its appearance cannot make
             // wrapping/height alternate between two layouts at the same window size.
-            var width = Math.Max(S(240), Math.Min(S(520), body.ClientSize.Width - S(48) - SystemInformation.VerticalScrollBarWidth));
+            var width = Math.Max(S(240), Math.Min(S(520), ClientSize.Width - S(48) - SystemInformation.VerticalScrollBarWidth));
             foreach (var stack in new[] { page, content, navigation })
             {
                 stack.MinimumSize = new Size(width, 0); stack.MaximumSize = new Size(width, 0); stack.Width = width;
@@ -357,6 +375,13 @@ internal sealed class SetupForm : Form
             {
                 card.MinimumSize = new Size(width, card.MinimumSize.Height); card.MaximumSize = new Size(width, 0); card.Width = width;
             }
+            foreach (var toggle in Descendants(content).OfType<ToggleSwitch>())
+            {
+                var artworkWidth = toggle.Parent!.Controls.OfType<ProviderArtwork>().Sum(a => a.Width + a.Margin.Horizontal);
+                toggle.Size = new Size(Math.Max(S(100), width - S(36) - artworkWidth), S(38));
+            }
+            foreach (var illustration in content.Controls.OfType<SetupAnimation>())
+                illustration.Size = new Size(width, (int)Math.Round(width * 9d / 16));
             foreach (var label in Descendants(content).OfType<Label>().Where(l => l.AutoSize && l.MaximumSize.Width > 0))
                 label.MaximumSize = new Size(label.Parent == content ? width : Math.Max(S(100), width - S(36)), 0);
             foreach (var actions in content.Controls.OfType<FlowLayoutPanel>().Where(p => p.Name == "setupActions")) actions.MaximumSize = new Size(width, 0);
@@ -367,16 +392,41 @@ internal sealed class SetupForm : Form
             }
             foreach (var centered in content.Controls.Cast<Control>().Where(c => c.Name is "finishLogo" or "finishHeading"))
             { centered.MinimumSize = new Size(width, centered.Name == "finishLogo" ? S(96) : 0); centered.MaximumSize = new Size(width, 0); centered.Width = width; }
-            content.PerformLayout(); navigation.PerformLayout(); page.PerformLayout();
+            content.PerformLayout(); navigation.PerformLayout();
+            var contentHeight = content.GetPreferredSize(new Size(width, 0)).Height;
+            var navigationHeight = navigation.GetPreferredSize(new Size(width, 0)).Height;
+            var overflow = contentHeight + navigationHeight + S(72) > ClientSize.Height;
+            if (overflow)
+            {
+                if (navigation.Parent != fixedNavigation) fixedNavigation.Controls.Add(navigation);
+                var footerHeight = navigationHeight + S(32);
+                fixedNavigation.SetBounds(0, ClientSize.Height - footerHeight, ClientSize.Width, footerHeight);
+                fixedNavigation.Visible = true;
+                navigation.Margin = Padding.Empty;
+                navigation.Location = new Point(Math.Max(S(24), (ClientSize.Width - width) / 2), S(12));
+                body.SetBounds(0, 0, ClientSize.Width, Math.Max(0, ClientSize.Height - footerHeight));
+            }
+            else
+            {
+                fixedNavigation.Visible = false;
+                if (navigation.Parent != page) page.Controls.Add(navigation);
+                body.SetBounds(0, 0, ClientSize.Width, ClientSize.Height);
+            }
+            page.PerformLayout();
             var height = page.GetPreferredSize(new Size(width, 0)).Height;
-            var top = Math.Max(S(24), (body.ClientSize.Height - height) / 2);
-            var left = Math.Max(S(24), (body.ClientSize.Width - width - (body.VerticalScroll.Visible ? SystemInformation.VerticalScrollBarWidth : 0)) / 2);
-            var padding = new Padding(left, top, S(24), S(24));
-            if (body.Padding != padding) body.Padding = padding;
-            // Include both gutters in the scroll extent, including when nested
-            // auto-sized content grows after status or save feedback changes.
+            var top = overflow ? S(24) : Math.Max(S(24), (body.ClientSize.Height - height) / 2);
+            var left = Math.Max(S(24), (body.ClientSize.Width - width) / 2);
+            // Position against the current offset, which Windows may have
+            // temporarily clamped, so the page retains its logical origin.
+            page.Location = new Point(left + body.AutoScrollPosition.X, top + body.AutoScrollPosition.Y);
+            // Explicit positioning avoids FlowLayoutPanel counting nested padding
+            // twice and creating a horizontal scrollbar after guide navigation.
             body.AutoScrollMinSize = new Size(0, top + height + S(24));
             body.PerformLayout();
+            // The setter clamps only against the final extent. Restoring an old
+            // offset before measuring would itself shift the page's origin.
+            body.AutoScrollPosition = new Point(0, -scroll.Y);
+            body.SynchronizeScrollStyles();
         }
         finally { fitting = false; }
     }
@@ -395,17 +445,35 @@ internal sealed class SetupForm : Form
         base.OnDpiChanged(e);
         FitBodyContent(); LayoutWelcome();
     }
+    protected override void OnLayout(LayoutEventArgs e)
+    {
+        // ContainerControl also scrolls its active descendant during the form's
+        // own layout, independently of the viewport's layout. Keep that passive
+        // refresh from undoing a user's scroll; explicit focus changes still scroll.
+        if (body is null) { base.OnLayout(e); return; }
+        var previous = body.PreserveFocusScroll; body.PreserveFocusScroll = true;
+        try
+        {
+            base.OnLayout(e);
+            // Arrange after the form has its final size. Docking/reparenting from
+            // a child SizeChanged event can leave a newly visible footer at its
+            // default bounds while the outer docking pass is still running.
+            FitBodyContent(); LayoutWelcome();
+        }
+        finally { body.PreserveFocusScroll = previous; }
+    }
     private static IEnumerable<Control> Descendants(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(Descendants(c)));
     internal void ApplyTheme()
     {
         // Setup stays Light independently of the saved application appearance.
         // Never apply the global palette here: Usage and the monitor may be open.
-        var background = Color.FromArgb(245, 245, 245);
+        var background = Color.FromArgb(247, 248, 250);
         var foreground = Color.FromArgb(28, 28, 28);
-        var buttonColor = Color.FromArgb(228, 231, 235);
+        var buttonColor = Color.FromArgb(235, 238, 243);
         void Theme(Control root, Color background) {
             if (root.Name == "setupCard") background = Color.White;
             root.BackColor = background; root.ForeColor = foreground;
+            if (root is ToggleSwitch toggle) toggle.LightAppearanceOverride = true;
             if (root is Button button) {
                 button.BackColor = buttonColor; button.FlatAppearance.BorderSize = 0;
                 button.FlatAppearance.MouseOverBackColor = Color.FromArgb(213, 220, 228);
@@ -420,5 +488,52 @@ internal sealed class SetupForm : Form
         next.FlatAppearance.MouseDownBackColor = Color.FromArgb(0, 70, 130);
     }
     protected override void Dispose(bool disposing)
-    { base.Dispose(disposing); if (disposing) { countdown.Dispose(); retryMessage.Dispose(); Icon?.Dispose(); bodyFont.Dispose(); headingFont.Dispose(); welcomeFont.Dispose(); } }
+    { base.Dispose(disposing); if (disposing) { countdown.Dispose(); retryMessage.Dispose(); Icon?.Dispose(); bodyFont.Dispose(); headingFont.Dispose(); welcomeFont.Dispose(); commandFont.Dispose(); } }
+
+    private sealed class SetupViewport : Panel
+    {
+        private bool arranging;
+        internal bool PreserveFocusScroll;
+        // Nested native resize/style callbacks can leave WS_HSCROLL set after
+        // ScrollableControl has cleared its managed horizontal-scroll state.
+        // Reapply the final managed styles once the page and extent are settled.
+        internal void SynchronizeScrollStyles() => UpdateStyles();
+        protected override void OnLayout(LayoutEventArgs e)
+        {
+            var previous = arranging; arranging = true;
+            try { base.OnLayout(e); }
+            finally { arranging = previous; }
+        }
+        // A status/countdown relayout must not undo a deliberate user scroll by
+        // bringing the previously focused switch back into view. Explicit focus
+        // navigation and ScrollControlIntoView still use the native behavior.
+        protected override Point ScrollToControl(Control activeControl)
+        {
+            return arranging || PreserveFocusScroll ? DisplayRectangle.Location : base.ScrollToControl(activeControl);
+        }
+    }
+
+    private sealed class SetupCard : FlowLayoutPanel
+    {
+        internal SetupCard() => SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint |
+            ControlStyles.OptimizedDoubleBuffer | ControlStyles.ResizeRedraw, true);
+        protected override void OnPaintBackground(PaintEventArgs e)
+        {
+            e.Graphics.Clear(Parent?.BackColor ?? BackColor);
+            if (Width < 4 || Height < 4) return;
+            var diameter = Math.Max(4, (int)Math.Round(20 * DeviceDpi / 96d));
+            using var shape = new GraphicsPath();
+            var bounds = new RectangleF(.5f, .5f, Width - 1.5f, Height - 3f);
+            shape.AddArc(bounds.Left, bounds.Top, diameter, diameter, 180, 90);
+            shape.AddArc(bounds.Right - diameter, bounds.Top, diameter, diameter, 270, 90);
+            shape.AddArc(bounds.Right - diameter, bounds.Bottom - diameter, diameter, diameter, 0, 90);
+            shape.AddArc(bounds.Left, bounds.Bottom - diameter, diameter, diameter, 90, 90); shape.CloseFigure();
+            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+            using var offset = new Matrix(); offset.Translate(0, 2);
+            using var shadow = (GraphicsPath)shape.Clone(); shadow.Transform(offset);
+            using var shade = new SolidBrush(Color.FromArgb(15, 31, 43, 63)); e.Graphics.FillPath(shade, shadow);
+            using var fill = new SolidBrush(BackColor); e.Graphics.FillPath(fill, shape);
+            using var border = new Pen(Color.FromArgb(224, 228, 235)); e.Graphics.DrawPath(border, shape);
+        }
+    }
 }

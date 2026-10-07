@@ -8,6 +8,10 @@ internal sealed record MonitorPosition(int Version, string Display, double Left,
         !Display.Any(char.IsControl) && double.IsFinite(Left) && double.IsFinite(Top) &&
         (Version == 1 ? Math.Abs(Left) <= 100_000 && Math.Abs(Top) <= 100_000 : Left is >= 0 and <= 1 && Top is >= 0 and <= 1);
 
+    internal static string SelectDisplay(string? savedDisplay, string primaryDisplay, IEnumerable<string> connectedDisplays) =>
+        connectedDisplays.FirstOrDefault(display => string.Equals(display, savedDisplay, StringComparison.OrdinalIgnoreCase))
+        ?? primaryDisplay;
+
     // Version 1 stores logical offsets. Version 2 stores the horizontal center and top
     // relative to the display's work area, independent of window size and display DPI.
     internal static MonitorPosition Capture(Point location, string display, Rectangle workArea, Size size)

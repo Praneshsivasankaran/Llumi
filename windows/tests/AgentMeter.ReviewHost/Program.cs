@@ -14,9 +14,10 @@ internal static class Program
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
         if (args.Length == 2 && args[0] == "--first-run-live") return LiveFirstRunReview.Run(args[1]);
+        if (args.Length == 2 && args[0] == "--resume-live") return LiveFirstRunReview.Run(args[1], resume: true);
         if (args.Length != 0 && (args.Length != 2 || args[0] != "--capture"))
         {
-            MessageBox.Show("Choose the synthetic preview, --capture <directory>, or --first-run-live <new absolute review directory>.",
+            MessageBox.Show("Choose the synthetic preview, --capture <directory>, --first-run-live <new absolute review directory>, or --resume-live <existing marked review directory>.",
                 "Llumi local review", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return 1;
         }
@@ -58,7 +59,6 @@ internal sealed class Review : Form
         usage.RefreshRequested += Apply;
         usage.StartupToggleRequested += () => { startupEnabled = !startupEnabled; usage.SetStartupState(startupEnabled, true); };
         usage.ResetPositionRequested += ResetPosition;
-        usage.SetupRequested += ShowSetup;
         usage.ExitRequested += Close;
         monitor.OpenRequested += () => { usage.Show(); usage.ShowUsage(); usage.Activate(); };
         monitor.ResetPositionRequested += ResetPosition;
@@ -126,14 +126,22 @@ internal sealed class Review : Form
             Save(usage, Path.Combine(directory, $"usage-{index}.png"));
             if (index == 0)
             {
+                var fixtureSize = usage.ClientSize;
+                int S(int value) => (int)Math.Round(value * usage.DeviceDpi / 96d);
+                usage.ClientSize = new(S(640), S(440)); Application.DoEvents();
+                Save(usage, Path.Combine(directory, "usage-default-size.png"));
+                usage.ClientSize = fixtureSize; Application.DoEvents();
                 monitor.SetExpanded(true, false); using var expanded = monitor.CreatePreviewBitmap(); expanded.Save(Path.Combine(directory, "monitor-expanded.png"), ImageFormat.Png);
                 monitor.SetExpanded(false, false); using var compact = monitor.CreatePreviewBitmap(); compact.Save(Path.Combine(directory, "monitor-compact.png"), ImageFormat.Png);
                 CaptureOverflowMonitors(directory);
                 usage.ShowSettings(); Application.DoEvents(); Save(usage, Path.Combine(directory, "settings.png"));
                 usage.ShowAbout(); Application.DoEvents(); Save(usage, Path.Combine(directory, "about.png"));
-                usage.ShowReleaseNotes(); Application.DoEvents(); Save(usage, Path.Combine(directory, "release-notes.png"));
                 CaptureSetupSteps(directory);
-                theme.SelectedIndex = 1; Apply(); usage.ShowUsage(); Application.DoEvents(); Save(usage, Path.Combine(directory, "usage-dark.png")); theme.SelectedIndex = 0;
+                theme.SelectedIndex = 1; Apply(); usage.ShowUsage(); Application.DoEvents(); Save(usage, Path.Combine(directory, "usage-dark.png"));
+                usage.ShowSettings(); Application.DoEvents(); Save(usage, Path.Combine(directory, "settings-dark.png"));
+                usage.ShowAbout(); Application.DoEvents(); Save(usage, Path.Combine(directory, "about-dark.png"));
+                monitor.SetExpanded(true, false); using var darkExpanded = monitor.CreatePreviewBitmap(); darkExpanded.Save(Path.Combine(directory, "monitor-expanded-dark.png"), ImageFormat.Png);
+                monitor.SetExpanded(false, false); theme.SelectedIndex = 0;
             }
         }
         monitor.HideMonitor(); usage.Hide();
@@ -176,6 +184,14 @@ internal sealed class Review : Form
             if (flow.Step != (SetupStep)index) throw new InvalidOperationException("Synthetic setup did not reach the requested step.");
             form.RefreshStatuses(); Application.DoEvents();
             Save(form, Path.Combine(directory, $"setup-{index + 1:00}-{names[index]}.png"));
+            if (index is 2 or 3)
+            {
+                var viewport = (Panel)form.Controls.Find("setupViewport", true).Single();
+                var illustration = form.Controls.Find("setupIllustration", true).Single();
+                viewport.ScrollControlIntoView(illustration); Application.DoEvents();
+                Save(form, Path.Combine(directory, $"setup-{names[index]}-illustration.png"));
+                viewport.AutoScrollPosition = Point.Empty; Application.DoEvents();
+            }
             if (index > 0)
             {
                 var originalSize = form.ClientSize; var originalMinimum = form.MinimumSize;
@@ -220,10 +236,58 @@ internal sealed class Review : Form
                 next.PerformClick(); Application.DoEvents();
             }
         }
+        for (var index = names.Length - 2; index > 0; index--)
+        {
+            var navigation = form.Controls.Find("setupNavigation", true).Single();
+            navigation.Controls.OfType<Button>().Single(button => button.Text == "Back").PerformClick();
+            Application.DoEvents(); AssertSetupGeometry(form, $"back-{names[index]}");
+            var originalSize = form.ClientSize; var originalMinimum = form.MinimumSize;
+            int S(int value) => (int)Math.Round(value * form.DeviceDpi / 96d);
+            form.MinimumSize = Size.Empty; form.ClientSize = new Size(S(420), S(280)); Application.DoEvents();
+            AssertSetupGeometry(form, $"back-{names[index]}-constrained");
+            form.MinimumSize = originalMinimum; form.ClientSize = originalSize; Application.DoEvents();
+            AssertSetupGeometry(form, $"back-{names[index]}-restored");
+        }
         form.Close();
     }
     private static void Save(Form form, string path)
-    { form.Refresh(); Application.DoEvents(); using var full = new Bitmap(form.Width, form.Height); form.DrawToBitmap(full, new Rectangle(Point.Empty, form.Size)); full.Save(path, ImageFormat.Png); }
+    {
+        form.Refresh(); Application.DoEvents();
+        AssertSetupGeometry(form, Path.GetFileName(path));
+        using var full = new Bitmap(form.Width, form.Height);
+        form.DrawToBitmap(full, new Rectangle(Point.Empty, form.Size)); full.Save(path, ImageFormat.Png);
+    }
+    private static void AssertSetupGeometry(Form form, string stage)
+    {
+        if (form is SetupForm)
+        {
+            // This process selects PerMonitorV2 before creating any form. Keep the
+            // native-DPI resize regression here instead of changing DPI awareness
+            // after earlier WinForms tests have cached process-wide metrics.
+            var viewport = (Panel)form.Controls.Find("setupViewport", true).Single();
+            if (viewport.Visible)
+            {
+                var navigation = form.Controls.Find("setupNavigation", true).Single();
+                var footer = form.Controls.Find("setupFixedNavigation", true).Single();
+                var nativeStyle = GetWindowLong(viewport.Handle, -16);
+                if (viewport.HorizontalScroll.Visible || viewport.AutoScrollPosition.X != 0 ||
+                    (nativeStyle & 0x00100000) != 0)
+                    throw new InvalidOperationException($"{stage}: setup unexpectedly scrolls horizontally at {form.DeviceDpi} DPI.");
+                if (((nativeStyle & 0x00200000) != 0) != viewport.VerticalScroll.Visible)
+                    throw new InvalidOperationException($"{stage}: setup vertical scrolling is out of sync at {form.DeviceDpi} DPI.");
+                foreach (var button in navigation.Controls.OfType<Button>())
+                {
+                    var bounds = form.RectangleToClient(button.RectangleToScreen(button.ClientRectangle));
+                    if (!form.ClientRectangle.Contains(bounds) || !navigation.ClientRectangle.Contains(button.Bounds))
+                        throw new InvalidOperationException($"{stage}: {button.Text} is clipped at {form.DeviceDpi} DPI.");
+                }
+                if (footer.Visible && (viewport.Bottom > footer.Top || !footer.ClientRectangle.Contains(navigation.Bounds)))
+                    throw new InvalidOperationException($"{stage}: setup content overlaps navigation at {form.DeviceDpi} DPI.");
+            }
+        }
+    }
+    [System.Runtime.InteropServices.DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
+    private static extern int GetWindowLong(IntPtr window, int index);
     protected override void Dispose(bool disposing)
     { if (disposing) { setup?.Dispose(); usage.Dispose(); monitor.Dispose(); icon.Dispose(); } base.Dispose(disposing); }
     private sealed class MemoryStartup(Func<bool> read, Action<bool> write) : IStartupRegistration

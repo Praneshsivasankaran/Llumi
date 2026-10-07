@@ -114,8 +114,10 @@ internal static class UsageAccessibility
 {
     internal static string Observation(ProviderState state, DateTimeOffset now)
     {
-        var text = PopupText.Summary(state, now);
-        if (!state.IsStale(now) || state.Snapshot is not { } snapshot) return text;
+        if (!state.Enabled || state.Snapshot is not { } snapshot) return PopupText.Summary(state, now);
+        var text = $"Updated {PopupText.Age(snapshot.ObservedAt, now)} ({snapshot.ObservedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss zzz})" +
+            (state.Detail is null ? "" : " · provider notice");
+        if (!state.IsStale(now)) return text;
         var reasons = new List<string>();
         if (snapshot.IsCached) reasons.Add("cached reading");
         if (state.Failure != FailureKind.None) reasons.Add("last retrieval failed");

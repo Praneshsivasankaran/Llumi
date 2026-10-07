@@ -10,3 +10,20 @@ The source assets were verified against the immutable `llumi-macos-1.1.3` tag. W
 The official Llumi Raspberry gauge is original Llumi artwork. Its embedded Windows icon supplies the welcome, dashboard, tray and application identity. It replaces the historical three-bars identity.
 
 Provider marks remain vendor property under their applicable artwork and trademark terms; this provenance record does not grant redistribution rights or imply endorsement. See [third-party notices](../../THIRD-PARTY-NOTICES.md). The exact delivered package inventory records the hashes of its built payload.
+
+## Illustrative Windows setup guides
+
+`windows/tools/generate-setup-guides.py` adapts the layout and pacing of `llumi-macos-1.1.3:scripts/macos/generate-setup-demos.py`. The Windows artwork replaces Mac Terminal/commands with PowerShell window styling and the existing Windows Install/Sign in commands. It contains synthetic copy, installation and browser sign-in scenes, identified as illustrations, without account identity or actual provider output. It neither executes commands nor opens a browser. Installation duration is illustrative.
+
+The four embedded assets live in `windows/src/AgentMeter/Assets/SetupGuides/`. Each GIF has 100 frames of 100 ms, looping every ten seconds without playback controls or a demo heading. The PNG is its matching first-frame poster. `SetupAnimation` uses the poster when Windows animations are disabled, stops animation work when hidden/disposed and exposes a descriptive accessibility label. Setup controls remain copy-only, retain their real keyboard actions and always render Light.
+
+The generator uses installed Segoe UI and Consolas as rendering inputs. Font files are not bundled, and Python/Pillow are build-time tools only. No vendor extension, shell installer or remote asset is executed to render these guides.
+
+| Asset | SHA-256 |
+| --- | --- |
+| `CodexSetup.gif` | `02fd0029a13a920d01050c52254fac9b8d7e69f840cb8ebe08cf1bb2eaf6869b` |
+| `CodexSetup.png` | `96ab4099735d14cfcdbe68fd426f24698cb684d56e30d38fe0168566ca52cc66` |
+| `ClaudeSetup.gif` | `cbedb603fef81a90d20f03bd618f4710e91f48b668a187a5b80123ddb965b11c` |
+| `ClaudeSetup.png` | `05492979e236c8dbc53dfd311c644c6aafe286a966a09875d6d2b45062727c0a` |
+
+These source asset hashes and synthetic renders establish provenance and reproducibility, not real-account setup completion or physical acceptance.

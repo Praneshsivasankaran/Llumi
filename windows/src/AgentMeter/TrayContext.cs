@@ -73,13 +73,11 @@ internal sealed class TrayContext : ApplicationContext
         menu.Items.Add("Open Llumi", null, (_, _) => ShowPopup());
         pinMenu = new ToolStripMenuItem("Pin Monitor", null, (_, _) => { if (monitor.Visible) UnpinMonitor(); else OpenMonitor(); });
         menu.Items.Add("Refresh", null, (_, _) => StartRefresh());
-        menu.Items.Add("Setup Llumi…", null, (_, _) => OpenSetup());
         menu.Items.Add("Settings", null, (_, _) => { ShowPopup(); popup.ShowSettings(); });
         startupMenu.Click += (_, _) => ToggleStartup();
         menu.Opening += (_, _) => UpdateStartupState();
         menu.Items.Add("Quit", null, async (_, _) => await ExitAsync());
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowPopup(); };
-        popup.SetupRequested += OpenSetup;
         popup.RefreshRequested += StartRefresh;
         popup.ExitRequested += async () => await ExitAsync();
         popup.PinRequested += OpenMonitor;
@@ -217,8 +215,7 @@ internal sealed class TrayContext : ApplicationContext
         {
             if (monitor.Visible) { monitor.ShowMonitor(monitor.Location); return; }
             var saved = positions.Load();
-            var screen = Screen.AllScreens.FirstOrDefault(s => string.Equals(s.DeviceName, saved?.Display, StringComparison.OrdinalIgnoreCase))
-                ?? Screen.FromPoint(Cursor.Position);
+            var screen = MonitorScreen(saved?.Display);
             // Moving the existing hidden HWND first lets Windows apply the destination DPI.
             monitor.Location = screen.WorkingArea.Location;
             monitor.Render(coordinator.States);
@@ -284,8 +281,7 @@ internal sealed class TrayContext : ApplicationContext
         if (monitor.Visible)
         {
             var saved = monitor.SavedPosition;
-            var screen = Screen.AllScreens.FirstOrDefault(s => string.Equals(s.DeviceName, saved.Display, StringComparison.OrdinalIgnoreCase))
-                ?? Screen.FromControl(monitor);
+            var screen = MonitorScreen(saved.Display);
             monitor.Location = screen.WorkingArea.Location;
             monitor.RestorePosition(saved, screen.DeviceName);
             SavePosition();
@@ -296,6 +292,14 @@ internal sealed class TrayContext : ApplicationContext
             popup.KeepOnScreen();
         }
     });
+
+    private static Screen MonitorScreen(string? savedDisplay)
+    {
+        var screens = Screen.AllScreens;
+        var primary = Screen.PrimaryScreen ?? screens[0];
+        var display = MonitorPosition.SelectDisplay(savedDisplay, primary.DeviceName, screens.Select(screen => screen.DeviceName));
+        return screens.FirstOrDefault(screen => string.Equals(screen.DeviceName, display, StringComparison.OrdinalIgnoreCase)) ?? primary;
+    }
 
     private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e) => OnUi(() =>
     {
@@ -393,6 +397,7 @@ internal sealed class TrayContext : ApplicationContext
         display.Stop();
         recovery.Stop();
         activityTimer.Stop();
+        coordinator.Suspend();
         await lifetime.CancelAsync();
         await activeRefresh;
         try { await activityTask.WaitAsync(TimeSpan.FromSeconds(2)); } catch (Exception) { }
@@ -413,6 +418,7 @@ internal sealed class TrayContext : ApplicationContext
             disposed = true;
             SavePosition();
             exiting = true;
+            coordinator.Suspend();
             lifetime.Cancel();
             coordinator.Changed -= OnChanged;
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;

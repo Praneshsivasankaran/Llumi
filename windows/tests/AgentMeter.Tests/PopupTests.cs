@@ -41,14 +41,17 @@ public sealed class PopupTests
     }
 
     [Fact]
-    public void RetainedDataShowsStaleOnFailureAndOriginalObservationAgeDuringRefresh()
+    public void RetainedDataShowsStaleOnFailureAndKeepsCalendarLabelDuringRefresh()
     {
         var failed = Live() with { Status = ProviderStatus.Error, Failure = FailureKind.Network };
         Assert.Equal("Stale", PopupText.Status(failed, Now.AddSeconds(40)));
-        Assert.Equal("Updated 40s ago", PopupText.Summary(failed, Now.AddSeconds(40)));
+        Assert.Equal("Today", PopupText.Summary(failed, Now.AddSeconds(40)));
+        Assert.Contains("Updated 40s ago", UsageAccessibility.Observation(failed, Now.AddSeconds(40)));
+        Assert.Contains("last retrieval failed", UsageAccessibility.Observation(failed, Now.AddSeconds(40)));
         var refreshing = failed with { Status = ProviderStatus.Loading };
         Assert.Equal("Refreshing…", PopupText.Status(refreshing, Now.AddSeconds(40)));
-        Assert.Equal("Updated 40s ago", PopupText.Summary(refreshing, Now.AddSeconds(40)));
+        Assert.Equal("Today", PopupText.Summary(refreshing, Now.AddSeconds(40)));
+        Assert.Contains("Updated 40s ago", UsageAccessibility.Observation(refreshing, Now.AddSeconds(40)));
         Assert.Equal("Checking local provider", PopupText.Summary(new ProviderState("provider", ProviderStatus.Loading), Now));
     }
 
@@ -63,12 +66,67 @@ public sealed class PopupTests
     }
 
     [Fact]
-    public void ProviderNoticeKeepsObservationAgeVisible()
+    public void ProviderNoticeKeepsPreciseObservationAccessibleWithQuietCalendarLabel()
     {
         var state = Live() with { Detail = "Provider has a restriction." };
-        Assert.Equal("Updated 3m ago · provider notice", PopupText.Summary(state, Now.AddMinutes(3)));
+        Assert.Equal("Today", PopupText.Summary(state, Now.AddMinutes(3)));
+        var observation = UsageAccessibility.Observation(state, Now.AddMinutes(3));
+        Assert.Contains("Updated 3m ago", observation);
+        Assert.Contains(Now.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz"), observation);
+        Assert.Contains("provider notice", observation);
         Assert.Equal("Stale", PopupText.Status(state, Now.AddMinutes(3)));
     }
+
+    [Fact]
+    public void ObservationLabelsFollowLocalCalendarDaysAcrossMidnightAndSourceOffsets()
+    {
+        var beforeMidnight = new DateTimeOffset(new DateTime(2026, 10, 7, 23, 59, 50, DateTimeKind.Local));
+        var afterMidnight = beforeMidnight.AddSeconds(20);
+        Assert.Equal("Today", PopupText.ObservationDate(beforeMidnight.ToOffset(TimeSpan.FromHours(-7)), beforeMidnight));
+        Assert.Equal("Yesterday", PopupText.ObservationDate(beforeMidnight.ToOffset(TimeSpan.FromHours(14)), afterMidnight));
+        Assert.Equal("Today", PopupText.ObservationDate(afterMidnight.ToUniversalTime(), afterMidnight));
+        // Yesterday is a calendar relationship even when the reading is more than 24 hours old.
+        var previousMorning = afterMidnight.AddMinutes(-1).AddHours(-23);
+        Assert.Equal("Yesterday", PopupText.ObservationDate(previousMorning, afterMidnight.AddHours(23)));
+    }
+
+    [Theory]
+    [InlineData("en-US", "10/5/2026")]
+    [InlineData("en-GB", "05/10/2026")]
+    public void OlderObservationUsesLocalDateAndCultureWithoutInventingFreshness(string culture, string expected)
+    {
+        var previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
+            var at = new DateTimeOffset(new DateTime(2026, 10, 7, 12, 0, 0, DateTimeKind.Local));
+            var state = Live() with { Snapshot = Live().Snapshot! with { ObservedAt = at.AddDays(-2) } };
+            Assert.Equal(expected, PopupText.Summary(state, at));
+            Assert.Equal("Stale", PopupText.Status(state, at));
+            Assert.Contains("Updated 2d ago", UsageAccessibility.Observation(state, at));
+        }
+        finally { CultureInfo.CurrentCulture = previous; }
+    }
+
+    [Fact]
+    public void CardCalendarLabelKeepsExactAgeTimestampAndStaleReasonInAccessibilityAndTooltip() => RunSta(() =>
+    {
+        using var hints = new ToolTip(); using var card = new ProviderCard(hints);
+        var at = new DateTimeOffset(new DateTime(2026, 10, 7, 12, 0, 0, DateTimeKind.Local));
+        var observed = at.AddMinutes(-3).AddSeconds(-19);
+        var state = Live() with { Snapshot = Live().Snapshot! with { ObservedAt = observed, IsCached = true } };
+        card.Render(state, at, 1);
+        var date = Assert.Single(card.Controls.OfType<Label>(), label => label.Text == "Today");
+        var exactTime = observed.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz");
+        foreach (var text in new[] { date.AccessibleName, hints.GetToolTip(date), card.AccessibleDescription })
+        {
+            Assert.Contains("Updated 3m ago", text);
+            Assert.Contains(exactTime, text);
+            Assert.Contains("Stale: cached reading", text);
+        }
+        Assert.Contains(card.Controls.OfType<Label>(), label => label.Text == "Stale");
+        Assert.DoesNotContain(card.Controls.OfType<Label>(), label => label.Text.StartsWith("Updated ", StringComparison.Ordinal));
+    });
 
     [Theory]
     [InlineData(59, "59s ago")]
@@ -411,14 +469,14 @@ public sealed class PopupTests
         card.Render(state, Now, 1);
         var texts = card.Controls.Cast<Control>().Select(c => c.Text).ToArray();
         Assert.Contains("5-hour limit", texts); Assert.Contains("Weekly limit", texts);
-        Assert.Equal(244, card.LogicalHeight);
+        Assert.Equal(282, card.LogicalHeight);
         var content = string.Join("\n", card.Controls.Cast<Control>().Select(c => c.Text + hints.GetToolTip(c) + c.AccessibleName));
         foreach (var name in new[] { "iguana_necktie", "synthetic_model", "provider_generated_" })
             Assert.DoesNotContain(name, content);
         Assert.Equal(4, state.Snapshot!.Windows.Count);
 
         card.Render(state with { Snapshot = new([windows[1], windows[2]], Now, "fixture") }, Now, 1);
-        Assert.Equal(116, card.LogicalHeight);
+        Assert.Equal(132, card.LogicalHeight);
         Assert.Contains(card.Controls.Cast<Control>(), c => c.Text == "Unsupported format");
         Assert.DoesNotContain(card.Controls.Cast<Control>(), c => c.Text.Contains("%") || c.Text.Contains("iguana_necktie"));
     });

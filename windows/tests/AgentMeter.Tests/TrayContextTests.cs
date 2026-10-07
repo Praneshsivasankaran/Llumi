@@ -38,6 +38,8 @@ public sealed class TrayContextTests
             Assert.False(popup.Visible);
             Assert.True(popup.ShowInTaskbar);
             Assert.True(Field<NotifyIcon>(context, "tray").Visible);
+            Assert.DoesNotContain(Field<ContextMenuStrip>(context, "menu").Items.Cast<ToolStripItem>(),
+                item => item.Text?.Contains("Setup Llumi", StringComparison.Ordinal) == true);
             Assert.True(Field<System.Windows.Forms.Timer>(context, "poll").Enabled);
             Assert.False(Field<System.Windows.Forms.Timer>(context, "display").Enabled);
             Assert.False(Field<Task>(context, "activeRefresh").IsCompleted);
@@ -442,7 +444,7 @@ public sealed class TrayContextTests
             {
                 Assert.Equal(step, flow.Step); visited.Add(step);
                 Assert.False(completion.IsComplete());
-                Assert.True(Palette.IsLight); Assert.Equal(Color.FromArgb(245, 245, 245), setup.BackColor);
+                Assert.True(Palette.IsLight); Assert.Equal(Color.FromArgb(247, 248, 250), setup.BackColor);
                 if (step == SetupStep.Providers)
                 {
                     var codex = Descendants(setup).OfType<CheckBox>().Single(c => c.AccessibleName == "Monitor Codex");
@@ -465,7 +467,7 @@ public sealed class TrayContextTests
                 }
                 if (step != SetupStep.Done)
                 {
-                    var next = Assert.IsType<Button>(setup.AcceptButton);
+                    var next = Assert.IsAssignableFrom<Button>(setup.AcceptButton);
                     Assert.True(next.Enabled); next.PerformClick();
                 }
             }
@@ -477,13 +479,13 @@ public sealed class TrayContextTests
             Assert.True(popup.Visible); Assert.True(setup.IsDisposed);
             Assert.Equal(new Preferences(CompactMonitor: false, Appearance: Appearance.Light), saved.Load());
             Assert.True(startup.Enabled); Assert.Equal(1, startup.Writes);
-            Assert.True(Palette.IsLight); Assert.Equal(Color.FromArgb(245, 245, 245), popup.BackColor);
+            Assert.True(Palette.IsLight); Assert.Equal(Color.FromArgb(247, 248, 250), popup.BackColor);
             popup.ShowSettings();
             var appAppearance = Descendants(popup).OfType<ComboBox>().Single(c => c.AccessibleName == "Appearance");
             Assert.Equal((int)Appearance.Light, appAppearance.SelectedIndex);
             appAppearance.SelectedIndex = (int)Appearance.Dark;
             Assert.Equal(Appearance.Dark, saved.Load().Appearance); Assert.False(Palette.IsLight);
-            Assert.Equal(Color.FromArgb(38, 38, 38), popup.BackColor);
+            Assert.Equal(Color.FromArgb(32, 33, 36), popup.BackColor);
         }, setupComplete: false, reviewTitle: "local first-time test");
     }
 
