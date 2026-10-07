@@ -172,6 +172,8 @@ internal sealed class Review : Form
         for (var index = 0; index < names.Length; index++)
         {
             if (flow.Step != (SetupStep)index) throw new InvalidOperationException("Synthetic setup did not reach the requested step.");
+            foreach (var demo in form.Controls.Find("setupDemo", true).OfType<SetupDemoView>())
+            { demo.MotionAllowed = () => false; demo.RefreshPlayback(); }
             form.RefreshStatuses(); Application.DoEvents();
             Save(form, Path.Combine(directory, $"setup-{index + 1:00}-{names[index]}.png"));
             if (index > 0)

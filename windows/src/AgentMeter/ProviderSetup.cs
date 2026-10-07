@@ -6,6 +6,9 @@ namespace AgentMeter;
 
 internal static class ProviderSetup
 {
+    internal static string InstallCommand(string provider) => provider == "Codex" ? "npm install -g @openai/codex" : "irm https://claude.ai/install.ps1 | iex";
+    internal static string SignInCommand(string provider) => provider == "Codex" ? "codex login" : "claude auth login";
+
     // Fixed official destinations only; no provider-provided URL or credentials reach the shell.
     internal static Uri? For(ProviderState state) => state.Enabled && state.Snapshot is null &&
         state.Failure is FailureKind.NotInstalled or FailureKind.LoggedOut
