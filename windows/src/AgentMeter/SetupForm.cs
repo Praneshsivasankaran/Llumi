@@ -15,7 +15,7 @@ internal sealed class SetupForm : Form
     private readonly Action toggleStartup;
     private readonly Action finished;
     private readonly FlowLayoutPanel body = new() { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = true, Padding = new Padding(24, 16, 24, 16) };
-    private readonly FlowLayoutPanel navigation = new() { Dock = DockStyle.Bottom, Height = 58, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(10) };
+    private readonly FlowLayoutPanel navigation = new() { Dock = DockStyle.Bottom, AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(10) };
     private readonly Panel welcome = new() { Dock = DockStyle.Fill, Name = "welcome", Visible = false };
     private readonly Panel welcomeGroup = new() { Name = "welcomeGroup" };
     private readonly Panel welcomeLogo = new() { Name = "welcomeLogo", AccessibleName = "Llumi logo" };
@@ -33,17 +33,19 @@ internal sealed class SetupForm : Form
     private readonly Font headingFont = new("Segoe UI", 16, FontStyle.Bold);
     private readonly Font welcomeFont = new("Segoe UI", 24, FontStyle.Bold);
     private bool syncingProviders;
+    private bool initialized;
 
     internal SetupForm(SetupFlow flow, Func<IReadOnlyList<ProviderState>> states, Action<string?> refresh,
         Func<Preferences> preferences, Action<Preferences> savePreferences, IStartupRegistration startup,
         Action toggleStartup, Action finished)
     {
+        SuspendLayout();
         this.flow = flow; this.states = states; this.refresh = refresh; this.preferences = preferences;
         this.savePreferences = savePreferences; this.startup = startup; this.toggleStartup = toggleStartup;
         this.finished = finished;
         var current = preferences(); flow.Codex = current.CodexEnabled; flow.Claude = current.ClaudeEnabled;
         Text = "Setup Llumi"; Font = bodyFont; Icon = AppIcon.Load();
-        AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(620, 580);
+        AutoScaleDimensions = new SizeF(96, 96); AutoScaleMode = AutoScaleMode.Dpi; ClientSize = new Size(620, 580);
         MinimumSize = new Size(560, 480); StartPosition = FormStartPosition.CenterScreen;
         Controls.Add(body); Controls.Add(navigation); Controls.Add(welcome);
         welcome.Controls.Add(welcomeGroup); welcomeGroup.Controls.Add(welcomeLogo); welcomeGroup.Controls.Add(welcomeName);
@@ -65,7 +67,8 @@ internal sealed class SetupForm : Form
         countdown.Tick += (_, _) => RefreshStatuses();
         VisibleChanged += (_, _) => { if (Visible) countdown.Start(); else countdown.Stop(); };
         body.SizeChanged += (_, _) => FitBodyContent();
-        AcceptButton = next; RenderStep();
+        AcceptButton = next; RenderStep(); ResumeLayout(true); initialized = true; FitBodyContent(); LayoutWelcome();
+        Load += (_, _) => FitInitialWindow();
         Shown += (_, _) => next.Select();
     }
     private void TextLine(string text, bool heading = false, int spacing = 8)
@@ -84,7 +87,7 @@ internal sealed class SetupForm : Form
         TextLine(title, spacing: 2);
         var row = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 8) };
         var box = new TextBox { Text = command, ReadOnly = true, Width = 414, AccessibleName = title, ShortcutsEnabled = true, Margin = new Padding(0, 4, 12, 0) };
-        var copy = Palette.Button("Copy", "Copy " + title + " command"); copy.Size = new Size(90, 32); copy.Margin = Padding.Empty;
+        var copy = Palette.Button("Copy", "Copy " + title + " command"); copy.AutoSize = true; copy.MinimumSize = new Size(90, 32); copy.Margin = Padding.Empty;
         copy.Click += (_, _) => Copy(command); row.Controls.Add(box); row.Controls.Add(copy); body.Controls.Add(row);
         commandRows.Add((row, box, copy));
     }
@@ -131,17 +134,25 @@ internal sealed class SetupForm : Form
         };
         row.Controls.Add(control);
     }
+    private void ProviderHeading(string provider, bool switches, int spacing = 6)
+    {
+        var heading = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, spacing) };
+        heading.Controls.Add(new ProviderArtwork(provider) { Size = new Size(26, 26), Margin = new Padding(0, 0, 10, 0) });
+        if (switches) ProviderSwitch(provider, heading);
+        else heading.Controls.Add(new Label { Text = Title(provider), AutoSize = true, Font = bodyFont, Margin = new Padding(0, 3, 0, 0) });
+        body.Controls.Add(heading);
+    }
+    private void ProviderChoices()
+    {
+        foreach (var provider in new[] { "Codex", "Claude" }) ProviderHeading(provider, true, 12);
+    }
     private void Statuses(bool switches = false)
     {
         foreach (var provider in GuideProvider is { } guide ? new[] { guide } : new[] { "Codex", "Claude" })
         {
             if (GuideProvider is null)
             {
-                var heading = new FlowLayoutPanel { AutoSize = true, WrapContents = false, Margin = new Padding(0, 0, 0, 6) };
-                heading.Controls.Add(new ProviderArtwork(provider) { Size = new Size(26, 26), Margin = new Padding(0, 0, 10, 0) });
-                if (switches) ProviderSwitch(provider, heading);
-                else heading.Controls.Add(new Label { Text = Title(provider), AutoSize = true, Font = bodyFont, Margin = new Padding(0, 3, 0, 0) });
-                body.Controls.Add(heading);
+                ProviderHeading(provider, switches);
             }
             var label = new Label { AutoSize = true, MaximumSize = new Size(520, 0), Margin = new Padding(0, 0, 0, 8), AccessibleName = Title(provider) + " setup status" };
             statusLabels[provider] = label; body.Controls.Add(label);
@@ -165,6 +176,7 @@ internal sealed class SetupForm : Form
             control.Checked = provider == "Codex" ? current.CodexEnabled : current.ClaudeEnabled;
         }
         syncingProviders = false;
+        if (statusLabels.Count == 0) return;
         foreach (var (name, label) in statusLabels)
         {
             label.Text = SetupDiagnostic.From(StateFor(name, states(), current)).Summary;
@@ -185,14 +197,17 @@ internal sealed class SetupForm : Form
         foreach (var control in body.Controls.Cast<Control>().ToArray()) control.Dispose();
         body.Controls.Clear(); statusLabels.Clear(); retryButtons.Clear(); providerSwitches.Clear(); commandRows.Clear(); message.Text = ""; message.Visible = false; retryMessage.Text = "";
         var isWelcome = flow.Step == SetupStep.Welcome;
-        body.Visible = navigation.Visible = !isWelcome; welcome.Visible = isWelcome;
+        welcome.Visible = isWelcome;
         if (isWelcome) { welcomeGroup.Controls.Add(next); next.AutoSize = false; }
         else
         {
             navigation.Controls.Add(next); navigation.Controls.SetChildIndex(next, 0);
-            next.MinimumSize = new Size((int)Math.Round(112 * DeviceDpi / 96d), (int)Math.Round(38 * DeviceDpi / 96d));
+            var scale = initialized ? DeviceDpi / 96d : 1;
+            next.MinimumSize = new Size((int)Math.Round(112 * scale), (int)Math.Round(38 * scale));
             next.Size = next.MinimumSize; next.AutoSize = true;
         }
+        body.Visible = navigation.Visible = !isWelcome;
+        Controls.SetChildIndex(body, 0); Controls.SetChildIndex(navigation, 1);
         back.Visible = flow.Step != SetupStep.Welcome;
         next.Text = flow.Step == SetupStep.Welcome ? "Get Started" : flow.Step == SetupStep.Done ? "Start Llumi" : "Continue";
         switch (flow.Step)
@@ -200,7 +215,7 @@ internal sealed class SetupForm : Form
             case SetupStep.Welcome:
                 break;
             case SetupStep.Providers:
-                TextLine("Choose your providers", true); TextLine("Choose either, both, or set them up later."); Statuses(switches: true); break;
+                TextLine("Choose your providers", true); TextLine("Choose either, both, or set them up later."); ProviderChoices(); break;
             case SetupStep.Codex: case SetupStep.Claude:
                 var isCodex = flow.Step == SetupStep.Codex;
                 TextLine(isCodex ? "Set up Codex" : "Set up Claude Code", true);
@@ -230,13 +245,13 @@ internal sealed class SetupForm : Form
             case SetupStep.Done:
                 TextLine("You’re all set", true); TextLine("Setup Llumi… remains available from the tray and app menu."); Statuses(); break;
         }
-        body.Controls.Add(message); RefreshStatuses(); ApplyTheme(); body.ResumeLayout(true); FitBodyContent(); LayoutWelcome();
+        body.Controls.Add(message); RefreshStatuses(); ApplyTheme(); body.ResumeLayout(true); PerformLayout(); FitBodyContent(); LayoutWelcome();
         AcceptButton = next;
         if (Visible) next.Select();
     }
     private void LayoutWelcome()
     {
-        if (flow.Step != SetupStep.Welcome) return;
+        if (!initialized || flow.Step != SetupStep.Welcome) return;
         int S(int value) => (int)Math.Round(value * DeviceDpi / 96d);
         var width = S(240);
         welcomeLogo.SetBounds((width - S(72)) / 2, 0, S(72), S(72));
@@ -248,10 +263,26 @@ internal sealed class SetupForm : Form
     }
     private void FitBodyContent()
     {
+        if (!initialized) return;
         var width = Math.Max(200, Math.Min((int)Math.Round(520 * DeviceDpi / 96d), body.ClientSize.Width - body.Padding.Horizontal - SystemInformation.VerticalScrollBarWidth));
         foreach (var label in Descendants(body).OfType<Label>().Where(l => l.AutoSize && l.MaximumSize.Width > 0)) label.MaximumSize = new Size(width, 0);
         foreach (var actions in body.Controls.OfType<FlowLayoutPanel>().Where(p => p.Name == "setupActions")) actions.MaximumSize = new Size(width, 0);
         foreach (var (row, box, copy) in commandRows) { row.MaximumSize = new Size(width, 0); box.Width = Math.Max(100, width - copy.Width - box.Margin.Horizontal); }
+    }
+    private void FitInitialWindow()
+    {
+        var area = Screen.FromControl(this).WorkingArea;
+        var margin = (int)Math.Round(16 * DeviceDpi / 96d);
+        var available = new Size(Math.Max(1, area.Width - margin * 2), Math.Max(1, area.Height - margin * 2));
+        MinimumSize = new Size(Math.Min(MinimumSize.Width, available.Width), Math.Min(MinimumSize.Height, available.Height));
+        Size = new Size(Math.Min(Width, available.Width), Math.Min(Height, available.Height));
+        Location = new Point(area.Left + (area.Width - Width) / 2, area.Top + (area.Height - Height) / 2);
+        PerformLayout(); FitBodyContent(); LayoutWelcome();
+    }
+    protected override void OnDpiChanged(DpiChangedEventArgs e)
+    {
+        base.OnDpiChanged(e);
+        FitBodyContent(); LayoutWelcome();
     }
     private static IEnumerable<Control> Descendants(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(Descendants(c)));
     internal void ApplyTheme()

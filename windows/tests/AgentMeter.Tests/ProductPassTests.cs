@@ -136,15 +136,16 @@ public sealed class SetupFormTests
         thread.SetApartmentState(ApartmentState.STA); thread.Start(); return completion.Task;
     }
     [Fact]
-    public Task RetryReadsSharedProviderStateAndAllowsFailure() => Sta(() =>
+    public Task CheckSetupRetryReadsSharedProviderStateAndAllowsFailure() => Sta(() =>
     {
         var path = Path.Combine(Path.GetTempPath(), "AgentMeter-setup-" + Guid.NewGuid(), "done.json");
+        var flow = new SetupFlow(new(path)); while (flow.Step != SetupStep.Verify) flow.Next();
         ProviderState[] states = [new("Codex", ProviderStatus.Loading), new("Claude", ProviderStatus.Error, Failure: FailureKind.NotInstalled)];
         var refreshes = 0;
-        using var form = new SetupForm(new(new(path)), () => states, _ => {
+        using var form = new SetupForm(flow, () => states, _ => {
             refreshes++; states = [new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "fixture"), Authentication: AuthenticationStatus.Verified)];
         }, () => new(), _ => { }, new Startup(), () => { }, () => { });
-        form.Show(); Button(form, "Get Started").PerformClick(); form.RefreshStatuses();
+        form.Show(); form.RefreshStatuses();
         Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text.Contains("Checking allowances"));
         Button(form, "Retry").PerformClick(); form.RefreshStatuses();
         Assert.Equal(1, refreshes);
