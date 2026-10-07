@@ -24,10 +24,7 @@ public sealed class SetupRefinementTests
             var next = Assert.IsType<Button>(form.AcceptButton); var back = Button(form, "Back");
             Assert.Equal(new Size(S(112), S(38)), next.MinimumSize);
             Assert.Equal(back.MinimumSize, next.MinimumSize);
-            var footer = form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Bottom);
-            Assert.Equal(form.ClientSize.Height, footer.Bottom);
-            Assert.True(footer.ClientRectangle.Contains(next.Bounds)); Assert.True(footer.ClientRectangle.Contains(back.Bounds));
-            Assert.True(form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Fill).Bottom <= footer.Top);
+            AssertNavigationFollowsContent(form);
         }
     });
 
@@ -56,26 +53,112 @@ public sealed class SetupRefinementTests
                 Assert.InRange(Math.Abs(next.Left * 2 + next.Width - group.Width), 0, 1);
                 Assert.True(logo.Bottom < name.Top && name.Bottom < next.Top);
                 Assert.Equal(Color.White.ToArgb(), next.ForeColor.ToArgb()); Assert.True(next.BackColor.B > next.BackColor.R + 100);
-                Assert.False(form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Bottom).Visible);
+                Assert.False(Panel(form, "setupNavigation").Visible);
                 var sizeBeforeNavigation = form.ClientSize;
                 next.PerformClick();
                 Assert.Contains(Labels(form), l => l.Visible && l.Text == "Choose your providers");
-                Assert.Same(next, form.AcceptButton); Assert.True(form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Bottom).Visible);
+                Assert.Same(next, form.AcceptButton); Assert.True(Panel(form, "setupNavigation").Visible);
                 Assert.Equal(next.Text, next.AccessibilityObject.Name);
-                var navigation = form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Bottom);
+                var navigation = Panel(form, "setupNavigation");
                 Assert.Equal(sizeBeforeNavigation, form.ClientSize);
-                Assert.True(form.ClientRectangle.Contains(navigation.Bounds));
+                Assert.True(form.ClientRectangle.Contains(form.RectangleToClient(navigation.RectangleToScreen(navigation.ClientRectangle))));
                 Assert.True(navigation.ClientRectangle.Contains(next.Bounds));
                 Assert.True(navigation.ClientRectangle.Contains(Button(form, "Back").Bounds));
                 Assert.Equal(Button(form, "Back").Height, next.Height);
                 Assert.Equal(Button(form, "Back").Top, next.Top);
-                Assert.True(form.Controls.OfType<FlowLayoutPanel>().Single(p => p.Dock == DockStyle.Fill).Bottom <= navigation.Top);
+                AssertNavigationFollowsContent(form);
                 Button(form, "Back").PerformClick(); Assert.Same(next, form.AcceptButton);
                 Assert.Equal(sizeBeforeNavigation, form.ClientSize);
             }
             Assert.Equal(0, requests); Assert.Equal(0, saves);
         }
         finally { Palette.Apply(Appearance.System); }
+    });
+
+    [Theory]
+    [InlineData(1)] [InlineData(2)] [InlineData(3)] [InlineData(4)] [InlineData(5)] [InlineData(6)]
+    public Task EveryContentPageBalancesAvailableSpaceAndScrollsWhenConstrained(int step) => Sta(() =>
+    {
+        using var form = FormAt((SetupStep)step, () => [Ready("Codex"), Ready("Claude Code")], _ => { }, () => new(), _ => { });
+        form.Show(); form.MinimumSize = Size.Empty;
+        int S(int value) => (int)Math.Round(value * form.DeviceDpi / 96d);
+        foreach (var size in new[] { new Size(S(620), S(580)), new Size(S(544), S(442)), new Size(S(420), S(280)) })
+        {
+            form.ClientSize = size; form.PerformLayout(); Application.DoEvents();
+            var viewport = Panel(form, "setupViewport"); var page = Panel(form, "setupPage");
+            var content = Panel(form, "setupContent");
+            viewport.AutoScrollPosition = Point.Empty; form.PerformLayout(); Application.DoEvents();
+            Assert.False(viewport.HorizontalScroll.Visible);
+            Assert.True(page.Width <= viewport.ClientSize.Width, "Page should fit the viewport width.");
+            Assert.InRange(page.Left, 0, viewport.ClientSize.Width - page.Width);
+            Assert.InRange(Math.Abs(page.Left * 2 + page.Width - viewport.ClientSize.Width), 0, SystemInformation.VerticalScrollBarWidth + 2);
+            if (!viewport.VerticalScroll.Visible && page.Height <= viewport.ClientSize.Height - S(32))
+                Assert.InRange(Math.Abs(page.Top * 2 + page.Height - viewport.ClientSize.Height), 0, 2);
+            else
+                // Resizing may scroll to preserve the focused control. Check the
+                // page's unscrolled origin independently of that native behavior.
+                Assert.InRange(page.Top - viewport.AutoScrollPosition.Y, 0, S(32));
+            AssertNavigationFollowsContent(form);
+            var cards = Descendants(content).OfType<FlowLayoutPanel>().Where(c => c.Name == "setupCard").ToArray();
+            if (cards.Length > 0)
+            {
+                Assert.All(cards, card => Assert.True(card.Width >= content.ClientSize.Width * .85, "Cards should use the available content width."));
+                Assert.Single(cards.Select(card => card.Width).Distinct());
+                if ((SetupStep)step == SetupStep.Providers)
+                {
+                    Assert.Equal(2, cards.Length); Assert.Equal(cards[0].Height, cards[1].Height);
+                    Assert.All(cards, card => Assert.True(card.Height >= S(48), "Provider choices need a comfortable padded row."));
+                }
+            }
+            AssertControlsReachable(viewport);
+        }
+    });
+
+    [Fact]
+    public Task EachSetupStepStartsAtTheTopAndKeepsTheDefaultActionWhenSpaceIsConstrained() => Sta(() =>
+    {
+        using var form = FormAt(SetupStep.Welcome, () => [Ready("Codex"), Ready("Claude Code")], _ => { }, () => new(), _ => { });
+        form.Show(); form.MinimumSize = Size.Empty;
+        int S(int value) => (int)Math.Round(value * form.DeviceDpi / 96d);
+        form.ClientSize = new Size(S(420), S(280));
+        var next = Assert.IsType<Button>(form.AcceptButton);
+        for (var step = 1; step <= 6; step++)
+        {
+            next.PerformClick(); Application.DoEvents();
+            var viewport = Panel(form, "setupViewport");
+            Assert.Equal(Point.Empty, viewport.AutoScrollPosition);
+            Assert.Same(next, form.AcceptButton);
+            AssertControlsReachable(viewport);
+        }
+    });
+
+    [Fact]
+    public Task VerificationWrapsFeedbackAndKeepsScrollPositionAcrossStatusUpdates() => Sta(() =>
+    {
+        var at = DateTimeOffset.UtcNow;
+        ProviderState[] states = [
+            new("Codex", ProviderStatus.Error, Failure: FailureKind.RateLimited, RetryAt: at.AddMinutes(15), AutomaticRetryAt: at.AddMinutes(15)),
+            new("Claude Code", ProviderStatus.Error, Failure: FailureKind.RateLimited, RetryAt: at.AddMinutes(15), AutomaticRetryAt: at.AddMinutes(15))
+        ];
+        using var form = FormAt(SetupStep.Verify, () => states, _ => { }, () => new(), _ => { });
+        form.Show(); form.MinimumSize = Size.Empty;
+        int S(int value) => (int)Math.Round(value * form.DeviceDpi / 96d);
+        form.ClientSize = new Size(S(420), S(280)); form.PerformLayout(); Application.DoEvents();
+        Switch(form, "Codex").Checked = false;
+        Assert.Contains(Labels(form), label => label.Visible && label.Text == "Settings could not be saved. Please try again.");
+        var viewport = Panel(form, "setupViewport");
+        Assert.True(viewport.VerticalScroll.Visible); Assert.False(viewport.HorizontalScroll.Visible);
+        AssertControlsReachable(viewport); AssertNavigationFollowsContent(form);
+        var next = Assert.IsType<Button>(form.AcceptButton); viewport.ScrollControlIntoView(next);
+        var scroll = viewport.AutoScrollPosition;
+        Assert.True(scroll.Y < 0);
+        form.RefreshStatuses(); form.PerformLayout(); Application.DoEvents();
+        Assert.Equal(scroll, viewport.AutoScrollPosition);
+        Assert.True(viewport.ClientRectangle.Contains(viewport.RectangleToClient(next.RectangleToScreen(next.ClientRectangle))));
+        Assert.Equal("Finish Anyway", next.AccessibilityObject.Name);
+        states = [Ready("Codex"), Ready("Claude Code")]; form.RefreshStatuses(); form.PerformLayout();
+        Assert.Equal("Continue", next.AccessibilityObject.Name); Assert.False(viewport.HorizontalScroll.Visible);
+        AssertControlsReachable(viewport); AssertNavigationFollowsContent(form);
     });
 
     [Theory]
@@ -240,7 +323,7 @@ public sealed class SetupRefinementTests
             Assert.True(button.TabStop); button.Select(); Assert.True(button.Focused);
         });
         Assert.DoesNotContain(Labels(form), l => l.Text.Contains("Copies only", StringComparison.Ordinal) || l.Text.Contains("Console/API", StringComparison.Ordinal) || l.Text.Contains("Credentials stay", StringComparison.Ordinal));
-        var body = form.Controls.OfType<FlowLayoutPanel>().Single(panel => panel.Dock == DockStyle.Fill);
+        var body = Panel(form, "setupViewport");
         foreach (var control in Descendants(body).Where(c => c is System.Windows.Forms.Button or TextBox))
         {
             body.ScrollControlIntoView(control);
@@ -364,6 +447,28 @@ public sealed class SetupRefinementTests
         return new(flow, states, refresh, preferences, save, startup ?? new Startup(), toggleStartup ?? (() => { }), () => { });
     }
     private static Button Button(Form form, string text) => Descendants(form).OfType<Button>().Single(b => b.Text == text);
+    private static FlowLayoutPanel Panel(Form form, string name) => Descendants(form).OfType<FlowLayoutPanel>().Single(panel => panel.Name == name);
+    private static void AssertNavigationFollowsContent(Form form)
+    {
+        var content = Panel(form, "setupContent"); var navigation = Panel(form, "setupNavigation"); var page = Panel(form, "setupPage");
+        var next = Assert.IsType<Button>(form.AcceptButton); var back = Button(form, "Back");
+        Assert.True(navigation.Visible); Assert.Same(page, navigation.Parent); Assert.Same(page, content.Parent);
+        Assert.InRange(navigation.Top - content.Bottom, 0, (int)Math.Round(40 * form.DeviceDpi / 96d));
+        Assert.True(page.ClientRectangle.Contains(navigation.Bounds));
+        Assert.True(navigation.ClientRectangle.Contains(next.Bounds)); Assert.True(navigation.ClientRectangle.Contains(back.Bounds));
+        Assert.Equal(back.Top, next.Top); Assert.Equal(back.Height, next.Height);
+        Assert.Equal(next.Text, next.AccessibilityObject.Name);
+    }
+    private static void AssertControlsReachable(FlowLayoutPanel viewport)
+    {
+        foreach (var control in Descendants(viewport).Where(c => c.Visible && c is System.Windows.Forms.Button or CheckBox or TextBox or ComboBox or LinkLabel))
+        {
+            viewport.ScrollControlIntoView(control);
+            Assert.True(viewport.ClientRectangle.Contains(viewport.RectangleToClient(control.RectangleToScreen(control.ClientRectangle))),
+                "Unreachable setup control: " + (control.AccessibleName ?? control.Text) + $" bounds={viewport.RectangleToClient(control.RectangleToScreen(control.ClientRectangle))}, scroll={viewport.AutoScrollPosition}, padding={viewport.Padding}, view={viewport.ClientSize}, display={viewport.DisplayRectangle}");
+            if (control.Enabled && control.TabStop) { control.Select(); Assert.True(control.Focused); }
+        }
+    }
     private static CheckBox Switch(Form form, string provider) => Descendants(form).OfType<CheckBox>().Single(c => c.AccessibleName == "Monitor " + provider);
     private static IEnumerable<Label> Labels(Control root) => Descendants(root).OfType<Label>();
     private static IEnumerable<Control> Descendants(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(Descendants(c)));

@@ -174,6 +174,20 @@ internal sealed class Review : Form
             if (flow.Step != (SetupStep)index) throw new InvalidOperationException("Synthetic setup did not reach the requested step.");
             form.RefreshStatuses(); Application.DoEvents();
             Save(form, Path.Combine(directory, $"setup-{index + 1:00}-{names[index]}.png"));
+            if (index > 0)
+            {
+                var originalSize = form.ClientSize; var originalMinimum = form.MinimumSize;
+                int S(int value) => (int)Math.Round(value * form.DeviceDpi / 96d);
+                form.MinimumSize = Size.Empty; form.ClientSize = new Size(S(420), S(280)); Application.DoEvents();
+                Save(form, Path.Combine(directory, $"setup-{names[index]}-constrained.png"));
+                form.MinimumSize = originalMinimum; form.ClientSize = originalSize; Application.DoEvents();
+                if (index == 2)
+                {
+                    Palette.Apply(AppAppearance.Dark); form.ApplyTheme(); Application.DoEvents();
+                    Save(form, Path.Combine(directory, "setup-codex-dark.png"));
+                    Palette.Apply(preferences.Appearance); form.ApplyTheme(); Application.DoEvents();
+                }
+            }
             if (index == 0)
             {
                 Save(form, Path.Combine(directory, "setup-welcome.png"));
