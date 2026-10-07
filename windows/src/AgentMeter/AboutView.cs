@@ -5,7 +5,7 @@ namespace AgentMeter;
 internal sealed class AboutView : Panel
 {
     internal static readonly Uri ReleaseNotesUri = new("https://tryllumi.com/releases/");
-    private readonly FlowLayoutPanel body = new() { FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true };
+    private readonly FlowLayoutPanel body = new() { AccessibleName = "About details", FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoSize = true };
     private readonly Action<Uri> openExternal;
     private readonly PictureBox identity = new() { SizeMode = PictureBoxSizeMode.Zoom, AccessibleName = "Llumi" };
     private readonly Font heading = new("Segoe UI Semibold", 21, FontStyle.Regular);
@@ -15,7 +15,7 @@ internal sealed class AboutView : Panel
 
     internal AboutView(Action<Uri>? openExternal = null)
     {
-        Name = "about"; AutoScroll = true;
+        Name = "about"; AccessibleName = "About Llumi"; AutoScroll = true;
         this.openExternal = openExternal ?? (uri => { using var process = Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }); });
         using var icon = AppIcon.Load(128); identity.Image = icon.ToBitmap();
         Controls.Add(body);
@@ -47,7 +47,7 @@ internal sealed class AboutView : Panel
     internal void ShowOverview()
     {
         ClearBody();
-        var identityRow = new Panel { Name = "aboutIdentity", Height = S(128), Margin = new Padding(0, 0, 0, S(6)) };
+        var identityRow = new Panel { Name = "aboutIdentity", AccessibleName = "App identity", Height = S(128), Margin = new Padding(0, 0, 0, S(6)) };
         identity.Size = new(S(56), S(56)); identity.Location = Point.Empty;
         var name = TextLine("Llumi", true); name.Name = "aboutName";
         var version = TextLine($"Version {ReleaseNotes.AppVersion}"); version.Name = "aboutVersion";

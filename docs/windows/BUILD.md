@@ -10,6 +10,8 @@ pwsh -NoProfile -File windows/tools/build.ps1
 
 The script runs the Windows production privacy check, restores dependencies, builds Release, runs the .NET tests, publishes an unsigned framework-dependent development build and checks its contents, notices and dependency inventory. Use `-PythonPath <python.exe>` when Python is outside PATH. Output stays under ignored `windows/artifacts/`. It does not create an installer, modify an installed package, sign, upload or publish anything.
 
+The test runner aborts the test process if a single test hangs for sixty seconds; it does not collect memory dumps. The multi-page setup appearance fixture checks its deadline between UI stages and awaits its worker through cleanup, so a timed-out worker cannot change shared appearance state during the next test.
+
 To launch your local build:
 
 ```powershell

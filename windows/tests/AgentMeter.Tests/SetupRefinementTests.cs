@@ -1,26 +1,42 @@
 using AgentMeter.Core;
+using System.Diagnostics;
+using Xunit.Abstractions;
 
 namespace AgentMeter.Tests;
 
 [Collection("Windows UI")]
-public sealed class SetupRefinementTests
+public sealed class SetupRefinementTests(ITestOutputHelper output)
 {
     [Theory]
     [InlineData(0, false)] [InlineData(0, true)] [InlineData(2, false)] [InlineData(2, true)]
     public Task ReopenedSetupStaysLightAtEveryStepWithoutChangingSavedOrOtherWindowAppearance(int appearance, bool systemLight) => Sta(() =>
     {
+        var elapsed = Stopwatch.StartNew(); var previous = TimeSpan.Zero;
+        void Checkpoint(string stage)
+        {
+            var current = elapsed.Elapsed;
+            var stageElapsed = current - previous;
+            output.WriteLine($"{stage}: {stageElapsed.TotalMilliseconds:0} ms; total {current.TotalMilliseconds:0} ms");
+            previous = current;
+            if (stageElapsed > TimeSpan.FromSeconds(8)) throw new TimeoutException($"Setup appearance stage {stage} exceeded its deadline ({stageElapsed.TotalSeconds:0.00}s).");
+            // Thirteen page visits plus three native windows take 2.7–3.8s alone
+            // but exceeded the old aggregate 8s bound under full-suite load.
+            if (current > TimeSpan.FromSeconds(30)) throw new TimeoutException($"Setup appearance round-trip exceeded its deadline after {stage} ({current.TotalSeconds:0.00}s).");
+        }
         var directory = Path.Combine(Path.GetTempPath(), "Llumi-setup-theme-fixture-" + Guid.NewGuid());
         try
         {
             var path = Path.Combine(directory, "preferences.json"); var store = new PreferenceStore(path);
             var choice = new Preferences(Appearance: (Appearance)appearance); Assert.True(store.Save(choice));
             var original = File.ReadAllText(path); var saves = 0;
+            Checkpoint("preference fixture");
             Palette.Apply(choice.Appearance, systemLight);
             var paletteBefore = (Palette.IsLight, Palette.Background, Palette.Foreground, Palette.Card, Palette.Secondary,
                 Palette.Border, Palette.Muted, Palette.Track, Palette.Live, Palette.Warning);
             using var icon = AppIcon.Load();
             using var usage = new UsageForm(["Codex", "Claude Code"], icon);
             usage.SetPreferences(choice); usage.Show();
+            Checkpoint("Usage window");
             using var monitor = new MonitorForm(["Codex", "Claude Code"], icon) { MotionAllowed = () => false };
             monitor.Render([Ready("Codex"), Ready("Claude Code")]);
             Color MonitorBackground()
@@ -29,8 +45,10 @@ public sealed class SetupRefinementTests
                 return bitmap.GetPixel(bitmap.Width / 2, bitmap.Height - Math.Max(4, monitor.DeviceDpi / 24));
             }
             var monitorBefore = MonitorBackground(); var appBackground = usage.BackColor;
+            Checkpoint("monitor preview");
             using var form = FormAt(SetupStep.Welcome, () => [Ready("Codex"), Ready("Claude Code")], _ => { }, store.Load, _ => saves++);
             form.Show();
+            Checkpoint("setup welcome");
             void AssertUnchanged()
             {
                 form.ApplyTheme();
@@ -49,14 +67,26 @@ public sealed class SetupRefinementTests
             for (var step = 0; step < 7; step++)
             {
                 AssertUnchanged();
+                Checkpoint($"verify {(SetupStep)step}");
                 if ((SetupStep)step == SetupStep.Preferences)
                     Assert.Equal(appearance, Descendants(form).OfType<ComboBox>().Single().SelectedIndex);
-                if (step < 6) Assert.IsAssignableFrom<Button>(form.AcceptButton).PerformClick();
+                if (step < 6)
+                {
+                    Assert.IsAssignableFrom<Button>(form.AcceptButton).PerformClick();
+                    Checkpoint($"advance from {(SetupStep)step}");
+                }
             }
-            for (var step = 5; step >= 0; step--) { Button(form, "Back").PerformClick(); AssertUnchanged(); }
+            for (var step = 5; step >= 0; step--)
+            {
+                Button(form, "Back").PerformClick(); Checkpoint($"return to {(SetupStep)step}");
+                AssertUnchanged(); Checkpoint($"verify returned {(SetupStep)step}");
+            }
         }
         finally { Palette.Apply(Appearance.System); if (Directory.Exists(directory)) Directory.Delete(directory, true); }
-    });
+        // The deadline above is cooperative between native UI stages. Await the
+        // worker through disposal/finally; abandoning it can change the shared
+        // palette while the next supposedly serialized UI test is running.
+    }, Timeout.InfiniteTimeSpan);
 
     [Fact]
     public Task ExplicitAppearanceChangesFromSetupAffectTheAppWhileSetupRemainsLight() => Sta(() =>

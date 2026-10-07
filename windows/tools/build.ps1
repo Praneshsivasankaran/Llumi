@@ -25,7 +25,7 @@ try {
     if ($LASTEXITCODE -ne 0) { throw 'Windows production privacy check failed.' }
     Invoke-DotNet @('restore', 'AgentMeter.sln', '--runtime', 'win-x64', '--verbosity', 'minimal')
     Invoke-DotNet @('build', 'AgentMeter.sln', '-c', 'Release', '--no-restore', '--verbosity', 'minimal')
-    Invoke-DotNet @('test', 'tests/AgentMeter.Tests/AgentMeter.Tests.csproj', '-c', 'Release', '--no-build', '--no-restore', '--verbosity', 'minimal')
+    Invoke-DotNet @('test', 'tests/AgentMeter.Tests/AgentMeter.Tests.csproj', '-c', 'Release', '--no-build', '--no-restore', '--verbosity', 'minimal', '--results-directory', 'artifacts/test-results', '--blame-hang-timeout', '60s', '--blame-hang-dump-type', 'none')
     Invoke-DotNet @('publish', 'src/AgentMeter/AgentMeter.csproj', '-c', 'Release', '-r', 'win-x64', '--self-contained', 'false', '--artifacts-path', 'artifacts/publish-build', '-o', 'artifacts/release', '--verbosity', 'minimal', '-p:DebugType=None', '-p:DebugSymbols=false')
     $release = Join-Path $projectRoot 'artifacts/release'
     $null = New-Item -ItemType Directory -Force -Path (Join-Path $release 'licenses')
