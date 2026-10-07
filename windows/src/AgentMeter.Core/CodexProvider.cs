@@ -20,7 +20,7 @@ public sealed class CodexProvider : IUsageProvider
         if (this.timeout <= TimeSpan.Zero || this.timeout.TotalMilliseconds > uint.MaxValue - 1)
             throw new ArgumentOutOfRangeException(nameof(timeout));
         this.executableLocator = executableLocator ?? CliLocator.FindCodex;
-        this.clientVersion = clientVersion ?? "2.1.0";
+        this.clientVersion = clientVersion ?? "2.1.3";
         if (this.clientVersion.Length > 32 || this.clientVersion.Any(c => !char.IsAsciiDigit(c) && c != '.') ||
             !Version.TryParse(this.clientVersion, out var version) || version.Build < 0)
             throw new ArgumentException("The client version must be a numeric product version.", nameof(clientVersion));

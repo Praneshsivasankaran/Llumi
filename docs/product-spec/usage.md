@@ -1,6 +1,6 @@
 # Usage
 
-Windows 2.1.0 locally adopts the macOS 1.1.3 product contract in [Windows catch-up requirements](windows-210.md), which supersedes conflicting earlier Windows allowance, setup and provider-selection rules below. Intentional native differences remain.
+Windows 2.1.3 locally adopts the macOS 1.1.3 product contract in [Windows catch-up requirements](windows-213.md), which supersedes conflicting earlier Windows allowance, setup and provider-selection rules below. Intentional native differences remain.
 
 Llumi is one product with native platform implementations. Its primary destinations are Usage and Settings. Provider names are Codex and Claude Code. The Raspberry semicircular gauge identifies Llumi; system status surfaces use its monochrome variant.
 

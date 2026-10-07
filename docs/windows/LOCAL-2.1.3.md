@@ -1,4 +1,4 @@
-# Windows 2.1.0 local review
+# Windows 2.1.3 local review
 
 Local catch-up implementation based on the macOS 1.1.3 allowance/setup requirements. Reference behavior is taken from the released tag, not from the different platform version numbers. This supersedes the earlier Windows 2.0.3 restriction to general Claude windows.
 
@@ -24,7 +24,7 @@ Local catch-up implementation based on the macOS 1.1.3 allowance/setup requireme
 - Simplify named additional/model rows to Spark limit, Opus and Sonnet; retain scope/period in accessibility metadata. Match the dashboard identity to the official Llumi application icon.
 - Match the Windows tray icon to the same official full-color Llumi tile, using the embedded small sizes instead of a separately drawn monochrome gauge. Preserve display-change reload, tray interactions and status tooltips.
 - Add a development-only live first-time review mode with fresh isolated settings, complete native setup, real provider checks and sandboxed startup. Preserve the installed Store app and existing CLI credentials.
-- Update local app version to 2.1.0. Microsoft Store remains the Windows update channel. No Sparkle, installer, public release, website change or Store metadata change.
+- Set the owner-review version to 2.1.3 (Windows file/assembly version 2.1.3.0) and show it in the first-time review window title. Microsoft Store remains the Windows update channel; submission awaits explicit owner approval. No Sparkle, installer, public release, website change or Store metadata change.
 
 ## Local review
 

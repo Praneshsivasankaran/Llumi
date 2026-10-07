@@ -27,7 +27,7 @@ public sealed class CodexAccountTests
         Assert.True(session.Disposed);
         Assert.DoesNotContain(First, JsonSerializer.Serialize(result));
         Assert.DoesNotContain("api", string.Join(" ", session.Methods));
-        Assert.Equal("2.1.0", session.Version);
+        Assert.Equal("2.1.3", session.Version);
         Assert.Equal(AuthenticationStatus.Verified, result.Authentication);
         Assert.NotNull(result.VerifiedBinding);
         Assert.DoesNotContain(result.VerifiedBinding.Digest, JsonSerializer.Serialize(result));

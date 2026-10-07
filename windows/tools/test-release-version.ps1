@@ -16,7 +16,7 @@ foreach ($version in @('0.0.0.0','1.9.9.0','2.0.1.0','2.0.2.0','2.0.3.1','2.0.3'
     Expect-Rejection { Assert-NextWindowsPackageVersion $version } 'must advance beyond frozen'
 }
 Assert-NextWindowsPackageVersion '2.0.3.0'; $passed++
-Assert-NextWindowsPackageVersion '2.1.0.0'; $passed++
+Assert-NextWindowsPackageVersion '2.1.3.0'; $passed++
 # A synthetic sibling checkout exercises the actual producers without touching
 # source versions, historical artifacts, SDK tools, or producing any package.
 $temporary = Join-Path ([IO.Path]::GetTempPath()) ('llumi-version-test-' + [guid]::NewGuid())

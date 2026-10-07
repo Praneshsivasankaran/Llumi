@@ -41,7 +41,7 @@ internal static class LiveFirstRunReview
                             startup: new ReviewStartupRegistration(log.Write), quitEvent: quitEvent, captureActivity: null,
                             preferenceStore: new PreferenceStore(Path.Combine(profile, "v2-preferences.json")),
                             setupStore: new SetupCompletionStore(Path.Combine(profile, "setup-completed.json")),
-                            reviewTitle: "local first-time review");
+                            reviewTitle: $"v{typeof(TrayContext).Assembly.GetName().Version?.ToString(3)} local first-time review");
                         log.Write("review.first-run.started");
                         context.OpenPanel();
                         Application.Run(context);

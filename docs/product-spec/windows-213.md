@@ -1,4 +1,6 @@
-# Windows 2.1.0 local catch-up contract
+# Windows 2.1.3 local catch-up contract
+
+The local owner-review candidate is v2.1.3 (Windows file/assembly version 2.1.3.0). Its first-time review window shows this version so the reviewed build is identifiable. Microsoft Store submission remains on hold until the owner explicitly approves it.
 
 Reference: macOS 1.1.3 tag `llumi-macos-1.1.3`, particularly `allowance-113.md`. This Windows contract supersedes the earlier five-hour-only Claude and longest-Codex selection rules. macOS source and published releases remain unchanged.
 
