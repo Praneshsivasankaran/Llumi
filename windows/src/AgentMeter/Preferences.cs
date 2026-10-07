@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 namespace AgentMeter;
 
 internal enum Appearance { System, Light, Dark }
-internal sealed record Preferences(bool CompactMonitor = true, bool TrayIcon = true, Appearance Appearance = Appearance.System,
+internal sealed record Preferences(bool CompactMonitor = true, bool TrayIcon = true, Appearance Appearance = Appearance.Light,
     bool CodexEnabled = true, bool ClaudeEnabled = true);
 internal sealed class PreferenceStore(string path)
 {

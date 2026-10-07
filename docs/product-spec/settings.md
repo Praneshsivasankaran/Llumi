@@ -26,4 +26,4 @@ Copy-only Windows setup commands (official sources checked 2026-09-23): `npm ins
 
 On both platforms, provider checks are embedded in Settings, with installation, authentication/readiness and usage states, Check Again and Copy Diagnostics. Windows uses a native scrollable Provider Setup section; it does not open a separate diagnostics dialog. The first-launch guided setup retains its verification step. Existing macOS presentation is unchanged.
 
-Windows uses one effective Appearance across the main window, onboarding and compact/expanded monitor. Explicit Light/Dark and System changes redraw existing surfaces live without changing monitor geometry, activity or interactions.
+Windows uses one effective Appearance across the main window, onboarding and compact/expanded monitor. Fresh profiles default to Light throughout setup and after completion, independent of the Windows system theme. Explicit Light/Dark and System choices persist and redraw existing surfaces live without changing monitor geometry, activity or interactions.
