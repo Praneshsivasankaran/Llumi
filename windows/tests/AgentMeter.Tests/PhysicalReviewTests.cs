@@ -19,6 +19,29 @@ public sealed class PhysicalReviewTests
         return bitmap.GetPixel(bitmap.Width / 2, bitmap.Height - Math.Max(4, form.DeviceDpi / 24)).GetBrightness() > .65;
     }
     [Theory]
+    [InlineData(1)] [InlineData(2)]
+    public Task DashboardHeaderRendersOfficialLlumiTileWithTitleAlignment(int appearance) => Sta(() =>
+    {
+        try
+        {
+            Palette.Apply((Appearance)appearance);
+            using var form = new UsageForm(["Codex"], SystemIcons.Application);
+            form.SetPreferences(new(Appearance: (Appearance)appearance)); form.Show();
+            var header = form.Controls.OfType<Panel>().Single(panel => panel.Controls.OfType<Label>().Any(label => label.Text == "Llumi"));
+            var title = header.Controls.OfType<Label>().Single(label => label.Text == "Llumi");
+            using var bitmap = new Bitmap(header.Width, header.Height); header.DrawToBitmap(bitmap, header.ClientRectangle);
+            int S(int value) => (int)Math.Round(value * form.DeviceDpi / 96f);
+            var bounds = new Rectangle(S(18), S(14), S(24), S(24));
+            var left = bitmap.GetPixel(bounds.Left + (int)(bounds.Width * .23), bounds.Top + (int)(bounds.Height * .55));
+            var right = bitmap.GetPixel(bounds.Left + (int)(bounds.Width * .77), bounds.Top + (int)(bounds.Height * .55));
+            Assert.True(left.B > left.G, "Header must retain the official tile's purple left side.");
+            Assert.True(right.R > right.G && right.R > right.B, "Header must retain the official tile's raspberry right side.");
+            Assert.Equal(Palette.Background.ToArgb(), bitmap.GetPixel(bounds.Left, bounds.Top).ToArgb());
+            Assert.True(title.Left > bounds.Right); Assert.InRange(Math.Abs(title.Top + title.Height / 2 - bounds.Top - bounds.Height / 2), 0, 1);
+        }
+        finally { Palette.Apply(Appearance.System); }
+    });
+    [Theory]
     [InlineData(1, false, true)] [InlineData(2, true, false)]
     [InlineData(0, true, true)] [InlineData(0, false, false)]
     public Task MonitorUsesEffectiveAppearance(int preference, bool osLight, bool expectedLight) => Sta(() =>
@@ -53,6 +76,27 @@ public sealed class PhysicalReviewTests
             Assert.NotEqual(oldLight, LightPixel(form)); Assert.Equal(bounds, form.Bounds);
         }
         finally { Palette.Apply(Appearance.System); }
+    });
+    [Fact]
+    public Task CleanVisibleLabelsKeepModelAndAdditionalPeriodsAccessible() => Sta(() =>
+    {
+        var now = DateTimeOffset.UtcNow;
+        var state = new ProviderState("Claude", ProviderStatus.Ready, new([
+            new("five_hour", "raw general", 20, now.AddHours(5)),
+            new("sonnet", "raw model", 40, now.AddDays(3), 10080, UsageScope.Model, "Sonnet"),
+            new("spark", "raw additional", 80, now.AddHours(5), 300, UsageScope.Additional, "Spark")], now, "fixture"));
+        using var hints = new ToolTip(); using var card = new ProviderCard(hints) { Width = 390 };
+        card.Render(state, now, 1);
+        var model = card.Controls.OfType<Label>().Single(label => label.Text == "Sonnet");
+        var additional = card.Controls.OfType<Label>().Single(label => label.Text == "Spark limit");
+        Assert.Equal("Sonnet", hints.GetToolTip(model)); Assert.Equal("Spark limit", hints.GetToolTip(additional));
+        Assert.Contains("Weekly model allowance", model.AccessibleName);
+        Assert.Contains("5-hour additional allowance", additional.AccessibleName);
+        Assert.Contains("Weekly model allowance", card.AccessibleDescription);
+        using var monitor = new MonitorForm(["Claude"], SystemIcons.Application); monitor.Render([state], now);
+        var accessible = monitor.AccessibilityObject.GetChild(0)!.Name!;
+        Assert.Contains("Sonnet · Weekly model allowance", accessible); Assert.Contains("Spark limit · 5-hour additional allowance", accessible);
+        Assert.DoesNotContain("Model:", accessible); Assert.DoesNotContain("Additional:", accessible);
     });
     [Fact]
     public Task SettingsContainsLiveChecksAndSanitizedDiagnostics() => Sta(() =>

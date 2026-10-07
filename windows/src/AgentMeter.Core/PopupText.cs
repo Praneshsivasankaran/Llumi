@@ -64,4 +64,5 @@ public static class PopupText
     }
 
     public static string WindowName(string provider, UsageWindow window) => UsagePresentation.Label(window);
+    public static string AccessibleWindowName(string provider, UsageWindow window) => UsagePresentation.AccessibilityLabel(window);
 }

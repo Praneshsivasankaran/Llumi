@@ -122,11 +122,11 @@ public sealed class PopupTests
     }
 
     [Fact]
-    public void LabelsDescribeDurationAndScopeWithoutRawProviderGeneratedNames()
+    public void LabelsUseConciseScopeNamesWithoutRawProviderGeneratedNames()
     {
         Assert.Equal("Weekly limit", PopupText.WindowName("Codex", new UsageWindow("one", "raw", 1, null, 10080, UsageScope.General)));
-        Assert.Equal("Weekly limit · Model: Spark", PopupText.WindowName("Codex", new UsageWindow("two", "raw", 2, null, 10080, UsageScope.Model, "Spark")));
-        Assert.Equal("2-day limit · Additional: Research", PopupText.WindowName("Codex", new UsageWindow("three", "raw", 3, null, 2880, UsageScope.Additional, "Research")));
+        Assert.Equal("Spark", PopupText.WindowName("Codex", new UsageWindow("two", "raw", 2, null, 10080, UsageScope.Model, "Spark")));
+        Assert.Equal("Research limit", PopupText.WindowName("Codex", new UsageWindow("three", "raw", 3, null, 2880, UsageScope.Additional, "Research")));
         Assert.Equal("", PopupText.WindowName("Codex", new UsageWindow("four", "raw", null, null)));
     }
 
@@ -192,7 +192,7 @@ public sealed class PopupTests
         var labels = Descendants(form).OfType<Label>().Select(c => c.Text).ToArray();
         Assert.Contains("53% remaining", labels);
         Assert.Contains("—", labels);
-        Assert.Contains("Weekly limit · Model: Spark", labels);
+        Assert.Contains("Spark", labels);
         Assert.Contains("Unsupported format", labels);
         Assert.False(form.Visible);
         form.Render([codex, claude], true, true);

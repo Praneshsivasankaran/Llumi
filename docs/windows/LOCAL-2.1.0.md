@@ -12,19 +12,21 @@ Local catch-up implementation based on the macOS 1.1.3 allowance/setup requireme
 - Equal Usage card sizing, consistent official Codex blossom/Claude Code pixel artwork, all supported expanded allowance details, stale age/accessibility text, keyboard access to Usage, and Reset Position in Settings/monitor menu.
 - Remove the Settings tray-availability explanation, independence/account/telemetry note and automatic-save footer; preserve error messages and collapse the unused message area.
 - Remove the passive diagnostics privacy note and its empty layout space. Copy Diagnostics retains concise success/clipboard-error feedback after use.
+- Simplify named additional/model rows to Spark limit, Opus and Sonnet; retain scope/period in accessibility metadata. Match the dashboard identity to the official Llumi application icon.
+- Add a development-only live first-time review mode with fresh isolated settings, complete native setup, real provider checks and sandboxed startup. Preserve the installed Store app and existing CLI credentials.
 - Update local app version to 2.1.0. Microsoft Store remains the Windows update channel. No Sparkle, installer, public release, website change or Store metadata change.
 
 ## Local review
 
 Build the production app with `pwsh -NoProfile -File windows/tools/build.ps1`. The framework-dependent output is `windows/artifacts/release/Llumi.exe`; it needs the .NET 10 Desktop Runtime. The script creates local files only.
 
-An additional development-only `AgentMeter.ReviewHost` project reuses the native application forms with fixed synthetic examples. It runs no provider collectors/activity scanners, writes no production preferences/startup settings and does not acquire the product single-instance locks. Use it to inspect both-window/model, weekly-only, missing/unsupported, stale, provider-off, themes and setup states while preserving the installed app. It is excluded from production packaging. Capture output is fixture rendering, not real-account or physical acceptance.
+An additional development-only `AgentMeter.ReviewHost` project reuses the native application forms. Its default scenario toolbar uses fixed synthetic examples, no collectors/activity scanners, memory-only preferences/startup and no product single-instance locks. Use it to inspect both-window/model, weekly-only, missing/unsupported, stale, provider-off and themes. Capture output includes every setup step; these are fixture renders, not real-account or physical acceptance.
+
+The separate `--first-run-live` mode starts the full native application with an empty isolated profile and real provider checks. It preserves the installed Store app, existing settings and CLI sign-ins, skips migration and acquires the normal product/legacy locks. Quit another Llumi instance normally before opening it. Startup toggling stays inside the review profile; it does not register this development helper with Windows. The delivery includes a launcher that creates a fresh profile for each first-time run. Neither review mode is included in production packaging.
 
 ## Validation boundaries
 
-The local Release build passed with zero warnings/errors and 717 tests passed, zero failed/skipped. Release metadata/dependency, runtime notices (10), version guard (17), dependency rejection (7), inventory (7), Windows production privacy, public-tree hygiene and macOS privacy checks passed. The separate synthetic review host also built successfully and produced native fixture previews.
-
-The subsequent Settings copy removals passed 98 relevant tests with zero failures/skips, including short/narrow-window reachability and sanitized diagnostics checks, plus Windows production privacy and public-tree checks. Both local app and synthetic preview were rebuilt; Release metadata/dependency and inventory checks passed again.
+The latest local Release build passed with zero warnings/errors and 732 tests passed, zero failed/skipped, including label/accessibility, dashboard identity and the full native first-time setup journey. Release metadata/dependency, runtime notices (10), version guard (17), dependency rejection (7), inventory (7), Windows production privacy, public-tree hygiene and macOS privacy checks passed. The separate review host also built successfully and produced twenty native fixture previews, including all seven setup steps.
 
 Automated tests use synthetic accounts and output. They do not prove support for untested live plans/auth modes or installed Store lifecycle. Before a future publication: owner review, real Codex/Claude account checks, physical screen-reader/high-contrast/multi-display/changed scaling, packaged startup, clean install/upgrade from Store 2.0.2 and uninstall/reinstall. Keep these separate from passing parser/runtime/UI fixtures. No external distribution is authorized by this local implementation.
 

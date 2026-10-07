@@ -16,6 +16,42 @@ public sealed class CatchUpSemanticsTests
             Authentication = account is null ? AuthenticationStatus.Unknown : AuthenticationStatus.Verified, RetryAfter = retry };
     private static ProviderState State(params UsageWindow[] windows) => new("Codex", ProviderStatus.Ready, new(windows, Now, "fixture"));
 
+    [Theory]
+    [InlineData(UsageScope.General, 300, null, "5-hour limit", "5-hour limit")]
+    [InlineData(UsageScope.General, 10080, null, "Weekly limit", "Weekly limit")]
+    [InlineData(UsageScope.Model, 10080, "Opus", "Opus", "Opus · Weekly model allowance")]
+    [InlineData(UsageScope.Model, 10080, "Sonnet", "Sonnet", "Sonnet · Weekly model allowance")]
+    [InlineData(UsageScope.Additional, 300, "Spark", "Spark limit", "Spark limit · 5-hour additional allowance")]
+    [InlineData(UsageScope.Additional, 2880, "Research", "Research limit", "Research limit · 2-day additional allowance")]
+    [InlineData(UsageScope.Additional, 60, "Fixture limit", "Fixture limit", "Fixture limit · 1-hour additional allowance")]
+    [InlineData(UsageScope.Model, 10080, null, "Model limit", "Model limit · Weekly model allowance")]
+    [InlineData(UsageScope.Additional, 300, " ", "Additional limit", "Additional limit · 5-hour additional allowance")]
+    [InlineData(UsageScope.Unknown, 300, "internal fixture", "", "")]
+    public void ScopeNamesAreConciseWhileAccessibilityPreservesPeriodAndScope(UsageScope scope, long minutes,
+        string? name, string visible, string accessible)
+    {
+        var window = new UsageWindow("fixture", "raw-provider-label", 20, Now.AddHours(1), minutes, scope, name);
+        Assert.Equal(visible, PopupText.WindowName("fixture provider", window));
+        Assert.Equal(accessible, PopupText.AccessibleWindowName("fixture provider", window));
+        Assert.DoesNotContain("raw-provider-label", accessible);
+    }
+
+    [Fact]
+    public void MissingScopeNamesAndPeriodsRemainExplicitWithoutChangingCompactSelection()
+    {
+        var general = new UsageWindow("codex/primary", "raw", 100, Now.AddHours(1), 300);
+        var model = new UsageWindow("model", "raw", 0, null, scope: UsageScope.Model);
+        var additional = new UsageWindow("additional", "raw", null, null, scope: UsageScope.Additional);
+        Assert.Equal("Model limit", PopupText.WindowName("Codex", model));
+        Assert.Equal("Model limit · model allowance · Period not reported", PopupText.AccessibleWindowName("Codex", model));
+        Assert.Equal("Additional limit", PopupText.WindowName("Codex", additional));
+        Assert.Equal("Additional limit · additional allowance · Period not reported", PopupText.AccessibleWindowName("Codex", additional));
+        Assert.Equal("Reset unavailable", PopupText.Reset(additional, Now));
+        Assert.Same(general, UsagePresentation.Primary(State(additional, model, general)));
+        Assert.Equal("0%", PopupText.Remaining(general));
+        Assert.Null(UsagePresentation.Primary(State(additional, model)));
+    }
+
     [Fact]
     public void CompactChoosesFiveHourThenWeeklyThenShortestAndNeverAdditionalOrModel()
     {

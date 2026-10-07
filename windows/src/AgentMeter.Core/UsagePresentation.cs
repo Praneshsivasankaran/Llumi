@@ -24,18 +24,31 @@ public static class UsagePresentation
     public static string Label(UsageWindow window)
     {
         if (!window.IsSupported) return "";
-        var duration = window.DurationMinutes switch
+        var name = string.IsNullOrWhiteSpace(window.ScopeLabel) ? null : window.ScopeLabel.Trim();
+        return window.Scope switch
+        {
+            UsageScope.Model => name ?? "Model limit",
+            UsageScope.Additional => name is null ? "Additional limit" :
+                name.EndsWith(" limit", StringComparison.OrdinalIgnoreCase) ? name : name + " limit",
+            _ => DurationLabel(window)
+        };
+    }
+
+    public static string AccessibilityLabel(UsageWindow window)
+    {
+        var label = Label(window);
+        if (!window.IsSupported || window.Scope == UsageScope.General) return label;
+        var scope = window.Scope == UsageScope.Model ? "model" : "additional";
+        var period = DurationLabel(window);
+        var detail = window.DurationMinutes is null ? $"{scope} allowance · Period not reported" :
+            period[..^" limit".Length] + $" {scope} allowance";
+        return label + " · " + detail;
+    }
+
+    private static string DurationLabel(UsageWindow window) => window.DurationMinutes switch
         {
             300 => "5-hour limit", 10080 => "Weekly limit", null => "Usage limit · Period not reported",
             var n when n % 1440 == 0 => $"{n / 1440}-day limit",
             var n when n % 60 == 0 => $"{n / 60}-hour limit", var n => $"{n}-minute limit"
         };
-        var scope = window.Scope switch
-        {
-            UsageScope.Model => "Model: " + (window.ScopeLabel ?? "Model"),
-            UsageScope.Additional => "Additional" + (string.IsNullOrEmpty(window.ScopeLabel) ? "" : ": " + window.ScopeLabel),
-            _ => ""
-        };
-        return string.IsNullOrEmpty(scope) ? duration : duration + " · " + scope;
-    }
 }

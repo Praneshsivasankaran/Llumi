@@ -28,6 +28,7 @@ internal sealed class TrayContext : ApplicationContext
     private readonly PreferenceStore preferenceStore;
     private Preferences preferences;
     private readonly SetupCompletionStore setupStore;
+    private readonly string? reviewTitle;
     private SetupForm? setupWindow;
     private bool needsSetup;
     private ActivitySnapshot activity = ActivitySnapshot.Empty;
@@ -44,10 +45,12 @@ internal sealed class TrayContext : ApplicationContext
 
     public TrayContext(RefreshCoordinator coordinator, DiagnosticLog log, EventWaitHandle showEvent,
         MonitorPositionStore? positions = null, IStartupRegistration? startup = null, EventWaitHandle? quitEvent = null,
-        Func<ActivitySnapshot>? captureActivity = null, PreferenceStore? preferenceStore = null, SetupCompletionStore? setupStore = null)
+        Func<ActivitySnapshot>? captureActivity = null, PreferenceStore? preferenceStore = null, SetupCompletionStore? setupStore = null,
+        string? reviewTitle = null)
     {
         this.coordinator = coordinator;
         this.log = log;
+        this.reviewTitle = reviewTitle;
         this.positions = positions ?? MonitorPositionStore.Default(log.Write);
         this.startup = startup ?? (PackagedEnvironment.HasIdentity
             ? new PackagedStartupRegistration(new WindowsStartupTaskAccess(), log.Write)
@@ -65,6 +68,7 @@ internal sealed class TrayContext : ApplicationContext
         var names = coordinator.States.Select(s => s.Name).ToArray();
         popup = new UsageForm(names, icon);
         monitor = new MonitorForm(names, icon);
+        if (reviewTitle is not null) { popup.Text = "Llumi — " + reviewTitle; monitor.Text = "Llumi monitor — " + reviewTitle; }
         tray = new NotifyIcon { Icon = trayIcon, Text = "Llumi — loading", ContextMenuStrip = menu, Visible = true };
         menu.Items.Add("Open Llumi", null, (_, _) => ShowPopup());
         pinMenu = new ToolStripMenuItem("Pin Monitor", null, (_, _) => { if (monitor.Visible) UnpinMonitor(); else OpenMonitor(); });
@@ -139,6 +143,7 @@ internal sealed class TrayContext : ApplicationContext
         {
             setupWindow = new SetupForm(new SetupFlow(setupStore), () => coordinator.States, StartRefresh,
                 () => preferences, ChangePreferences, startup, ToggleStartup, () => { needsSetup = false; ShowPopup(); });
+            if (reviewTitle is not null) setupWindow.Text = "Setup Llumi — " + reviewTitle;
             setupWindow.FormClosed += (_, _) => { if (!exiting && !preferences.TrayIcon) ShowPopup(); };
         }
         setupWindow.Show(); setupWindow.Activate();

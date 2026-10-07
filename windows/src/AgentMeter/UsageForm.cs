@@ -43,6 +43,7 @@ internal sealed class UsageForm : Form
     private readonly Dictionary<string, ProviderCard> cards = new();
     private readonly Font headingFont = new("Segoe UI", 13, FontStyle.Bold);
     private readonly Font bodyFont = new("Segoe UI", 10);
+    private Icon headerIdentity = AppIcon.Load();
     private IReadOnlyList<ProviderState> lastStates = [];
     private bool loading, logFailed, rendering, syncing, settingsShown;
     private Preferences preferences = new();
@@ -64,7 +65,7 @@ internal sealed class UsageForm : Form
         DoubleBuffered = true;
         title.Font = headingFont; title.TextAlign = ContentAlignment.MiddleLeft;
         header.Controls.AddRange([title, usageTab, settingsTab, refresh, menu]);
-        header.Paint += (_, e) => GlyphDrawing.DrawIdentity(e.Graphics, new Rectangle(S(18), S(15), S(18), S(22)));
+        header.Paint += (_, e) => e.Graphics.DrawIcon(headerIdentity, new Rectangle(S(18), S(14), S(24), S(24)));
         Controls.AddRange([header, content, settings, footer]);
         foreach (var name in names) { var card = new ProviderCard(hints); cards[name] = card; content.Controls.Add(card); }
         content.Controls.AddRange([offMessage, offSettings]);
@@ -97,14 +98,19 @@ internal sealed class UsageForm : Form
         appearance.SelectedIndexChanged += (_, _) => SavePreferences();
         FormClosing += (_, e) => { if (!AllowExit && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; HidePanel(); } };
         Resize += (_, _) => { if (!rendering) Render(lastStates, loading, logFailed); };
-        DpiChanged += (_, _) => { FitInitialWindow(Screen.FromControl(this).WorkingArea); Render(lastStates, loading, logFailed); KeepOnScreen(); };
+        DpiChanged += (_, _) => { LoadHeaderIdentity(); FitInitialWindow(Screen.FromControl(this).WorkingArea); Render(lastStates, loading, logFailed); KeepOnScreen(); };
         countdown.Tick += (_, _) => UpdateRetry();
         VisibleChanged += (_, _) => { if (Visible) countdown.Start(); else countdown.Stop(); };
         _ = Handle;
+        LoadHeaderIdentity();
         FitInitialWindow(Screen.FromControl(this).WorkingArea);
         SetPreferences(preferences);
     }
     private int S(int n) => (int)Math.Round(n * DeviceDpi / 96f);
+    private void LoadHeaderIdentity()
+    {
+        var next = AppIcon.Load(S(24)); headerIdentity.Dispose(); headerIdentity = next; header.Invalidate();
+    }
     private void FitInitialWindow(Rectangle work)
     {
         // WinForms autoscaling is disabled because this view lays out in device pixels.
@@ -173,7 +179,7 @@ internal sealed class UsageForm : Form
             if (availableWorkArea is { } work) FitInitialWindow(work);
             var width = ClientSize.Width; var height = ClientSize.Height;
             header.SetBounds(0, 0, width, S(103));
-            title.SetBounds(S(46), S(7), width - S(90), S(38));
+            title.SetBounds(S(52), S(7), width - S(96), S(38));
             usageTab.SetBounds(S(16), S(56), S(95), S(32)); settingsTab.SetBounds(S(120), S(56), S(95), S(32));
             menu.SetBounds(width - S(46), S(12), S(28), S(28)); refresh.SetBounds(width - S(136), S(57), S(120), S(30));
             content.SetBounds(S(12), S(105), width - S(24), Math.Max(S(60), height - S(150)));
@@ -272,6 +278,6 @@ internal sealed class UsageForm : Form
     protected override void Dispose(bool disposing)
     {
         base.Dispose(disposing);
-        if (disposing) { countdown.Dispose(); actions.Dispose(); hints.Dispose(); headingFont.Dispose(); bodyFont.Dispose(); }
+        if (disposing) { headerIdentity.Dispose(); countdown.Dispose(); actions.Dispose(); hints.Dispose(); headingFont.Dispose(); bodyFont.Dispose(); }
     }
 }

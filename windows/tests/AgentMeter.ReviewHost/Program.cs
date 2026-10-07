@@ -3,19 +3,27 @@ using AgentMeter;
 using AgentMeter.Core;
 using AppAppearance = AgentMeter.Appearance;
 
-// Local-only review harness. It instantiates presentation surfaces with fixed synthetic
-// values, memory-only preferences/startup, and no collectors, activity scanner or tray context.
+// Development-only harness. The default/capture path contains fixed synthetic values;
+// the explicit first-run path uses real providers with isolated Llumi storage and startup.
 internal static class Program
 {
     [STAThread]
-    private static void Main(string[] args)
+    private static int Main(string[] args)
     {
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        if (args.Length == 2 && args[0] == "--first-run-live") return LiveFirstRunReview.Run(args[1]);
+        if (args.Length != 0 && (args.Length != 2 || args[0] != "--capture"))
+        {
+            MessageBox.Show("Choose the synthetic preview, --capture <directory>, or --first-run-live <new absolute review directory>.",
+                "Llumi local review", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return 1;
+        }
         using var review = new Review();
-        if (args.Length == 2 && args[0] == "--capture") { review.CapturePreviews(Path.GetFullPath(args[1])); return; }
+        if (args.Length == 2 && args[0] == "--capture") { review.CapturePreviews(Path.GetFullPath(args[1])); return 0; }
         Application.Run(review);
+        return 0;
     }
 }
 internal sealed class Review : Form
@@ -28,6 +36,7 @@ internal sealed class Review : Form
     private Preferences preferences = new(Appearance: AppAppearance.Light);
     private ProviderState[] states = [];
     private SetupForm? setup;
+    private SetupFlow? setupFlow;
     private bool startupEnabled;
     internal Review()
     {
@@ -102,7 +111,8 @@ internal sealed class Review : Form
         if (setup is { IsDisposed: false }) { setup.Show(); setup.Activate(); return; }
         // This completion flag is isolated from production storage and contains no provider data.
         var path = Path.Combine(Path.GetTempPath(), "Llumi-local-review-" + Environment.ProcessId, "setup-completed.json");
-        setup = new(new SetupFlow(new(path)), () => states, Apply, () => preferences,
+        setupFlow = new SetupFlow(new(path));
+        setup = new(setupFlow, () => states, Apply, () => preferences,
             value => { preferences = value; Apply(); }, new MemoryStartup(() => startupEnabled, enabled => startupEnabled = enabled),
             () => { startupEnabled = !startupEnabled; }, () => usage.Show()) { Text = "Llumi setup — synthetic review" };
         setup.Show();
@@ -119,11 +129,36 @@ internal sealed class Review : Form
                 monitor.SetExpanded(true, false); using var expanded = monitor.CreatePreviewBitmap(); expanded.Save(Path.Combine(directory, "monitor-expanded.png"), ImageFormat.Png);
                 monitor.SetExpanded(false, false); using var compact = monitor.CreatePreviewBitmap(); compact.Save(Path.Combine(directory, "monitor-compact.png"), ImageFormat.Png);
                 usage.ShowSettings(); Application.DoEvents(); Save(usage, Path.Combine(directory, "settings.png"));
-                ShowSetup(); Application.DoEvents(); Save(setup!, Path.Combine(directory, "setup-welcome.png")); setup!.Close();
+                CaptureSetupSteps(directory);
                 theme.SelectedIndex = 1; Apply(); usage.ShowUsage(); Application.DoEvents(); Save(usage, Path.Combine(directory, "usage-dark.png")); theme.SelectedIndex = 0;
             }
         }
         monitor.HideMonitor(); usage.Hide();
+    }
+
+    private void CaptureSetupSteps(string directory)
+    {
+        // Every image uses the same native setup surface, memory-only preferences and
+        // startup adapter, and the explicitly synthetic provider states above.
+        preferences = preferences with { CodexEnabled = true, ClaudeEnabled = true };
+        Apply();
+        setup?.Close(); ShowSetup();
+        var form = setup!; var flow = setupFlow!;
+        var names = new[] { "welcome", "providers", "codex", "claude", "verify", "preferences", "done" };
+        for (var index = 0; index < names.Length; index++)
+        {
+            if (flow.Step != (SetupStep)index) throw new InvalidOperationException("Synthetic setup did not reach the requested step.");
+            form.RefreshStatuses(); Application.DoEvents();
+            Save(form, Path.Combine(directory, $"setup-{index + 1:00}-{names[index]}.png"));
+            if (index == 0) Save(form, Path.Combine(directory, "setup-welcome.png"));
+            if (index + 1 < names.Length)
+            {
+                var next = form.Controls.OfType<FlowLayoutPanel>().SelectMany(panel => panel.Controls.OfType<Button>())
+                    .Single(button => button.AccessibleName == "Continue setup");
+                next.PerformClick(); Application.DoEvents();
+            }
+        }
+        form.Close();
     }
     private static void Save(Form form, string path)
     { using var full = new Bitmap(form.Width, form.Height); form.DrawToBitmap(full, new Rectangle(Point.Empty, form.Size)); full.Save(path, ImageFormat.Png); }

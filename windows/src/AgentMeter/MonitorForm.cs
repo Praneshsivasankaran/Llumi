@@ -121,10 +121,12 @@ internal sealed class MonitorForm : Form
             var value = window is not null ? PopupText.Remaining(window) : state.Status == ProviderStatus.Loading ? "…" : "—";
             var status = PopupText.Status(state, at);
             var reset = window is null ? status : PopupText.Reset(window, at);
-            var hint = $"{name}: {status}\n{value} remaining\n{(window is null ? "" : PopupText.WindowName(name, window))}\n{reset}\n{UsageAccessibility.Observation(state, at)}";
-            var windows = UsagePresentation.Windows(state).Select(w => new MonitorDetail(PopupText.WindowName(name, w), PopupText.Remaining(w), PopupText.Reset(w, at))).ToArray();
+            var hint = $"{name}: {status}\n{value} remaining\n{(window is null ? "" : PopupText.AccessibleWindowName(name, window))}\n{reset}\n{UsageAccessibility.Observation(state, at)}";
+            var allowances = UsagePresentation.Windows(state);
+            var windows = allowances.Select(w => new MonitorDetail(PopupText.WindowName(name, w), PopupText.Remaining(w), PopupText.Reset(w, at))).ToArray();
             var details = string.Join("\n", windows.Select(w => $"{w.Label} · {w.Value} remaining\n{w.Reset}"));
-            return new MonitorRow(name, value, window?.RemainingPercent, stale, status, reset, window is null ? "Allowance unavailable" : PopupText.WindowName(name, window), hint + "\n" + details, details, windows);
+            var accessibleDetails = string.Join("\n", allowances.Select(w => $"{PopupText.AccessibleWindowName(name, w)} · {PopupText.Remaining(w)} remaining\n{PopupText.Reset(w, at)}"));
+            return new MonitorRow(name, value, window?.RemainingPercent, stale, status, reset, window is null ? "Allowance unavailable" : PopupText.WindowName(name, window), hint + "\n" + accessibleDetails, details, windows);
         }).ToArray();
         var changed = providersChanged || !rows.Select(r => r.Visual(hovered)).SequenceEqual(next.Select(r => r.Visual(hovered)));
         var accessibilityChanged = !rows.Select(r => r.Hint).SequenceEqual(next.Select(r => r.Hint));

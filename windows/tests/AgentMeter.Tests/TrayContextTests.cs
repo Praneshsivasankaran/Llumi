@@ -326,7 +326,8 @@ public sealed class TrayContextTests
 
     private static async Task RunMessageLoop(RefreshCoordinator coordinator,
         Func<TrayContext, UsageForm, Task> scenario, Preferences? initialPreferences = null,
-        Func<ActivitySnapshot>? captureActivity = null, bool waitInitialActivity = true, bool rejectPreferenceWrites = false)
+        Func<ActivitySnapshot>? captureActivity = null, bool waitInitialActivity = true, bool rejectPreferenceWrites = false,
+        bool setupComplete = true, string? reviewTitle = null)
     {
         var completed = NewSignal();
         var logDirectory = Path.Combine(Path.GetTempPath(), "AgentMeter.TrayTests." + Guid.NewGuid().ToString("N"));
@@ -338,10 +339,10 @@ public sealed class TrayContextTests
             {
                 using var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset);
                 var setupStore = new SetupCompletionStore(Path.Combine(logDirectory, "setup.json"));
-                setupStore.Save(true);
+                if (setupComplete) setupStore.Save(true);
                 var preferenceStore = new PreferenceStore(rejectPreferenceWrites ? logDirectory : Path.Combine(logDirectory, "preferences.json"));
                 if (initialPreferences is not null) Assert.True(preferenceStore.Save(initialPreferences));
-                context = new TrayContext(coordinator, new DiagnosticLog(logDirectory), showEvent, new MonitorPositionStore(Path.Combine(logDirectory, "position.json")), new MemoryStartup(), captureActivity: captureActivity ?? (() => ActivitySnapshot.Empty), preferenceStore: preferenceStore, setupStore: setupStore);
+                context = new TrayContext(coordinator, new DiagnosticLog(logDirectory), showEvent, new MonitorPositionStore(Path.Combine(logDirectory, "position.json")), new MemoryStartup(), captureActivity: captureActivity ?? (() => ActivitySnapshot.Empty), preferenceStore: preferenceStore, setupStore: setupStore, reviewTitle: reviewTitle);
                 var popup = Field<UsageForm>(context, "popup");
                 var tray = Field<NotifyIcon>(context, "tray");
                 using var watchdog = new System.Threading.Timer(_ =>
@@ -410,6 +411,71 @@ public sealed class TrayContextTests
             Assert.True(popup.Visible);
             Assert.Equal(FormWindowState.Normal, popup.WindowState);
         });
+    }
+
+    [Fact]
+    public async Task FreshReviewContextTraversesEveryNativeSetupStepAndCompletesOnlyAtFinish()
+    {
+        var binding = new AccountBinding("synthetic-first-run-account");
+        ProviderResult SignedIn(ProviderResult value) => value with { Authentication = AuthenticationStatus.Verified, VerifiedBinding = binding };
+        var coordinator = new RefreshCoordinator([
+            new FakeProvider("Codex", _ => Task.FromResult(SignedIn(GoodResult()))),
+            new FakeProvider("Claude Code", _ => Task.FromResult(SignedIn(new(new UsageSnapshot([new("five_hour", "fixture", 10, DateTimeOffset.UtcNow.AddHours(2))], DateTimeOffset.UtcNow, "synthetic first-run fixture")))))
+        ], minimumInterval: TimeSpan.Zero);
+        await RunMessageLoop(coordinator, async (context, popup) =>
+        {
+            await Field<Task>(context, "activeRefresh");
+            var setup = Field<SetupForm>(context, "setupWindow");
+            var flow = (SetupFlow)typeof(SetupForm).GetField("flow", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(setup)!;
+            var completion = Field<SetupCompletionStore>(context, "setupStore");
+            var saved = Field<PreferenceStore>(context, "preferenceStore");
+            var startup = Assert.IsType<MemoryStartup>(Field<IStartupRegistration>(context, "startup"));
+            Assert.True(setup.Visible); Assert.False(popup.Visible);
+            Assert.Equal(SetupStep.Welcome, flow.Step); Assert.Equal(Enum.GetValues<SetupStep>(), flow.Steps);
+            Assert.False(completion.IsComplete()); Assert.False(saved.HasValidExistingPreferences());
+            Assert.Equal(new Preferences(), Field<Preferences>(context, "preferences"));
+            Assert.Contains("local first-time test", setup.Text); Assert.Contains("local first-time test", popup.Text);
+            Assert.Contains("local first-time test", Field<MonitorForm>(context, "monitor").Text);
+            var visited = new List<SetupStep>();
+            foreach (var step in Enum.GetValues<SetupStep>())
+            {
+                Assert.Equal(step, flow.Step); visited.Add(step);
+                Assert.False(completion.IsComplete());
+                if (step == SetupStep.Providers)
+                {
+                    var codex = Descendants(setup).OfType<CheckBox>().Single(c => c.AccessibleName == "Monitor Codex");
+                    codex.Checked = false; Assert.False(saved.Load().CodexEnabled);
+                    Assert.False(coordinator.States[0].Enabled);
+                    Assert.False(completion.RecognizeExisting(saved.HasValidExistingPreferences()));
+                    codex.Checked = true; await Field<Task>(context, "activeRefresh");
+                    Assert.True(saved.Load().CodexEnabled); Assert.True(coordinator.States[0].Enabled);
+                }
+                if (step == SetupStep.Preferences)
+                {
+                    var compact = Descendants(setup).OfType<CheckBox>().Single(c => c.Text == "Compact Monitor");
+                    compact.Checked = false; Assert.False(saved.Load().CompactMonitor);
+                    var launch = Descendants(setup).OfType<CheckBox>().Single(c => c.Text == "Launch at Startup");
+                    typeof(Control).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(launch, [EventArgs.Empty]);
+                    Assert.True(startup.Enabled); Assert.True(launch.Checked); Assert.Equal(1, startup.Writes);
+                    var appearance = Assert.Single(Descendants(setup).OfType<ComboBox>());
+                    appearance.SelectedIndex = (int)Appearance.Light;
+                    Assert.Equal(Appearance.Light, saved.Load().Appearance);
+                }
+                if (step != SetupStep.Done)
+                {
+                    var next = Descendants(setup).OfType<Button>().Single(b => b.AccessibleName == "Continue setup");
+                    Assert.True(next.Enabled); next.PerformClick();
+                }
+            }
+            Assert.Equal(Enum.GetValues<SetupStep>(), visited);
+            Assert.True(Field<bool>(context, "needsSetup"));
+            var finish = Descendants(setup).OfType<Button>().Single(b => b.Text == "Start Llumi");
+            finish.PerformClick();
+            Assert.True(completion.IsComplete()); Assert.False(Field<bool>(context, "needsSetup"));
+            Assert.True(popup.Visible); Assert.True(setup.IsDisposed);
+            Assert.Equal(new Preferences(CompactMonitor: false, Appearance: Appearance.Light), saved.Load());
+            Assert.True(startup.Enabled); Assert.Equal(1, startup.Writes);
+        }, setupComplete: false, reviewTitle: "local first-time test");
     }
 
     [Fact]
@@ -624,7 +690,8 @@ public sealed class TrayContextTests
     private sealed class MemoryStartup : IStartupRegistration
     {
         internal bool Enabled, RejectWrites;
+        internal int Writes;
         public bool TryRead(out bool enabled) { enabled = Enabled; return true; }
-        public bool TrySet(bool enabled) { if (RejectWrites) return false; Enabled = enabled; return true; }
+        public bool TrySet(bool enabled) { Writes++; if (RejectWrites) return false; Enabled = enabled; return true; }
     }
 }

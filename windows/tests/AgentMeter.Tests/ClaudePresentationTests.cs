@@ -80,8 +80,9 @@ public sealed class ClaudePresentationTests
         Assert.Equal(5, MonitorSelection.Details(state).Length);
         Assert.Equal("five_hour", MonitorSelection.Select(state)!.Id);
         var text = UsageText.Provider(state, DateTimeOffset.UtcNow);
-        Assert.Contains("Weekly limit · Model: Sonnet", text);
-        Assert.Contains("Model: synthetic_model", text);
+        Assert.Contains("Sonnet   97% remaining", text);
+        Assert.Contains("synthetic_model   96% remaining", text);
+        Assert.DoesNotContain("Model:", text);
         var diagnostics = SetupDiagnostics.Report([state], "2.1.0", "0");
         foreach (var name in new[] { "iguana_necktie", "future_internal", "seven_day_sonnet", "synthetic_model", "model:" })
             Assert.DoesNotContain(name, diagnostics);
@@ -113,7 +114,7 @@ public sealed class ClaudePresentationTests
         Assert.Equal(3, UsagePresentation.Windows(state).Length);
         Assert.Equal("codex/primary", MonitorSelection.Select(state)!.Id);
         Assert.Equal("80%", PopupText.Remaining(MonitorSelection.Select(state)!));
-        Assert.Contains(UsagePresentation.Windows(state), w => PopupText.WindowName("Codex", w) == "5-hour limit · Additional: Spark");
+        Assert.Contains(UsagePresentation.Windows(state), w => PopupText.WindowName("Codex", w) == "Spark limit");
         Assert.Contains("5-hour limit", UsageText.Provider(state, DateTimeOffset.UtcNow));
     }
 }

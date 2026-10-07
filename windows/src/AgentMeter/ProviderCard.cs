@@ -83,7 +83,7 @@ internal sealed class ProviderCard : Panel
         primary.Text = selected is null ? "" : PopupText.Remaining(selected) + " remaining";
         primary.Visible = selected is not null; primaryBar.Visible = selected is not null;
         primary.ForeColor = stale ? Palette.Warning : Palette.Foreground;
-        primary.AccessibleName = selected is null ? status.Text : $"{title.Text}: {PopupText.WindowName(state.Name, selected)}, {primary.Text}, {status.Text}";
+        primary.AccessibleName = selected is null ? status.Text : $"{title.Text}: {PopupText.AccessibleWindowName(state.Name, selected)}, {primary.Text}, {status.Text}";
         primaryBar.Accent = accent;
         primaryBar.UpdateValue(selected?.RemainingPercent, stale);
         var windows = UsagePresentation.Windows(state)
@@ -107,15 +107,17 @@ internal sealed class ProviderCard : Panel
             row.Value.Text = window.Id == selected?.Id ? "" : PopupText.Remaining(window);
             row.Value.ForeColor = stale ? Palette.Warning : Palette.Foreground;
             row.Reset.Text = PopupText.Reset(window, now);
-            row.Name.AccessibleName = $"{row.Name.Text}, {PopupText.Remaining(window)} remaining, {row.Reset.Text}, {status.Text}";
-            row.Value.AccessibleName = $"{row.Name.Text}: {PopupText.Remaining(window)} remaining";
-            hints.SetToolTip(row.Name, row.Name.AccessibleName);
+            var accessibleLabel = PopupText.AccessibleWindowName(state.Name, window);
+            row.Name.AccessibleName = $"{accessibleLabel}, {PopupText.Remaining(window)} remaining, {row.Reset.Text}, {status.Text}";
+            row.Value.AccessibleName = $"{accessibleLabel}: {PopupText.Remaining(window)} remaining";
+            row.Reset.AccessibleName = $"{accessibleLabel}: {row.Reset.Text}";
+            hints.SetToolTip(row.Name, row.Name.Text);
             hints.SetToolTip(row.Reset, UsageText.Reset(window.ResetsAt, now));
             row.Bar.Accent = accent;
             row.Bar.UpdateValue(window.RemainingPercent, stale);
         }
         AccessibleName = $"{title.Text}, {status.Text}";
-        AccessibleDescription = UsageAccessibility.Observation(state, now) + "; " + string.Join("; ", windows.Select(w => $"{PopupText.WindowName(state.Name, w)}: {PopupText.Remaining(w)} remaining, {PopupText.Reset(w, now)}"));
+        AccessibleDescription = UsageAccessibility.Observation(state, now) + "; " + string.Join("; ", windows.Select(w => $"{PopupText.AccessibleWindowName(state.Name, w)}: {PopupText.Remaining(w)} remaining, {PopupText.Reset(w, now)}"));
         LogicalHeight = windows.Length == 0 ? 116 : 144 + windows.Length * 50;
         LayoutRows(scale);
         Invalidate();

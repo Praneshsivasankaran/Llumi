@@ -292,9 +292,9 @@ public sealed class MonitorFormTests
         form.Render(states, Now); form.SetExpanded(true, false);
         Assert.Equal(["29%", "60%"], form.RowValues);
         Assert.Equal(MonitorForm.SizeForDpi(form.DeviceDpi, 2, true, allowanceRows: 3), form.ClientSize);
-        Assert.Contains("Model: Spark", form.AccessibilityObject.GetChild(0)!.Name);
+        Assert.Contains("Spark · 5-hour model allowance", form.AccessibilityObject.GetChild(0)!.Name);
         var claude = form.AccessibilityObject.GetChild(1)!.Name!;
-        foreach (var expected in new[] { "Model: Sonnet", "Additional: Extra usage", "Updated 3m ago", "observation older than two minutes" }) Assert.Contains(expected, claude);
+        foreach (var expected in new[] { "Sonnet · Weekly model allowance", "Extra usage limit · 1-hour additional allowance", "Updated 3m ago", "observation older than two minutes" }) Assert.Contains(expected, claude);
         foreach (var denied in new[] { "raw-model", "raw-additional", "raw-week" }) Assert.DoesNotContain(denied, claude);
         using var image = form.CreatePreviewBitmap(); Assert.Equal(form.ClientSize.Height, image.Height);
     });
