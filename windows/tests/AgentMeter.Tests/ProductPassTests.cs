@@ -141,7 +141,7 @@ public sealed class SetupFormTests
         var path = Path.Combine(Path.GetTempPath(), "AgentMeter-setup-" + Guid.NewGuid(), "done.json");
         ProviderState[] states = [new("Codex", ProviderStatus.Loading), new("Claude", ProviderStatus.Error, Failure: FailureKind.NotInstalled)];
         var refreshes = 0;
-        using var form = new SetupForm(new(new(path)), () => states, () => {
+        using var form = new SetupForm(new(new(path)), () => states, _ => {
             refreshes++; states = [new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "fixture"), Authentication: AuthenticationStatus.Verified)];
         }, () => new(), _ => { }, new Startup(), () => { }, () => { });
         form.Show(); Button(form, "Get Started").PerformClick(); form.RefreshStatuses();
@@ -158,7 +158,7 @@ public sealed class SetupFormTests
         var path = Path.Combine(Path.GetTempPath(), "AgentMeter-setup-" + Guid.NewGuid(), "done.json");
         var flow = new SetupFlow(new(path)); while (flow.Step != SetupStep.Verify) flow.Next();
         ProviderState[] states = [new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "fixture"), Authentication: AuthenticationStatus.Verified)];
-        using var form = new SetupForm(flow, () => states, () => { }, () => new(), _ => { }, new Startup(), () => { }, () => { });
+        using var form = new SetupForm(flow, () => states, _ => { }, () => new(), _ => { }, new Startup(), () => { }, () => { });
         form.Show(); Assert.True(Button(form, "Continue").Visible);
         Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text.Contains("Signed in") && l.Text.Contains("Allowances not reported"));
         states = [states[0] with { Authentication = AuthenticationStatus.Unknown }]; form.RefreshStatuses();
@@ -171,7 +171,7 @@ public sealed class SetupFormTests
         var path = Path.Combine(Path.GetTempPath(), "AgentMeter-setup-" + Guid.NewGuid(), "done.json");
         var p = new Preferences(CodexEnabled: false, ClaudeEnabled: true); var flow = new SetupFlow(new(path));
         ProviderState[] states = [new("Codex", ProviderStatus.Unavailable, Enabled: false), new("Claude", ProviderStatus.Unavailable)];
-        using var form = new SetupForm(flow, () => states, () => { }, () => p, value => p = value,
+        using var form = new SetupForm(flow, () => states, _ => { }, () => p, value => p = value,
             new Startup(), () => { }, () => { });
         form.Show(); Button(form, "Get Started").PerformClick();
         var choices = Descendants(form).OfType<CheckBox>().ToArray(); Assert.False(choices.Single(c => c.AccessibleName == "Monitor Codex").Checked);
@@ -192,7 +192,7 @@ public sealed class SetupFormTests
             Assert.True(preferences.Save(new(CodexEnabled: false, ClaudeEnabled: false)));
             var flow = new SetupFlow(completion) { Codex = false, Claude = false };
             var startup = new Startup(); var finished = false;
-            using var form = new SetupForm(flow, () => [], () => { }, preferences.Load,
+            using var form = new SetupForm(flow, () => [], _ => { }, preferences.Load,
                 p => { preferences.Save(p); Palette.Apply(p.Appearance); }, startup,
                 () => startup.TrySet(!startup.Enabled), () => finished = true);
             form.Show(); Button(form, "Get Started").PerformClick();

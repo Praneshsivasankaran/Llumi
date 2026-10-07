@@ -65,7 +65,8 @@ public interface IUsageProvider
 
 public sealed record ProviderState(string Name, ProviderStatus Status, UsageSnapshot? Snapshot = null,
     FailureKind Failure = FailureKind.None, string? Detail = null, DateTimeOffset? LastRefresh = null,
-    bool Enabled = true, AuthenticationStatus Authentication = AuthenticationStatus.Unknown, DateTimeOffset? RetryAt = null)
+    bool Enabled = true, AuthenticationStatus Authentication = AuthenticationStatus.Unknown, DateTimeOffset? RetryAt = null,
+    DateTimeOffset? AutomaticRetryAt = null)
 {
     public AllowanceAvailability Availability
     {

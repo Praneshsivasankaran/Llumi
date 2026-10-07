@@ -141,7 +141,7 @@ internal sealed class TrayContext : ApplicationContext
     {
         if (setupWindow is null || setupWindow.IsDisposed)
         {
-            setupWindow = new SetupForm(new SetupFlow(setupStore), () => coordinator.States, StartRefresh,
+            setupWindow = new SetupForm(new SetupFlow(setupStore), () => coordinator.States, providerName => StartRefresh(RefreshReason.Manual, providerName),
                 () => preferences, ChangePreferences, startup, ToggleStartup, () => { needsSetup = false; ShowPopup(); });
             if (reviewTitle is not null) setupWindow.Text = "Setup Llumi — " + reviewTitle;
             setupWindow.FormClosed += (_, _) => { if (!exiting && !preferences.TrayIcon) ShowPopup(); };
@@ -155,7 +155,8 @@ internal sealed class TrayContext : ApplicationContext
     {
         if (!preferenceStore.Save(value)) { popup.SetPreferences(preferences); popup.PreferenceSaveFailed(); return; }
         var providerChange = preferences.CodexEnabled != value.CodexEnabled || preferences.ClaudeEnabled != value.ClaudeEnabled;
-        var reenabled = !preferences.CodexEnabled && value.CodexEnabled || !preferences.ClaudeEnabled && value.ClaudeEnabled;
+        var codexReenabled = !preferences.CodexEnabled && value.CodexEnabled;
+        var claudeReenabled = !preferences.ClaudeEnabled && value.ClaudeEnabled;
         preferences = value; tray.Visible = value.TrayIcon;
         if (providerChange)
         {
@@ -168,7 +169,9 @@ internal sealed class TrayContext : ApplicationContext
         if (setupWindow is { IsDisposed: false }) setupWindow.ApplyTheme();
         monitor.UpdateSurface(); ApplyActivity(activity);
         Render();
-        if (reenabled) { StartRefresh(RefreshReason.Enable); SampleActivity(); }
+        if (codexReenabled) StartRefresh(RefreshReason.Enable, "Codex");
+        if (claudeReenabled) StartRefresh(RefreshReason.Enable, coordinator.States.FirstOrDefault(s => UsagePresentation.IsClaude(s.Name))?.Name ?? "Claude Code");
+        if (codexReenabled || claudeReenabled) SampleActivity();
     }
 
     private void SampleActivity()
@@ -359,18 +362,18 @@ internal sealed class TrayContext : ApplicationContext
     private void StartRefresh()
         => StartRefresh(RefreshReason.Manual);
 
-    private void StartRefresh(RefreshReason reason)
+    private void StartRefresh(RefreshReason reason, string? providerName = null)
     {
         if (exiting || suspended) return;
         refreshes.RemoveAll(task => task.IsCompleted);
-        var refresh = RefreshAsync(reason);
+        var refresh = RefreshAsync(reason, providerName);
         if (!refresh.IsCompleted) refreshes.Add(refresh);
         activeRefresh = Task.WhenAll(refreshes);
     }
 
-    private async Task RefreshAsync(RefreshReason reason)
+    private async Task RefreshAsync(RefreshReason reason, string? providerName)
     {
-        try { await coordinator.RefreshAsync(lifetime.Token, reason); }
+        try { await coordinator.RefreshAsync(lifetime.Token, reason, providerName); }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception) { log.Write("refresh.unexpected-error"); }
     }

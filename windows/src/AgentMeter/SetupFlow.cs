@@ -91,12 +91,20 @@ internal static class SetupRetryPresentation
     {
         if (!state.Enabled) return null;
         if (state.Status == ProviderStatus.Loading) return "Checking…";
-        if (state.RetryAt is not { } retry || retry <= now) return null;
+        var manual = state.RetryAt is { } retry && retry > now ? retry : (DateTimeOffset?)null;
+        if (manual is { } embargo && state.Failure == FailureKind.RateLimited)
+            return "Rate limited. Retry " + When(embargo, now) + ".";
+        if (state.AutomaticRetryAt is { } automatic && automatic > now)
+            return "Automatic retry available " + When(automatic, now) + ". " +
+                (manual is { } ready ? "Retry available " + When(ready, now) + "." : "You can retry now.");
+        return manual is { } next ? "Retry available " + When(next, now) + "." : null;
+    }
+    private static string When(DateTimeOffset retry, DateTimeOffset now)
+    {
         var duration = retry - now;
         var after = duration.TotalSeconds > 900 ? $"after {retry.ToLocalTime():MMM d HH:mm}" :
             "in " + (duration.TotalSeconds < 60 ? $"{Math.Ceiling(duration.TotalSeconds):0}s" : $"{Math.Ceiling(duration.TotalMinutes):0}m");
-        return state.Failure == FailureKind.RateLimited ? "Rate limited. Retry " + after + "." :
-            duration.TotalSeconds > 900 ? "Retry " + after + "." : PopupText.Retry(state, now);
+        return after;
     }
 }
 

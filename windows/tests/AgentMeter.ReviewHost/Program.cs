@@ -112,7 +112,7 @@ internal sealed class Review : Form
         // This completion flag is isolated from production storage and contains no provider data.
         var path = Path.Combine(Path.GetTempPath(), "Llumi-local-review-" + Environment.ProcessId, "setup-completed.json");
         setupFlow = new SetupFlow(new(path));
-        setup = new(setupFlow, () => states, Apply, () => preferences,
+        setup = new(setupFlow, () => states, _ => Apply(), () => preferences,
             value => { preferences = value; Apply(); }, new MemoryStartup(() => startupEnabled, enabled => startupEnabled = enabled),
             () => { startupEnabled = !startupEnabled; }, () => usage.Show()) { Text = "Llumi setup — synthetic review" };
         setup.Show();
@@ -151,6 +151,20 @@ internal sealed class Review : Form
             form.RefreshStatuses(); Application.DoEvents();
             Save(form, Path.Combine(directory, $"setup-{index + 1:00}-{names[index]}.png"));
             if (index == 0) Save(form, Path.Combine(directory, "setup-welcome.png"));
+            if (flow.Step == SetupStep.Verify)
+            {
+                var originalStates = states; var originalPreferences = preferences; var now = DateTimeOffset.UtcNow;
+                states = states.Select(s => s.Name == "Codex" ? s with { Snapshot = null, Status = ProviderStatus.Error,
+                    Failure = FailureKind.Network, RetryAt = now.AddSeconds(10), AutomaticRetryAt = now.AddSeconds(60) } : s).ToArray();
+                form.RefreshStatuses(); Application.DoEvents();
+                Save(form, Path.Combine(directory, "setup-verify-backoff.png"));
+                preferences = preferences with { CodexEnabled = false, ClaudeEnabled = false };
+                states = originalStates.Select(s => s with { Enabled = false, Snapshot = null, Authentication = AuthenticationStatus.Unknown }).ToArray();
+                form.RefreshStatuses(); Application.DoEvents();
+                Save(form, Path.Combine(directory, "setup-verify-both-off.png"));
+                states = originalStates; preferences = originalPreferences;
+                form.RefreshStatuses(); Application.DoEvents();
+            }
             if (index + 1 < names.Length)
             {
                 var next = form.Controls.OfType<FlowLayoutPanel>().SelectMany(panel => panel.Controls.OfType<Button>())

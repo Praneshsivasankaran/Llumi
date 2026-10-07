@@ -50,7 +50,14 @@ public sealed class RefreshCoordinator
             lock (stateLock) return providers.Select(p =>
             {
                 var e = entries[p.Name]; var wait = ManualWait(e);
-                return e.State with { RetryAt = e.State.Enabled && wait > TimeSpan.Zero ? clock.GetUtcNow() + wait : null };
+                var automaticWait = !suspended && e.State.Enabled && !e.Active &&
+                    e.Pending is not { IsCompleted: false } && e.Failures > 0 ? Max(wait, Left(e.Background)) : TimeSpan.Zero;
+                var at = clock.GetUtcNow();
+                return e.State with
+                {
+                    RetryAt = e.State.Enabled && wait > TimeSpan.Zero ? at + wait : null,
+                    AutomaticRetryAt = automaticWait > TimeSpan.Zero ? at + automaticWait : null
+                };
             }).ToArray();
         }
     }
@@ -61,7 +68,8 @@ public sealed class RefreshCoordinator
         {
             if (!entries.TryGetValue(name, out var e) || e.State.Enabled == enabled) return;
             ++e.Generation; cancellation = e.Cancellation;
-            e.State = new(name, enabled ? ProviderStatus.Loading : ProviderStatus.Unavailable, Enabled: enabled);
+            e.State = new(name, ProviderStatus.Unavailable,
+                Failure: enabled && Left(e.Embargo) > TimeSpan.Zero ? FailureKind.RateLimited : FailureKind.None, Enabled: enabled);
             // A toggle never shortens a provider rate-limit embargo.
             e.Background = null; e.Failures = 0; e.LastReset = null;
         }
@@ -96,7 +104,8 @@ public sealed class RefreshCoordinator
         try { await Task.WhenAll(operations).WaitAsync(TimeSpan.FromSeconds(4)).ConfigureAwait(false); }
         catch (Exception) { /* Owned adapter cleanup stays bounded at shutdown. */ }
     }
-    public async Task<bool> RefreshAsync(CancellationToken cancellationToken = default, RefreshReason reason = RefreshReason.Manual)
+    public async Task<bool> RefreshAsync(CancellationToken cancellationToken = default, RefreshReason reason = RefreshReason.Manual,
+        string? providerName = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var selected = new List<(IUsageProvider Provider, ProviderState Previous, int Generation, CancellationTokenSource Cancellation)>();
@@ -105,6 +114,7 @@ public sealed class RefreshCoordinator
             if (suspended) return false;
             foreach (var provider in providers)
             {
+                if (providerName is not null && !string.Equals(provider.Name, providerName, StringComparison.Ordinal)) continue;
                 var e = entries[provider.Name];
                 if (!e.State.Enabled || e.Active || e.Pending is { IsCompleted: false } || ManualWait(e) > TimeSpan.Zero) continue;
                 var at = clock.GetUtcNow(); var stamp = clock.GetTimestamp();
