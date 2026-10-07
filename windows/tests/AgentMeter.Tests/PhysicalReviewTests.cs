@@ -119,6 +119,53 @@ public sealed class PhysicalReviewTests
         form.ShowUsage(); Assert.DoesNotContain(Controls(form), c => c.Text.Contains("Diagnostics copied"));
     });
     [Fact]
+    public Task SettingsStatusAccessibilityTracksCheckingMalformedStaleAndDisabledStates() => Sta(() =>
+    {
+        using var form = new UsageForm(["Codex"], SystemIcons.Application);
+        form.Show(); form.ShowSettings();
+        var label = Controls(form).OfType<Label>().Single(control => control.AccessibleName == "Codex setup status");
+        var now = DateTimeOffset.UtcNow;
+        var state = new ProviderState("Codex", ProviderStatus.Error, Failure: FailureKind.Malformed);
+        form.Render([state], false, false);
+        Assert.Contains("Sign-in not verified", label.AccessibilityObject.Description);
+        Assert.Contains("Allowance format not supported", label.AccessibilityObject.Description);
+        state = new("Codex", ProviderStatus.Ready,
+            new([new("five_hour", "fixture", 25, now.AddHours(5))], now.AddMinutes(-5), "private-source@example.test", IsCached: true),
+            Failure: FailureKind.Network, Authentication: AuthenticationStatus.Verified, Detail: "private-notice@example.test");
+        form.Render([state], false, false);
+        var description = label.AccessibilityObject.Description!;
+        Assert.Contains("Signed in", description); Assert.Contains("stale", description);
+        Assert.Contains("cached reading", description); Assert.Contains("last retrieval failed", description);
+        Assert.DoesNotContain("private-", description);
+        form.Render([state with { Status = ProviderStatus.Loading }], true, false);
+        Assert.Contains("Signed in", label.AccessibilityObject.Description);
+        Assert.Contains("Checking allowances", label.AccessibilityObject.Description);
+        form.SetPreferences(new(CodexEnabled: false));
+        Assert.Equal("Monitoring off", label.AccessibilityObject.Description);
+        Assert.DoesNotContain("Updated", label.AccessibilityObject.Description);
+    });
+
+    [Fact]
+    public Task SettingsRetryStillHonorsEveryProviderGuard() => Sta(() =>
+    {
+        using var form = new UsageForm(["Codex", "Claude Code"], SystemIcons.Application);
+        form.Show(); form.ShowSettings();
+        var retry = Controls(form).OfType<Button>().Single(control => control.AccessibleName == "Retry provider checks");
+        var now = DateTimeOffset.UtcNow;
+        ProviderState[] states = [new("Codex", ProviderStatus.Loading),
+            new("Claude Code", ProviderStatus.Error, Failure: FailureKind.RateLimited, RetryAt: now.AddMinutes(5))];
+        form.Render(states, true, false);
+        Assert.False(retry.Enabled); Assert.Equal("Checking…", retry.Text);
+        states[1] = states[1] with { RetryAt = now.AddSeconds(-1) };
+        form.Render(states, true, false);
+        Assert.True(retry.Enabled); Assert.Equal("Retry", retry.Text);
+        form.SetPreferences(new(ClaudeEnabled: false));
+        Assert.False(retry.Enabled);
+        form.SetPreferences(new(CodexEnabled: false, ClaudeEnabled: false));
+        Assert.False(retry.Enabled); Assert.Equal("Retry", retry.Text);
+    });
+
+    [Fact]
     public Task UsageExpandsIntoRemovedFooterAndKeepsErrorNotice() => Sta(() =>
     {
         using var form = new UsageForm(["Codex"], SystemIcons.Application);

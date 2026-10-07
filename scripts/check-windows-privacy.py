@@ -17,6 +17,8 @@ if not re.search(r"CreateProviders\(Action<string> log\).*?new CodexProvider.*?n
     errors.append("Production provider factory is not the audited Codex/Claude adapters")
 if "new ClaudeDesktopSource" in program or "new ClaudeCodeSource" in program:
     errors.append("Production uses a legacy cache/helper source")
+if '"--probe"' in program or re.search(r"\bFile\.(?:WriteAllText|WriteAllBytes|AppendAllText|Create|OpenWrite)\b|\bJsonSerializer\.Serialize", program):
+    errors.append("Production entry point must not export or persist usage snapshots")
 usage = (root / "windows/src/AgentMeter.Core/Usage.cs").read_text(encoding="utf-8")
 for field in ["Binding", "VerifiedBinding"]:
     if not re.search(r"\[JsonIgnore\] public AccountBinding\? " + field, usage):

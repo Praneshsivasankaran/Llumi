@@ -8,18 +8,20 @@ namespace AgentMeter.Core;
 public sealed class CodexProvider : IUsageProvider
 {
     private readonly TimeSpan timeout;
-    private readonly Func<string?> executableLocator;
+    private readonly Func<IReadOnlyList<string>> executableCandidates;
     private readonly Func<string, IProviderRpcProcess> startProcess;
     private readonly string clientVersion;
     public string Name => "Codex";
 
     public CodexProvider(TimeSpan? timeout = null, Func<string?>? executableLocator = null,
-        Func<string, IProviderRpcProcess>? startProcess = null, string? clientVersion = null)
+        Func<string, IProviderRpcProcess>? startProcess = null, string? clientVersion = null,
+        Func<IReadOnlyList<string>>? executableCandidates = null)
     {
         this.timeout = timeout ?? TimeSpan.FromSeconds(20);
         if (this.timeout <= TimeSpan.Zero || this.timeout.TotalMilliseconds > uint.MaxValue - 1)
             throw new ArgumentOutOfRangeException(nameof(timeout));
-        this.executableLocator = executableLocator ?? CliLocator.FindCodex;
+        this.executableCandidates = executableCandidates ?? (executableLocator is null ? CliLocator.CodexCandidates :
+            () => executableLocator() is { } path ? [path] : []);
         this.clientVersion = clientVersion ?? "2.1.3";
         if (this.clientVersion.Length > 32 || this.clientVersion.Any(c => !char.IsAsciiDigit(c) && c != '.') ||
             !Version.TryParse(this.clientVersion, out var version) || version.Build < 0)
@@ -39,9 +41,7 @@ public sealed class CodexProvider : IUsageProvider
         ProviderResult result;
         try
         {
-            var executable = executableLocator();
-            if (executable is null) return Complete(ProviderResult.Fail(FailureKind.NotInstalled), null);
-            await using var process = startProcess(executable);
+            await using var process = StartCandidate(deadline.Token);
             var token = deadline.Token;
             await process.SendAsync(new { id = 1, method = "initialize", @params = new { clientInfo = new { name = "llumi", version = clientVersion } } }, token).ConfigureAwait(false);
             await process.ReadRpcResultAsync(1, token).ConfigureAwait(false);
@@ -83,6 +83,18 @@ public sealed class CodexProvider : IUsageProvider
         return Complete(result with { RetryAfter = result.RetryAfter is { } latest && rateEmbargo is { } earlier
                 ? (latest > earlier ? latest : earlier) : result.RetryAfter ?? rateEmbargo,
             RateLimitObserved = rateLimitObserved || result.Failure == FailureKind.RateLimited }, verifiedBinding);
+    }
+
+    private IProviderRpcProcess StartCandidate(CancellationToken token)
+    {
+        var candidates = executableCandidates().Distinct(StringComparer.OrdinalIgnoreCase).Take(CliLocator.MaximumCandidates).ToArray();
+        for (var index = 0; index < candidates.Length; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            try { return startProcess(candidates[index]); }
+            catch (Win32Exception error) when (index + 1 < candidates.Length && CliLocator.CanTryNextAfterLaunchFailure(error)) { }
+        }
+        throw new ProviderQueryException(FailureKind.NotInstalled);
     }
 
     private ProviderResult Complete(ProviderResult result, string? binding)

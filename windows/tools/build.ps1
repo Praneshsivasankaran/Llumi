@@ -1,6 +1,6 @@
 #requires -Version 7.0
 [CmdletBinding()]
-param()
+param([string]$PythonPath = 'python.exe')
 $ErrorActionPreference = 'Stop'
 $env:DOTNET_CLI_TELEMETRY_OPTOUT = '1'
 $env:DOTNET_NOLOGO = '1'
@@ -21,6 +21,8 @@ function Invoke-DotNet {
 }
 Push-Location -LiteralPath $projectRoot
 try {
+    & $PythonPath (Join-Path $projectRoot '../scripts/check-windows-privacy.py')
+    if ($LASTEXITCODE -ne 0) { throw 'Windows production privacy check failed.' }
     Invoke-DotNet @('restore', 'AgentMeter.sln', '--runtime', 'win-x64', '--verbosity', 'minimal')
     Invoke-DotNet @('build', 'AgentMeter.sln', '-c', 'Release', '--no-restore', '--verbosity', 'minimal')
     Invoke-DotNet @('test', 'tests/AgentMeter.Tests/AgentMeter.Tests.csproj', '-c', 'Release', '--no-build', '--no-restore', '--verbosity', 'minimal')
@@ -33,6 +35,7 @@ try {
     & "$PSScriptRoot/assert-release.ps1" -Directory $release
     & "$PSScriptRoot/test-package-notices.ps1"
     & "$PSScriptRoot/test-release-version.ps1"
+    & "$PSScriptRoot/test-release-source.ps1" -ReleaseDirectory $release
     & "$PSScriptRoot/test-v2-dependencies.ps1" -ReleaseDirectory $release
     & "$PSScriptRoot/write-inventory.ps1" -Directory $release
     & "$PSScriptRoot/test-inventory.ps1" -PackageDirectory $release

@@ -13,7 +13,7 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
     public static readonly string[] Arguments = ["--print", "--input-format", "stream-json", "--output-format", "stream-json",
         "--verbose", "--no-session-persistence", "--safe-mode", "--setting-sources=", "--strict-mcp-config",
         "--mcp-config", "{\"mcpServers\":{}}"];
-    private readonly Func<string?> locate;
+    private readonly Func<IReadOnlyList<string>> locateCandidates;
     private readonly Func<string, CancellationToken, Task<(JsonElement Output, int ExitCode)>> auth;
     private readonly Func<string, Identity, CancellationToken, Task<JsonElement>> usage;
     private readonly TimeSpan timeout;
@@ -24,9 +24,11 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
 
     public ClaudeControlTransport(Func<string?>? locate = null,
         Func<string, CancellationToken, Task<(JsonElement Output, int ExitCode)>>? auth = null,
-        Func<string, Identity, CancellationToken, Task<JsonElement>>? usage = null, TimeSpan? timeout = null)
+        Func<string, Identity, CancellationToken, Task<JsonElement>>? usage = null, TimeSpan? timeout = null,
+        Func<IReadOnlyList<string>>? locateCandidates = null)
     {
-        this.locate = locate ?? ClaudeCliLocator.Find;
+        this.locateCandidates = locateCandidates ?? (locate is null ? ClaudeCliLocator.StandaloneCandidates :
+            () => locate() is { } path ? [path] : []);
         this.auth = auth ?? ReadAuth;
         this.usage = usage ?? ReadUsage;
         this.timeout = timeout ?? TimeSpan.FromSeconds(12);
@@ -46,9 +48,7 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
                 ? (latest > earlier ? latest : earlier) : retryAfter ?? rateEmbargo, rateLimitObserved);
         try
         {
-            var executable = locate();
-            if (executable is null) return Failed(FailureKind.NotInstalled);
-            var beforeResult = await auth(executable, token).ConfigureAwait(false);
+            var (executable, beforeResult) = await ReadInitialAuth(token).ConfigureAwait(false);
             var before = ParseIdentity(beforeResult.Output, beforeResult.ExitCode);
             JsonElement response = default;
             ProviderQueryException? queryFailure = null;
@@ -83,6 +83,18 @@ public sealed class ClaudeControlTransport : IClaudeUsageSource
         catch (UnauthorizedAccessException) { return Failed(FailureKind.AccessDenied); }
         catch (System.ComponentModel.Win32Exception e) { return Failed(e.NativeErrorCode is 2 or 3 ? FailureKind.NotInstalled : FailureKind.AccessDenied); }
         catch (IOException) { return Failed(FailureKind.ProcessExited); }
+    }
+
+    private async Task<(string Executable, (JsonElement Output, int ExitCode) Result)> ReadInitialAuth(CancellationToken token)
+    {
+        var candidates = locateCandidates().Distinct(StringComparer.OrdinalIgnoreCase).Take(CliLocator.MaximumCandidates).ToArray();
+        for (var index = 0; index < candidates.Length; index++)
+        {
+            token.ThrowIfCancellationRequested();
+            try { return (candidates[index], await auth(candidates[index], token).ConfigureAwait(false)); }
+            catch (System.ComponentModel.Win32Exception error) when (index + 1 < candidates.Length && CliLocator.CanTryNextAfterLaunchFailure(error)) { }
+        }
+        throw new ProviderQueryException(FailureKind.NotInstalled);
     }
 
     public sealed record Identity(string Email, string Organization, string OrganizationName, string Plan)

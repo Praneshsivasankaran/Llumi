@@ -42,6 +42,9 @@ OpenAI blossom follows the surface appearance and the mascot retains its origina
 color. Exact sources and hashes are recorded in the [Windows artwork provenance](docs/windows/PROVIDER-ARTWORK.md).
 These marks remain vendor property under their respective artwork and trademark
 terms, including [OpenAI's brand guidance](https://openai.com/brand/).
+The older Claude sunburst from [Claude's favicon](https://claude.ai/favicon.svg)
+also remains embedded for compatibility, although the current renderer selects
+the Claude Code mascot. It retains the same vendor artwork and trademark terms.
 The Llumi Raspberry gauge is original Llumi artwork. No external font files are bundled.
 
 The local build produces a per-file dependency inventory. That inventory and

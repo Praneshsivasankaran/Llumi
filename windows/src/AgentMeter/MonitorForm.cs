@@ -141,6 +141,10 @@ internal sealed class MonitorForm : Form
     {
         var next = names.Distinct().ToArray(); requestedProviderNames = next; if (providerNames.SequenceEqual(next)) return;
         providerNames = next; providersChanged = true;
+        // Removing providers must invalidate cached accessibility children even
+        // when the hidden monitor will not receive another scheduled render.
+        rows = next.Select(name => rows.FirstOrDefault(row => row.Name == name)).OfType<MonitorRow>().ToArray();
+        AccessibilityNotifyClients(AccessibleEvents.Reorder, -1);
         if (Visible) { if (pointerGesture is null) BeginTransition(CurrentSize(hovered), 1, hovered ? 1 : 0, true); }
         else { ClientSize = CurrentSize(hovered); KeepOnScreen(); }
     }
@@ -469,25 +473,34 @@ internal sealed class MonitorForm : Form
     protected override AccessibleObject CreateAccessibilityInstance() => new MonitorAccessibleObject(this);
     private sealed class MonitorAccessibleObject(MonitorForm owner) : ControlAccessibleObject(owner)
     {
-        public override int GetChildCount() => owner.rows.Length;
-        public override AccessibleObject? GetChild(int index) => index >= 0 && index < owner.rows.Length ? new RowAccessibleObject(owner, this, index) : null;
+        public override int GetChildCount() => owner.IsDisposed ? 0 : owner.rows.Length;
+        public override AccessibleObject? GetChild(int index) => index >= 0 && index < GetChildCount() ? new RowAccessibleObject(owner, this, owner.rows[index].Name) : null;
     }
-    private sealed class RowAccessibleObject(MonitorForm owner, AccessibleObject parent, int index) : AccessibleObject
+    private sealed class RowAccessibleObject(MonitorForm owner, AccessibleObject parent, string providerName) : AccessibleObject
     {
+        // Assistive clients can retain children after the provider rows change.
+        // Resolve by identity so an old child cannot read another provider or an
+        // out-of-range slot, and never retain a removed provider's old reading.
+        private MonitorRow? Current => owner.IsDisposed ? null : owner.rows.FirstOrDefault(row =>
+            string.Equals(row.Name, providerName, StringComparison.OrdinalIgnoreCase) ||
+            UsagePresentation.IsClaude(row.Name) && UsagePresentation.IsClaude(providerName));
         public override string? Name
         {
             get
             {
-                var hint = owner.rows[index].Hint;
+                var row = Current;
+                if (row is null) return UsagePresentation.IsClaude(providerName) ? "Claude Code" : providerName;
+                var hint = row.Hint;
                 if (!owner.hovered || !owner.ExpandedLayout.Overflow) return hint;
-                var omitted = Math.Max(0, owner.rows[index].Windows.Length - owner.ExpandedLayout.VisibleRows);
+                var omitted = Math.Max(0, row.Windows.Length - owner.ExpandedLayout.VisibleRows);
                 return hint + $"\nOpen Usage for all limits ({omitted} more). Click, Enter or Control+1 opens Usage.";
             }
             set { }
         }
-        public override string? Value => owner.rows[index].Value;
+        public override string? Value => Current?.Value;
         public override AccessibleRole Role => AccessibleRole.StaticText;
-        public override AccessibleStates State => AccessibleStates.ReadOnly;
+        public override AccessibleStates State => AccessibleStates.ReadOnly |
+            (Current is null ? AccessibleStates.Unavailable | AccessibleStates.Offscreen : AccessibleStates.None);
         public override AccessibleObject? Parent => parent;
     }
     private sealed record MonitorDetail(string Label, string Value, string Reset);

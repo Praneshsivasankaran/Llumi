@@ -72,6 +72,136 @@ public sealed class TrayContextTests
     }
 
     [Fact]
+    public async Task SettingsRetryChecksAnEligibleProviderWhileTheOtherQueryRemainsInFlight()
+    {
+        var slowStarted = NewSignal(); var fastReady = NewSignal(); var fastRetried = NewSignal();
+        var slow = new FakeProvider("Claude Code", async token =>
+        {
+            slowStarted.TrySetResult();
+            await Task.Delay(Timeout.Infinite, token);
+            return GoodResult();
+        });
+        var fast = new FakeProvider("Codex", _ => Task.FromResult(GoodResult()));
+        var coordinator = new RefreshCoordinator([fast, slow], minimumInterval: TimeSpan.Zero);
+        coordinator.Changed += () =>
+        {
+            if (coordinator.States[0].Status != ProviderStatus.Ready) return;
+            fastReady.TrySetResult();
+            if (fast.Calls >= 2) fastRetried.TrySetResult();
+        };
+        await RunMessageLoop(coordinator, async (context, popup) =>
+        {
+            await slowStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            await fastReady.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            context.OpenPanel(); popup.ShowSettings();
+            var retry = Descendants(popup).OfType<Button>().Single(button => button.AccessibleName == "Retry provider checks");
+            Assert.True(coordinator.IsRefreshing); Assert.True(retry.Enabled); Assert.Equal("Retry", retry.Text);
+            retry.PerformClick();
+            await fastRetried.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.Equal(2, fast.Calls); Assert.Equal(1, slow.Calls);
+            Assert.Equal(ProviderStatus.Loading, coordinator.States[1].Status);
+        });
+    }
+
+    [Fact]
+    public async Task HiddenMonitorClearsCachedAccessibilityReadingsWhenProvidersAreDisabled()
+    {
+        var coordinator = new RefreshCoordinator([
+            new FakeProvider("Codex", _ => Task.FromResult(GoodResult())),
+            new FakeProvider("Claude Code", _ => Task.FromResult(GoodResult()))
+        ]);
+        await RunMessageLoop(coordinator, async (context, popup) =>
+        {
+            await Field<Task>(context, "activeRefresh");
+            var monitor = Field<MonitorForm>(context, "monitor");
+            Assert.False(monitor.Visible);
+            monitor.Render(coordinator.States);
+            var codex = monitor.AccessibilityObject.GetChild(0)!;
+            var claude = monitor.AccessibilityObject.GetChild(1)!;
+            Assert.Equal("53%", codex.Value); Assert.Equal("53%", claude.Value);
+
+            Change(context, new Preferences(CodexEnabled: false));
+            Assert.False(monitor.Visible);
+            Assert.Null(codex.Value); Assert.True(codex.State.HasFlag(AccessibleStates.Unavailable));
+            Assert.Equal("53%", claude.Value);
+            Assert.Equal(1, monitor.AccessibilityObject.GetChildCount());
+
+            Change(context, new Preferences(CodexEnabled: false, ClaudeEnabled: false));
+            Assert.False(monitor.Visible);
+            Assert.Null(codex.Value); Assert.Null(claude.Value);
+            Assert.True(claude.State.HasFlag(AccessibleStates.Unavailable));
+            Assert.Equal(0, monitor.AccessibilityObject.GetChildCount());
+        });
+    }
+
+    [Fact]
+    public async Task SettingsStartupFailuresShowFeedbackRestoreTheSwitchAndRecover()
+    {
+        var coordinator = new RefreshCoordinator([new FakeProvider("Codex", _ => Task.FromResult(GoodResult()))]);
+        await RunMessageLoop(coordinator, (context, popup) =>
+        {
+            var registration = (MemoryStartup)Field<IStartupRegistration>(context, "startup");
+            context.OpenPanel(); popup.ShowSettings();
+            var launch = Descendants(popup).OfType<ToggleSwitch>().Single(control => control.Text == "Launch at Startup");
+            registration.RejectWrites = true;
+            launch.Checked = true;
+            Assert.Equal(1, registration.Writes); Assert.False(launch.Checked); Assert.True(launch.Enabled);
+            var feedback = Descendants(popup).OfType<Label>().Single(label => label.Visible && label.Text == "Startup setting could not be saved. Please try again.");
+            var panel = (Panel)feedback.Parent!;
+            Assert.True(panel.ClientRectangle.Contains(feedback.Bounds), "Rejected startup feedback must be brought into the visible viewport.");
+            Change(context, new Preferences(CompactMonitor: false));
+            context.ResetMonitorPosition();
+            Assert.True(feedback.Visible); Assert.Contains("Startup setting could not be saved", feedback.Text);
+            registration.RejectWrites = false;
+            launch.Checked = true;
+            Assert.Equal(2, registration.Writes); Assert.True(launch.Checked); Assert.True(registration.Enabled);
+            Assert.False(feedback.Visible); Assert.Equal("", feedback.Text);
+            registration.BecomeUnavailableAfterWrite = true;
+            launch.Checked = false;
+            Assert.Equal(3, registration.Writes); Assert.False(launch.Checked); Assert.False(launch.Enabled);
+            Assert.True(feedback.Visible); Assert.Equal("Startup setting is unavailable. Please try again.", feedback.Text);
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
+    public async Task SettingsPreferenceAndPositionErrorsClearOnlyAfterTheirOwnSuccessfulRetry()
+    {
+        var directory = "";
+        var coordinator = new RefreshCoordinator([new FakeProvider("Codex", _ => Task.FromResult(GoodResult()))]);
+        await RunMessageLoop(coordinator, (context, popup) =>
+        {
+            context.OpenPanel(); popup.ShowSettings();
+            var compact = Descendants(popup).OfType<ToggleSwitch>().Single(control => control.Text == "Show monitor");
+            var temporaryPreference = Path.Combine(directory, "preferences.json.tmp");
+            Directory.CreateDirectory(temporaryPreference);
+            compact.Checked = false;
+            Assert.True(compact.Checked);
+            var feedback = Descendants(popup).OfType<Label>().Single(label => label.Visible && label.Text.Contains("previous preferences remain active"));
+            context.ResetMonitorPosition();
+            Assert.True(feedback.Visible); Assert.Contains("previous preferences remain active", feedback.Text);
+            Directory.Delete(temporaryPreference);
+            compact.Checked = false;
+            Assert.False(compact.Checked); Assert.False(feedback.Visible); Assert.Equal("", feedback.Text);
+
+            var positionPath = Path.Combine(directory, "position.json");
+            File.Delete(positionPath); Directory.CreateDirectory(positionPath);
+            context.ResetMonitorPosition();
+            Assert.True(feedback.Visible); Assert.Equal("Monitor position could not be saved. Try again.", feedback.Text);
+            compact.Checked = true;
+            var launch = Descendants(popup).OfType<ToggleSwitch>().Single(control => control.Text == "Launch at Startup");
+            launch.Checked = true;
+            Assert.True(launch.Checked); Assert.True(compact.Checked);
+            Assert.True(feedback.Visible); Assert.Equal("Monitor position could not be saved. Try again.", feedback.Text);
+            Directory.Delete(positionPath);
+            context.ResetMonitorPosition();
+            Assert.False(feedback.Visible); Assert.Equal("", feedback.Text);
+            Assert.NotNull(Field<MonitorPositionStore>(context, "positions").Load());
+            return Task.CompletedTask;
+        }, storageReady: path => directory = path);
+    }
+
+    [Fact]
     public async Task RecoveryBurstsDebounceToOneRefreshAndKeepBothWindowsHidden()
     {
         var recovered = NewSignal();
@@ -329,7 +459,7 @@ public sealed class TrayContextTests
     private static async Task RunMessageLoop(RefreshCoordinator coordinator,
         Func<TrayContext, UsageForm, Task> scenario, Preferences? initialPreferences = null,
         Func<ActivitySnapshot>? captureActivity = null, bool waitInitialActivity = true, bool rejectPreferenceWrites = false,
-        bool setupComplete = true, string? reviewTitle = null)
+        bool setupComplete = true, string? reviewTitle = null, Action<string>? storageReady = null)
     {
         var completed = NewSignal();
         var logDirectory = Path.Combine(Path.GetTempPath(), "AgentMeter.TrayTests." + Guid.NewGuid().ToString("N"));
@@ -345,6 +475,7 @@ public sealed class TrayContextTests
                 var preferenceStore = new PreferenceStore(rejectPreferenceWrites ? logDirectory : Path.Combine(logDirectory, "preferences.json"));
                 if (initialPreferences is not null) Assert.True(preferenceStore.Save(initialPreferences));
                 context = new TrayContext(coordinator, new DiagnosticLog(logDirectory), showEvent, new MonitorPositionStore(Path.Combine(logDirectory, "position.json")), new MemoryStartup(), captureActivity: captureActivity ?? (() => ActivitySnapshot.Empty), preferenceStore: preferenceStore, setupStore: setupStore, reviewTitle: reviewTitle);
+                storageReady?.Invoke(logDirectory);
                 var popup = Field<UsageForm>(context, "popup");
                 var tray = Field<NotifyIcon>(context, "tray");
                 using var watchdog = new System.Threading.Timer(_ =>
@@ -701,8 +832,15 @@ public sealed class TrayContextTests
     private sealed class MemoryStartup : IStartupRegistration
     {
         internal bool Enabled, RejectWrites;
+        internal bool Available = true, BecomeUnavailableAfterWrite;
         internal int Writes;
-        public bool TryRead(out bool enabled) { enabled = Enabled; return true; }
-        public bool TrySet(bool enabled) { Writes++; if (RejectWrites) return false; Enabled = enabled; return true; }
+        public bool TryRead(out bool enabled) { enabled = Enabled; return Available; }
+        public bool TrySet(bool enabled)
+        {
+            Writes++; if (RejectWrites) return false;
+            Enabled = enabled;
+            if (BecomeUnavailableAfterWrite) Available = false;
+            return true;
+        }
     }
 }

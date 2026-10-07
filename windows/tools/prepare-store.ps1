@@ -8,6 +8,9 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $version = [string]([xml](Get-Content "$root/src/AgentMeter/AgentMeter.csproj" -Raw)).Project.PropertyGroup.FileVersion
 Assert-NextWindowsPackageVersion -PackageVersion $version
+. "$PSScriptRoot/release-source.ps1"
+$repository = Split-Path -Parent $root
+$provenance = Assert-StorePayloadSource -RepositoryDirectory $repository -PayloadDirectory $PayloadDirectory
 $expected = '5cd7219626334f2312fbbebe7b5540dbd57b4df9a5ba8a586589a9d131486bcd'
 if ((Get-FileHash -LiteralPath $HistoricalPackage).Hash -ne $expected) { throw 'Historical package hash mismatch.' }
 foreach ($name in @('makeappx.exe','makepri.exe')) {
@@ -19,6 +22,11 @@ $out = Join-Path $root ('artifacts/store/' + $version + '-' + (Get-Date -Format 
 $stage = Join-Path $out 'stage'
 $null = New-Item -ItemType Directory -Path $stage
 Copy-Item "$PayloadDirectory/*" $stage -Recurse
+$stagedProvenance = Assert-StorePayloadSource -RepositoryDirectory $repository -PayloadDirectory $stage
+if ($provenance.sourceCommit -cne $stagedProvenance.sourceCommit -or
+    ($provenance.assemblies | ConvertTo-Json -Compress) -cne ($stagedProvenance.assemblies | ConvertTo-Json -Compress)) {
+    throw 'Payload or source changed while staging the Store package.'
+}
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 $zip = [IO.Compression.ZipFile]::OpenRead((Resolve-Path $HistoricalPackage))
 try {
@@ -64,5 +72,6 @@ $package = Join-Path $out "Llumi-$version-x64.msix"
 & "$SdkBinDirectory/makeappx.exe" pack /d $stage /p $package /h SHA256 | Out-File "$out/makeappx.txt"
 if ($LASTEXITCODE) { throw 'MSIX packing failed.' }
 if ((Get-FileHash -LiteralPath $HistoricalPackage).Hash -ne $expected) { throw 'Historical artifact changed.' }
-[ordered]@{version=$version;identity=$manifest.Package.Identity.Name;storeId='9NV153Q5K5MQ';historicalSha256=$expected;sha256=(Get-FileHash $package).Hash.ToLowerInvariant();sourceCommit=(& git -C $root rev-parse HEAD).Trim();signed=$false;submitted=$false;published=$false} | ConvertTo-Json | Set-Content "$out/receipt.json"
+if ((Get-CleanReleaseSourceCommit -RepositoryDirectory $repository) -cne $provenance.sourceCommit) { throw 'Source changed during Store packaging.' }
+[ordered]@{version=$version;identity=$manifest.Package.Identity.Name;storeId='9NV153Q5K5MQ';historicalSha256=$expected;sha256=(Get-FileHash $package).Hash.ToLowerInvariant();sourceCommit=$provenance.sourceCommit;sourceWorkingTreeDirty=$false;payloadAssemblies=$provenance.assemblies;signed=$false;submitted=$false;published=$false} | ConvertTo-Json -Depth 6 | Set-Content "$out/receipt.json"
 Write-Output "STORE_CANDIDATE=$package"

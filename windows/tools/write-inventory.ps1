@@ -10,8 +10,11 @@ function Component($name, $version, $origin, $bundled, $license, $notices) {
     [ordered]@{component=$name;version=$version;origin=$origin;bundled=$bundled;license=$license;requiredNotice=@($notices);noticePresent=(@($notices | Where-Object { -not (Test-Path -LiteralPath (Join-Path $root $_) -PathType Leaf) }).Count -eq 0)}
 }
 $components += Component 'Llumi application and original artwork' $version 'Committed local AgentMeter source' $true 'MIT' @('LICENSE.txt')
-$components += Component 'OpenAI Codex identification artwork' 'Mac reference 7b41fc7f8e61cdc3b5ff97130c9858b3f7409b01' 'https://cdn.openai.com/brand/OpenAI-Logos-2025.zip' $true 'Vendor artwork/trademark terms; not MIT' @('THIRD-PARTY-NOTICES.txt')
-$components += Component 'Claude identification artwork' 'Mac reference 7b41fc7f8e61cdc3b5ff97130c9858b3f7409b01' 'https://claude.ai/favicon.svg' $true 'Vendor artwork/trademark terms; not MIT' @('THIRD-PARTY-NOTICES.txt')
+$components += Component 'OpenAI Codex identification artwork' 'OpenAI-Logos-2025; OpenAI-white-monoblossom.svg' 'https://cdn.openai.com/brand/OpenAI-Logos-2025.zip' $true 'Vendor artwork/trademark terms; not MIT' @('THIRD-PARTY-NOTICES.txt')
+$components += Component 'Claude Code identification artwork' 'Claude Code VS Code extension 2.1.289; extension/resources/clawd.svg' 'https://anthropic.gallerycdn.vsassets.io/extensions/anthropic/claude-code/2.1.289/1791068913543/Microsoft.VisualStudio.Services.VSIXPackage' $true 'Vendor artwork/trademark terms; not MIT' @('THIRD-PARTY-NOTICES.txt')
+# The old sunburst remains embedded through Assets/*.svg, although the renderer
+# selects the Code mascot. Inventory all bundled artwork, including that asset.
+$components += Component 'Legacy Claude sunburst artwork (unused)' 'Claude favicon; ClaudeLogo.svg' 'https://claude.ai/favicon.svg' $true 'Vendor artwork/trademark terms; not MIT' @('THIRD-PARTY-NOTICES.txt')
 foreach ($framework in @($config.runtimeOptions.includedFrameworks)) {
     if ($null -eq $framework) { continue }
     $notices = @("licenses/$($framework.name)-LICENSE.txt")

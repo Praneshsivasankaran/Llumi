@@ -335,6 +335,37 @@ public sealed class MonitorFormTests
     });
 
     private static MonitorForm NewForm() => new(["Codex", "Claude"], SystemIcons.Application);
+    [Fact]
+    public Task CachedAccessibilityChildrenKeepProviderIdentityWhenRowsChange() => RunSta(() =>
+    {
+        using var form = NewForm(); var states = States(); form.Render(states, Now);
+        var codex = form.AccessibilityObject.GetChild(0)!;
+        var claude = form.AccessibilityObject.GetChild(1)!;
+        form.SetProviders(["Claude"]);
+        Assert.Equal("100%", claude.Value);
+        Assert.Contains("Claude", claude.Name);
+        Assert.Null(codex.Value);
+        Assert.DoesNotContain("Claude", codex.Name);
+        Assert.True(codex.State.HasFlag(AccessibleStates.Unavailable));
+        Assert.True(codex.State.HasFlag(AccessibleStates.Offscreen));
+        Assert.Equal(1, form.AccessibilityObject.GetChildCount());
+        form.Render([states[1]], Now);
+        form.SetProviders([]);
+        Assert.Null(claude.Value);
+        Assert.True(claude.State.HasFlag(AccessibleStates.Unavailable));
+        Assert.Equal(0, form.AccessibilityObject.GetChildCount());
+        form.Render([], Now);
+        form.SetProviders(["Codex", "Claude"]);
+        Assert.Null(codex.Value); Assert.Null(claude.Value);
+        form.Render(states, Now);
+        Assert.Equal("29%", codex.Value);
+        Assert.Equal("100%", claude.Value);
+        form.Dispose();
+        Assert.Null(claude.Value);
+        Assert.True(claude.State.HasFlag(AccessibleStates.Unavailable));
+        Assert.Equal(0, form.AccessibilityObject.GetChildCount());
+    });
+
     private static ProviderState[] States() =>
     [
         new("Codex", ProviderStatus.Ready, new UsageSnapshot([

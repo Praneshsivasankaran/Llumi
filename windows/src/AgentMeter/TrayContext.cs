@@ -162,8 +162,12 @@ internal sealed class TrayContext : ApplicationContext
             coordinator.SetEnabled("Codex", value.CodexEnabled);
             coordinator.SetEnabled("Claude Code", value.ClaudeEnabled);
             activitySource?.SetEnabled(value.CodexEnabled, value.ClaudeEnabled);
+            // Disablement also invalidates readings held by cached accessibility
+            // children while the monitor is hidden and ordinary renders are paused.
+            monitor.Render(coordinator.States);
         }
         Palette.Apply(value.Appearance); popup.SetPreferences(value);
+        popup.PreferenceSaveSucceeded();
         if (setupWindow is { IsDisposed: false }) setupWindow.ApplyTheme();
         monitor.UpdateSurface(); ApplyActivity(activity);
         Render();
@@ -239,8 +243,10 @@ internal sealed class TrayContext : ApplicationContext
 
     private void ToggleStartup()
     {
-        if (startup.TryRead(out var enabled)) startup.TrySet(!enabled);
+        var available = startup.TryRead(out var enabled);
+        var saved = available && startup.TrySet(!enabled);
         UpdateStartupState();
+        popup.StartupChangeResult(saved && startupMenu.Checked != enabled, startupMenu.Enabled);
     }
 
     private void ShowPopup()
@@ -263,6 +269,7 @@ internal sealed class TrayContext : ApplicationContext
         var position = new MonitorPosition(1, screen.DeviceName, 20, 20);
         // Save first: failed persistence must leave the current position active.
         if (!positions.Save(position)) { popup.PositionResetFailed(); return; }
+        popup.PositionResetSucceeded();
         if (!monitor.Visible) return;
         try
         {

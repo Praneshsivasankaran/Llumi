@@ -45,6 +45,8 @@ internal sealed class UsageForm : Form
     private Icon headerIdentity = AppIcon.Load();
     private IReadOnlyList<ProviderState> lastStates = [];
     private bool loading, logFailed, rendering, syncing, settingsShown, aboutShown;
+    private enum SettingsError { Preferences, Position, Startup }
+    private SettingsError? settingsError;
     private Preferences preferences = new();
     [DesignerSerializationVisibility(DesignerSerializationVisibility.Hidden)] internal bool AllowExit { get; set; }
     internal event Action? RefreshRequested;
@@ -135,12 +137,30 @@ internal sealed class UsageForm : Form
         codex.Checked = value.CodexEnabled; claude.Checked = value.ClaudeEnabled;
         syncing = false; ApplyTheme();
     }
-    internal void PreferenceSaveFailed() => ShowSettingsMessage("Settings could not be saved. The previous preferences remain active.");
-    internal void PositionResetFailed() => ShowSettingsMessage("Monitor position could not be saved. Try again.");
-    private void ShowSettingsMessage(string message)
+    internal void PreferenceSaveFailed() => ShowSettingsMessage(SettingsError.Preferences, "Settings could not be saved. The previous preferences remain active.");
+    internal void PositionResetFailed() => ShowSettingsMessage(SettingsError.Position, "Monitor position could not be saved. Try again.");
+    internal void PreferenceSaveSucceeded() => ClearSettingsMessage(SettingsError.Preferences);
+    internal void PositionResetSucceeded() => ClearSettingsMessage(SettingsError.Position);
+    internal void StartupChangeResult(bool saved, bool available)
     {
+        if (saved && available) ClearSettingsMessage(SettingsError.Startup);
+        else ShowSettingsMessage(SettingsError.Startup, !available
+            ? "Startup setting is unavailable. Please try again."
+            : "Startup setting could not be saved. Please try again.");
+    }
+    private void ClearSettingsMessage(SettingsError recovered)
+    {
+        if (settingsError != recovered) return;
+        settingsError = null;
+        settingsMessage.Text = "";
+        Render(lastStates, loading, logFailed);
+    }
+    private void ShowSettingsMessage(SettingsError error, string message)
+    {
+        settingsError = error;
         settingsMessage.Text = message;
         Render(lastStates, loading, logFailed);
+        if (settingsShown && settingsMessage.Visible) settings.ScrollControlIntoView(settingsMessage);
     }
     internal void ApplyTheme()
     {
@@ -200,15 +220,18 @@ internal sealed class UsageForm : Form
             providerHeading.Location = new(S(20), S(12));
             var twoColumns = settingsWidth >= S(548);
             var setupWidth = twoColumns ? (settingsWidth - S(12)) / 2 : settingsWidth;
-            string SetupText(string name)
+            void SetSetupStatus(Label label, string name)
             {
                 var state = states.FirstOrDefault(s => s.Name == name || (name == "Claude" && s.Name == "Claude Code"))
                     ?? new ProviderState(name, ProviderStatus.Loading);
                 var enabled = name == "Codex" ? preferences.CodexEnabled : preferences.ClaudeEnabled;
-                var value = SetupDiagnostic.From(state with { Enabled = enabled });
-                return $"{value.Status}\n{value.Monitoring}";
+                state = state with { Enabled = enabled };
+                var value = SetupDiagnostic.From(state);
+                label.Text = $"{value.Status}\n{value.Monitoring}";
+                label.AccessibleDescription = value.Description + (state.Enabled && state.Snapshot is not null
+                    ? "\n" + UsageAccessibility.Observation(state, DateTimeOffset.UtcNow) : "");
             }
-            codexSetup.Text = SetupText("Codex"); claudeSetup.Text = SetupText("Claude");
+            SetSetupStatus(codexSetup, "Codex"); SetSetupStatus(claudeSetup, "Claude");
             var narrowProvider = setupWidth < S(268);
             var statusY = narrowProvider ? 88 : 58;
             var statusWidth = setupWidth - S(28);
@@ -289,8 +312,8 @@ internal sealed class UsageForm : Form
     {
         var now = DateTimeOffset.UtcNow;
         var active = lastStates.Where(s => s.Enabled && (s.Name == "Codex" ? preferences.CodexEnabled : preferences.ClaudeEnabled)).ToArray();
-        checkAgain.Enabled = !loading && active.Any(s => SetupRetryPresentation.CanRetry(s, now));
-        checkAgain.Text = loading ? "Checking…" : "Retry";
+        checkAgain.Enabled = active.Any(s => SetupRetryPresentation.CanRetry(s, now));
+        checkAgain.Text = !checkAgain.Enabled && active.Any(s => s.Status == ProviderStatus.Loading) ? "Checking…" : "Retry";
         retryMessage.Text = string.Join("\n", active.Where(s => s.Status == ProviderStatus.Loading || s.RetryAt > now)
             .Select(s => $"{(UsagePresentation.IsClaude(s.Name) ? "Claude Code" : s.Name)}: {PopupText.Retry(s, now)}"));
     }

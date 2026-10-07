@@ -1,6 +1,6 @@
 # Provider semantics
 
-Windows 2.1.3 locally adopts the macOS 1.1.3 product contract in [Windows catch-up requirements](windows-213.md), which supersedes conflicting earlier Windows allowance, setup and provider-selection rules below. Intentional native differences remain.
+Windows 2.1.3 locally adopts the macOS 1.1.3 allowance contract. [Windows catch-up requirements](windows-213.md) records the current Windows presentation, setup and intentional native differences.
 
 A normalized reading carries provider, window identity, duration where known, remaining percentage, reset instant, observed instant, freshness and provider status. Identity continuity is verified in memory; account or plan changes invalidate incompatible observations. No account identifiers belong in presentation or logs.
 
@@ -10,4 +10,8 @@ Claude Code is the allowance source. The user installs and signs in through it. 
 
 Unknown fields remain unknown. Malformed envelopes, duplicate identity fields and ambiguous account scopes fail closed. Retaining stale usage requires reverified compatible identity. No automatic provider installation, API-key field, credential extraction or provider authentication inside Llumi.
 
-Claude compact presentation uses only the verified `five_hour` window, never weekly or a model-specific fallback. Expanded details show five-hour and weekly (`seven_day`) independently with their verified resets. Missing/invalid five-hour remains unknown even when weekly is available. Codex selection is unchanged.
+Windows discovery preserves its existing installation order and tries at most eight distinct native executable candidates within the existing query deadline. A missing file/path or invalid executable image reported by Windows before the first authentication/protocol response permits trying the next candidate. An explicit executable override remains authoritative, including when invalid. Once an installation responds, it remains authoritative for that query: sign-out, billing restrictions, rate limits, unsupported or malformed responses, failed continuity verification and successful empty allowance results never trigger another installation. Claude candidates remain standalone installations; Desktop and extension copies stay excluded. Cancellation is checked before discovery and between candidate attempts; synchronous filesystem metadata calls are not individually interruptible. macOS keeps the tagged native executable/version validation behavior; this Windows launch-recovery change does not modify macOS.
+
+Windows interactive CLI activity may match any executable in that same bounded discovery list, so an earlier unlaunchable installation cannot hide a running supported candidate. Activity discovery does not launch or probe candidates. Existing process-name, console/mode, owned-helper and per-provider enablement gates remain required before publishing activity.
+
+Both providers select a usable general five-hour allowance first, then weekly, then the deterministic shortest supported general duration. Selection requires a known duration and valid percentage; model-specific and additional allowances never substitute for a missing general allowance. Full Usage retains every supported general, model and additional time window with its verified scope, duration and optional reset. Expanded monitor details follow that same supported-window policy, with the native overflow behavior defined in [Compact monitor](compact-monitor.md).
