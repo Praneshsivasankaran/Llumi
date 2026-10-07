@@ -75,8 +75,6 @@ internal sealed class SetupForm : Form
         countdown.Tick += (_, _) => RefreshStatuses();
         VisibleChanged += (_, _) => { if (Visible) countdown.Start(); else countdown.Stop(); };
         body.SizeChanged += (_, _) => FitBodyContent();
-        body.Scroll += (_, _) => RefreshSetupDemos();
-        page.LocationChanged += (_, _) => RefreshSetupDemos();
         content.SizeChanged += (_, _) => FitBodyContent();
         AcceptButton = next; RenderStep(); ResumeLayout(true); initialized = true; FitBodyContent(); LayoutWelcome();
         Load += (_, _) => FitInitialWindow();
@@ -103,8 +101,8 @@ internal sealed class SetupForm : Form
     }
     private void Command(string title, string command)
     {
-        var card = Card(); card.Padding = new Padding(S(10)); card.Margin = new Padding(0, 0, 0, S(10));
-        TextLine(title, spacing: 6, parent: card);
+        var card = Card(96);
+        TextLine(title, spacing: 12, parent: card);
         var row = new FlowLayoutPanel { AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = false, Margin = Padding.Empty };
         var box = new TextBox { Text = command, ReadOnly = true, Width = S(370), AccessibleName = title, ShortcutsEnabled = true, Margin = new Padding(0, S(4), S(12), 0) };
         var copy = Palette.Button("Copy", "Copy " + title + " command"); copy.AutoSize = true; copy.MinimumSize = new Size(S(72), S(32)); copy.Margin = Padding.Empty;
@@ -257,18 +255,15 @@ internal sealed class SetupForm : Form
                 TextLine("Choose your providers", true); TextLine("Choose either, both, or set them up later."); ProviderChoices(); break;
             case SetupStep.Codex: case SetupStep.Claude:
                 var isCodex = flow.Step == SetupStep.Codex;
-                var provider = isCodex ? "Codex" : "Claude";
                 TextLine(isCodex ? "Set up Codex" : "Set up Claude Code", true);
-                var cue = new FlowLayoutPanel { Name = "setupGuideCue", AutoSize = true, AutoSizeMode = AutoSizeMode.GrowAndShrink, WrapContents = true, Margin = new Padding(0, 0, 0, S(12)) };
-                cue.Controls.Add(new Label { Text = "Run these in PowerShell.", AutoSize = true, Margin = Padding.Empty });
+                TextLine("Run these in PowerShell.");
+                Command("1. Install", isCodex ? "npm install -g @openai/codex" : "irm https://claude.ai/install.ps1 | iex");
+                Command("2. Sign in", isCodex ? "codex login" : "claude auth login");
                 var help = new LinkLabel { Text = "Setup help", AccessibleName = (isCodex ? "Codex" : "Claude Code") + " setup help",
-                    AutoSize = true, TabStop = true, LinkBehavior = LinkBehavior.HoverUnderline, Margin = new Padding(S(16), 0, 0, 0) };
+                    AutoSize = true, TabStop = true, LinkBehavior = LinkBehavior.HoverUnderline, Margin = new Padding(0, 8, 0, 0) };
                 help.LinkClicked += (_, _) => ProviderSetup.Open(new Uri(isCodex
                     ? "https://learn.chatgpt.com/docs/codex/cli" : "https://code.claude.com/docs/en/setup"));
-                cue.Controls.Add(help); content.Controls.Add(cue);
-                content.Controls.Add(new SetupDemoView(provider) { Margin = new Padding(0, 0, 0, S(14)) });
-                Command("1. Install", ProviderSetup.InstallCommand(provider));
-                Command("2. Sign in", ProviderSetup.SignInCommand(provider)); break;
+                content.Controls.Add(help); break;
             case SetupStep.Verify:
                 TextLine("Check Setup", true); Statuses(switches: true); break;
             case SetupStep.Preferences:
@@ -365,15 +360,9 @@ internal sealed class SetupForm : Form
             foreach (var label in Descendants(content).OfType<Label>().Where(l => l.AutoSize && l.MaximumSize.Width > 0))
                 label.MaximumSize = new Size(label.Parent == content ? width : Math.Max(S(100), width - S(36)), 0);
             foreach (var actions in content.Controls.OfType<FlowLayoutPanel>().Where(p => p.Name == "setupActions")) actions.MaximumSize = new Size(width, 0);
-            foreach (var cue in content.Controls.OfType<FlowLayoutPanel>().Where(p => p.Name == "setupGuideCue")) cue.MaximumSize = new Size(width, 0);
-            foreach (var demo in content.Controls.OfType<SetupDemoView>())
-            {
-                demo.MinimumSize = demo.MaximumSize = new Size(width, (int)Math.Round(width * 480d / 1280));
-                demo.Size = demo.MinimumSize;
-            }
             foreach (var (row, box, copy) in commandRows)
             {
-                var innerWidth = width - (row.Parent?.Padding.Horizontal ?? S(20));
+                var innerWidth = width - S(36);
                 row.MaximumSize = new Size(innerWidth, 0); box.Width = Math.Max(S(100), innerWidth - copy.GetPreferredSize(Size.Empty).Width - box.Margin.Horizontal);
             }
             foreach (var centered in content.Controls.Cast<Control>().Where(c => c.Name is "finishLogo" or "finishHeading"))
@@ -388,7 +377,6 @@ internal sealed class SetupForm : Form
             // auto-sized content grows after status or save feedback changes.
             body.AutoScrollMinSize = new Size(0, top + height + S(24));
             body.PerformLayout();
-            RefreshSetupDemos();
         }
         finally { fitting = false; }
     }
@@ -406,15 +394,6 @@ internal sealed class SetupForm : Form
     {
         base.OnDpiChanged(e);
         FitBodyContent(); LayoutWelcome();
-    }
-    private void RefreshSetupDemos()
-    {
-        foreach (var demo in content.Controls.OfType<SetupDemoView>()) demo.RefreshPlayback();
-    }
-    protected override void WndProc(ref Message m)
-    {
-        base.WndProc(ref m);
-        if (m.Msg == 0x001A /* WM_SETTINGCHANGE */) RefreshSetupDemos();
     }
     private static IEnumerable<Control> Descendants(Control root) => root.Controls.Cast<Control>().SelectMany(c => new[] { c }.Concat(Descendants(c)));
     internal void ApplyTheme()

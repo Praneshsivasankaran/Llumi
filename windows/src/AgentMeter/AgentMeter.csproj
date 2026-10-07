@@ -21,8 +21,6 @@
   <ItemGroup>
     <EmbeddedResource Include="Assets/Llumi.ico" />
     <EmbeddedResource Include="Assets/*.svg" />
-    <EmbeddedResource Include="Assets/SetupDemos/*.gif" />
-    <EmbeddedResource Include="Assets/SetupDemos/*.png" />
     <ProjectReference Include="../AgentMeter.Core/AgentMeter.Core.csproj" />
   </ItemGroup>
 </Project>
