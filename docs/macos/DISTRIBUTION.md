@@ -71,3 +71,11 @@ Verification checks the Developer ID authority, secure timestamp, Hardened Runti
 8. Check Launch at Login against actual registration state, then restore the tester's preference. Record architecture and hardware actually tested.
 
 Do not describe a release as signed, notarized, or tested on Intel until the corresponding checks have really completed.
+
+## 1.1.2 updater candidate
+
+Current candidate validation targets 1.1.2/build 2; it rejects reuse of the frozen 1.1.1 version and non-advancing builds. Sparkle 2.10.0 is the only reviewed nested framework. Its exact file/symlink inventory and universal executables are validated; escaping links or additional helper code are rejected. Explicit inside-out signing is prepared for the reviewed helpers, framework and app. Signed verification binds the approved publisher/team on the app, framework/helpers and DMG. The final notarized DMG can also be the Sparkle enclosure. [Updater configuration, official appcast tooling and remaining tests](UPDATES.md) are local candidate work, not release authorization.
+
+For an explicitly authorized stop before notarization, `create-dmg.sh APP --signed-candidate` creates a Developer ID signed, pre-notarization DMG. `LLUMI_RELEASE_OUTPUT` selects a separate output directory. This mode checks the signed app; it does not satisfy the notarized release gate. Normal `--signed` packaging still requires the app's notarization, stapled ticket and Gatekeeper acceptance. DMG verification now mounts the container read-only and checks its contained Llumi app with the same verification mode, preventing a valid outer signature from masking an incorrect product.
+
+Stapling changes the release bytes. Notarize and staple the app first, package it again into a new final output directory, then notarize/staple the DMG. Regenerate SHA-256 and all Sparkle signatures/feed from that final DMG. Pre-notarization checksums and signatures are staged evidence only and must not be published as final release metadata.

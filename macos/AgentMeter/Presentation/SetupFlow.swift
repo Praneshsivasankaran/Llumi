@@ -29,43 +29,106 @@ enum SetupCompletion {
 
 enum SetupStep: Equatable {
   case welcome, providers, codex, claude, verify, preferences, done
+  static let ordered: [SetupStep] = [.welcome, .providers, .codex, .claude, .verify, .preferences, .done]
 }
 
 enum SetupStatus: String {
   case checking = "Checking…"
+  case notChecked = "Sign-in not checked"
   case notInstalled = "Not installed"
-  case signedOut = "Installed — sign in required"
-  case ready = "Ready"
-  case unavailable = "Unable to verify — check again"
+  case signedOut = "Sign in required"
+  case ready = "Signed in"
+  case unsupportedBilling = "Other billing mode detected"
+  case unavailable = "Sign-in not verified"
   init(snapshot: UsageSnapshot) {
+    if snapshot.refreshStatus.checking { self = .checking; return }
+    if snapshot.authenticationVerified { self = .ready; return }
     switch snapshot.state {
-    case .live: self = snapshot.reading == nil ? .unavailable : .ready
     case .notInstalled: self = .notInstalled
     case .signedOut: self = .signedOut
-    case .loading: self = .checking
-    case .stale, .unavailable: self = .unavailable
+    case .loading: self = .notChecked
+    case .unsupportedBilling: self = .unsupportedBilling
+    default: self = .unavailable
+    }
+  }
+}
+
+enum SetupMonitoring {
+  static func text(_ snapshot: UsageSnapshot) -> String {
+    if snapshot.refreshStatus.checking { return "Checking allowances…" }
+    switch snapshot.state {
+    case .live: return snapshot.reading == nil ? "Unavailable" : "Available"
+    case .notReported: return "Allowances not reported"
+    case .unsupportedBilling: return "This billing mode can’t be monitored"
+    case .unsupportedAllowance: return "Allowance format not supported"
+    case .stale: return "Last known allowances — stale"
+    case .notInstalled, .signedOut: return "Not ready"
+    case .loading: return "Not checked yet"
+    case .unavailable: return "Allowances unavailable"
+    }
+  }
+}
+
+enum SetupRetryPresentation {
+  static func canRetry(_ snapshot: UsageSnapshot, at now: Date) -> Bool {
+    guard !snapshot.refreshStatus.checking else { return false }
+    guard let retry = snapshot.refreshStatus.retryAt, retry > now else { return true }
+    return snapshot.refreshStatus.retryReason == .cooldown
+  }
+  static func message(_ snapshot: UsageSnapshot, at now: Date) -> String? {
+    let status = snapshot.refreshStatus
+    if status.checking { return "Checking…" }
+    guard let retry = status.retryAt, retry > now, retry.timeIntervalSince(now).isFinite
+    else { return nil }
+    // Wall-clock changes can make a bounded collector deadline appear farther
+    // away. Keep the reason visible without overflowing a duration conversion.
+    if retry.timeIntervalSince(now) > 900 {
+      let date = retry.formatted(date: .abbreviated, time: .shortened)
+      switch status.retryReason {
+      case .rateLimited: return "Rate limited. Retry after \(date)."
+      case .manualCooldown: return "Retry after \(date)."
+      case .cooldown: return "Automatic retry after \(date). Retry checks now."
+      case nil: return nil
+      }
+    }
+    let seconds = Int(ceil(retry.timeIntervalSince(now)))
+    let duration = seconds < 60 ? "\(seconds)s" : "\(Int(ceil(Double(seconds) / 60)))m"
+    switch status.retryReason {
+    case .rateLimited: return "Rate limited. Retry in \(duration)."
+    case .manualCooldown: return "Retry in \(duration)."
+    case .cooldown: return "Automatic retry in \(duration). Retry checks now."
+    case nil: return nil
     }
   }
 }
 
 @MainActor @Observable final class SetupFlow {
   private let defaults: UserDefaults
+  let preferences: Preferences
   private(set) var step: SetupStep = .welcome
-  var selected: Set<ProviderID> = Set(ProviderID.allCases)
+  var selected: Set<ProviderID> {
+    get { preferences.enabledProviders }
+    set { preferences.enabledProviders = newValue }
+  }
   var needsAutomaticSetup: Bool { !SetupCompletion.isComplete(defaults) }
   var steps: [SetupStep] {
     [.welcome, .providers] + (selected.contains(.codex) ? [.codex] : [])
       + (selected.contains(.claude) ? [.claude] : []) + [.verify, .preferences, .done]
   }
-  init(defaults: UserDefaults = .standard) { self.defaults = defaults }
+  init(defaults: UserDefaults = .standard, preferences: Preferences? = nil) {
+    self.defaults = defaults
+    self.preferences = preferences ?? Preferences(defaults: defaults)
+  }
   func reopen() { step = .welcome }
   func next() {
-    guard let index = steps.firstIndex(of: step), index + 1 < steps.count else { return }
-    step = steps[index + 1]
+    guard let index = SetupStep.ordered.firstIndex(of: step),
+      let next = SetupStep.ordered.dropFirst(index + 1).first(where: steps.contains) else { return }
+    step = next
   }
   func back() {
-    guard let index = steps.firstIndex(of: step), index > 0 else { return }
-    step = steps[index - 1]
+    guard let index = SetupStep.ordered.firstIndex(of: step),
+      let previous = SetupStep.ordered.prefix(index).last(where: steps.contains) else { return }
+    step = previous
   }
   func complete() { defaults.set(true, forKey: SetupCompletion.key) }
 }
@@ -91,19 +154,28 @@ struct SetupDiagnostic {
   let failure: String
   let result: String
   init(_ snapshot: UsageSnapshot) {
+    authentication = snapshot.authenticationVerified ? "verified"
+      : snapshot.state == .signedOut ? "signed-out"
+      : snapshot.state == .unsupportedBilling ? "mode-detected" : "unknown"
     switch snapshot.state {
     case .live where snapshot.reading != nil:
-      detected = "yes"; authentication = "verified"; usage = "available"; result = "success"
+      detected = "yes"; usage = "available"; result = "success"
+    case .notReported where snapshot.reading != nil:
+      detected = "yes"; usage = "not-reported"; result = "success"
+    case .unsupportedAllowance where snapshot.reading != nil:
+      detected = "yes"; usage = "unsupported"; result = "success"
+    case .unsupportedBilling:
+      detected = "yes"; usage = "unsupported"; result = snapshot.reading == nil ? "failure" : "success"
     case .notInstalled:
-      detected = "no"; authentication = "unknown"; usage = "unavailable"; result = "failure"
+      detected = "no"; usage = "unavailable"; result = "failure"
     case .signedOut:
-      detected = "yes"; authentication = "signed-out"; usage = "unavailable"; result = "failure"
+      detected = "yes"; usage = "unavailable"; result = "failure"
     case .stale:
-      detected = "unknown"; authentication = "unknown"; usage = "stale"; result = "failure"
+      detected = snapshot.authenticationVerified ? "yes" : "unknown"; usage = "stale"; result = "failure"
     case .loading:
-      detected = "unknown"; authentication = "unknown"; usage = "checking"; result = "pending"
+      detected = "unknown"; usage = "checking"; result = "pending"
     default:
-      detected = "unknown"; authentication = "unknown"; usage = "unavailable"; result = "failure"
+      detected = snapshot.authenticationVerified ? "yes" : "unknown"; usage = "unavailable"; result = "failure"
     }
     failure = snapshot.failure?.rawValue ?? "none"
   }

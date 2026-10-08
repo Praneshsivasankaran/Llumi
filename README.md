@@ -8,7 +8,7 @@ Llumi monitors Codex and Claude Code usage on **macOS and Windows**, with native
 
 ## Availability
 
-- **macOS 1.1.1:** [Download the signed and notarized DMG](https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-1.1.1/Llumi-1.1.1-macos.dmg) · [Release notes and checksum](https://github.com/Praneshsivasankaran/Llumi/releases/tag/llumi-macos-1.1.1). Requires macOS 14 or later; Apple Silicon and Intel.
+- **macOS 1.1.3:** [Download the signed and notarized DMG](https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-1.1.3/Llumi-1.1.3-macos.dmg) · [Release notes and checksum](https://github.com/Praneshsivasankaran/Llumi/releases/tag/llumi-macos-1.1.3). Requires macOS 14 or later; Apple Silicon and Intel.
 - **Windows 2.0.2.0:** [Download from Microsoft Store](https://apps.microsoft.com/detail/9NV153Q5K5MQ). Requires Windows 10 22H2 or later, or Windows 11; x64. No direct Windows installer is offered.
 
 Historical AgentMeter releases remain available in [release history](https://github.com/Praneshsivasankaran/Llumi/releases); they are not Llumi downloads.

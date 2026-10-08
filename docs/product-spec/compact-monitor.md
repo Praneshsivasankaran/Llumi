@@ -1,6 +1,8 @@
 # Compact monitor
 
-Windows 2.1.3 locally adopts the macOS 1.1.3 allowance contract. [Windows catch-up requirements](windows-213.md) records the current Windows presentation, setup and intentional native differences.
+macOS 1.1.3 follows [the approved allowance selection and full-details rules](allowance-113.md). Windows 2.1.3 adopts that allowance contract; [Windows catch-up requirements](windows-213.md) records its presentation, setup and intentional native differences. The selection and details rules below supersede the earlier five-hour-only and weekly-secondary behavior.
+
+macOS 1.1.3 permits dragging anywhere across connected displays after a five-point movement threshold. A click still opens Llumi. Dragging suspends hover transitions without stealing keyboard focus. Persist display identity and a normalized center/top anchor, retain it through resizing and relaunch, clamp to usable bounds, and fall back to the main display if the saved display disappears. Settings exposes Reset Position. Disabled providers never enter the monitor. Windows uses its native scaled drag threshold and work-area positioning described in the Windows requirements.
 
 The compact monitor is contextual and optional. Its content is the same across platforms: provider logo plus primary percentage; one or both providers according to activity. Full names remain available to accessibility. Unknown is a dash; stale values have an explicit indicator and a stale detail state.
 

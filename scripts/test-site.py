@@ -6,6 +6,8 @@ from pathlib import Path
 import re
 import unittest
 import json
+import base64
+import xml.etree.ElementTree as ET
 from unittest.mock import patch
 import tempfile
 from urllib.parse import urljoin, urlsplit, unquote
@@ -74,7 +76,113 @@ class SiteTests(unittest.TestCase):
         cls.pages = {name: Page((SITE / name).read_text(encoding="utf-8")) for name in cls.files if name.endswith(".html")}
 
     def test_only_intended_public_output(self):
-        self.assertEqual(self.files, {"index.html", "privacy/index.html", "support/index.html", "styles.css", "mark.svg", "app.js", ".nojekyll", "media/codex.svg", "media/claude.svg", "media/llumi-macos-usage.webp", "media/llumi-macos-usage-small.webp", "media/llumi-social.png"})
+        expected = {"index.html", "privacy/index.html", "support/index.html", "releases/index.html", "styles.css", "release.css", "mark.svg", "app.js", "appcast.xml", ".nojekyll", "media/codex.svg", "media/claude.svg", "media/llumi-macos-usage.webp", "media/llumi-macos-usage-small.webp", "media/llumi-social.png"}
+        expected |= {builder.release_route(item) + "index.html" for item in builder.load_releases()}
+        self.assertEqual(self.files, expected)
+
+    def test_preview_notes_are_excluded_from_public_output(self):
+        self.assertFalse(any(name.startswith("review/") for name in self.files))
+        for item in builder.load_releases(include_review=True):
+            if item["status"] == "preview":
+                self.assertNotIn(builder.release_route(item) + "index.html", self.files)
+                self.assertNotIn(item["version"], "".join(self.pages["releases/index.html"].data))
+
+    def test_release_navigation_and_version_notes(self):
+        self.assertIn("./releases/", self.pages["index.html"].links)
+        for item in builder.load_releases():
+            page = self.pages[builder.release_route(item) + "index.html"]
+            self.assertEqual(" ".join("".join(page.headings).split()), "Llumi " + item["version"])
+            self.assertIn("../../../styles.css", page.assets)
+            self.assertIn("../../../release.css", page.assets)
+            self.assertIn("../../", page.links)
+            for section in item["sections"]:
+                for note in section["items"]:
+                    self.assertIn(note, "".join(page.data))
+
+    def test_local_review_build_contains_only_notes_and_preserves_feed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            builder.build(output, include_review=True)
+            files = {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()}
+            expected = self.files | {builder.release_route(item) + "index.html"
+                for item in builder.load_releases(include_review=True)}
+            self.assertEqual(files, expected)
+            self.assertFalse((output / "review").exists())
+            archive = (output / "releases/index.html").read_text()
+            self.assertNotIn("Preview the update flow", archive)
+            self.assertNotIn("update-flow", archive)
+            for item in builder.load_releases(include_review=True):
+                text = (output / builder.release_route(item) / "index.html").read_text()
+                self.assertIn('name="robots" content="noindex, nofollow"', text)
+                if item["status"] == "preview":
+                    self.assertIn("Not released yet", text)
+                    self.assertNotIn("<time", text)
+            self.assertEqual((output / "appcast.xml").read_bytes(), (ROOT / "site/appcast.xml").read_bytes())
+            if any(item["status"] == "preview" for item in builder.load_releases(include_review=True)):
+                with self.assertRaises(ValueError):
+                    builder.build(output, include_review=False)
+            else:
+                # Once every release ships, no extra preview routes remain.
+                # Rebuilding the same public pages must remove review noindex.
+                builder.build(output, include_review=False)
+                for item in builder.load_releases():
+                    text = (output / builder.release_route(item) / "index.html").read_text()
+                    self.assertNotIn('name="robots" content="noindex, nofollow"', text)
+
+    def test_removed_browser_preview_output_requires_a_fresh_directory(self):
+        with tempfile.TemporaryDirectory() as directory:
+            output = Path(directory)
+            stale = output / "review/update-flow/index.html"
+            stale.parent.mkdir(parents=True)
+            stale.write_text("Historical browser preview")
+            for include_review in (False, True):
+                with self.assertRaises(ValueError):
+                    builder.build(output, include_review=include_review)
+
+    def test_release_metadata_rejects_invalid_identity_and_release_claims(self):
+        original = json.loads((ROOT / "site/releases.json").read_text())
+        # Keep malformed-preview coverage after all actual release entries ship.
+        original["releases"][0].update(status="preview", published_at=None)
+        for patch_key, patch_value in (("version", "../../oops"), ("build", True), ("status", "latest"), ("published_at", "2026-10-05")):
+            metadata = json.loads(json.dumps(original))
+            preview = next(item for item in metadata["releases"] if item["status"] == "preview")
+            preview[patch_key] = patch_value
+            with patch.object(builder.json, "loads", return_value=metadata):
+                with self.assertRaises(ValueError):
+                    builder.load_releases(include_review=True)
+        metadata = json.loads(json.dumps(original))
+        metadata["releases"].append(metadata["releases"][0])
+        with patch.object(builder.json, "loads", return_value=metadata):
+            with self.assertRaises(ValueError):
+                builder.load_releases(include_review=True)
+
+    def test_release_notes_escape_metadata(self):
+        item = dict(builder.load_releases()[0])
+        item.update(title='<script>alert("unsafe")</script>', summary='<img src=x onerror="unsafe">')
+        item["sections"] = [{"title": "<b>Changed</b>", "items": ["<script>unsafe</script>"]}]
+        for rendered in (builder.release_card(item), builder.release_detail(item)):
+            self.assertNotIn("<script>", rendered)
+            self.assertNotIn("<img src=x", rendered)
+            self.assertIn("&lt;script&gt;", rendered)
+
+    def test_signed_appcast_is_preserved_without_rendering(self):
+        feed = (SITE / "appcast.xml").read_bytes()
+        self.assertEqual(feed, (ROOT / "site/appcast.xml").read_bytes())
+        self.assertIn(b'<!-- sparkle-signatures:', feed)
+        self.assertNotIn(b'untagged-', feed)
+        ns = {'sparkle': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
+        items = ET.fromstring(feed).findall('./channel/item')
+        self.assertTrue(items)
+        for item in items:
+            version = item.findtext('sparkle:shortVersionString', namespaces=ns)
+            self.assertRegex(version, r'^\d+\.\d+\.\d+$')
+            self.assertRegex(item.findtext('sparkle:version', namespaces=ns), r'^[1-9]\d*$')
+            enclosure = item.find('enclosure')
+            expected = f'https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-{version}/Llumi-{version}-macos.dmg'
+            self.assertEqual(enclosure.attrib['url'], expected)
+            self.assertGreater(int(enclosure.attrib['length']), 0)
+            signature = enclosure.attrib['{' + ns['sparkle'] + '}edSignature']
+            self.assertEqual(len(base64.b64decode(signature, validate=True)), 64)
 
     def test_titles_identity_and_visible_content(self):
         for name, title in [("index.html", "Llumi — Track your AI coding usage"), ("privacy/index.html", "Llumi Privacy Policy"), ("support/index.html", "Llumi Support")]:

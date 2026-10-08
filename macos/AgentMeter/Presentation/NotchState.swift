@@ -24,8 +24,22 @@ struct ProviderGlance: Identifiable {
     snapshot.primary?.remaining.map(UsageSnapshot.percent)
       ?? (snapshot.state == .loading ? "…" : "--")
   }
+  var compactText: String {
+    snapshot.primary?.remaining != nil ? percentage + " left" : percentage
+  }
   var accessibility: String {
-    "\(id.title), \(snapshot.primary?.remaining.map { UsageSnapshot.percent($0)+" remaining" } ?? snapshot.state.rawValue), \(snapshot.state.rawValue). \(snapshot.primary?.resetText(at: Date()) ?? "")"
+    accessibility(at: Date())
+  }
+  func accessibility(at now: Date) -> String {
+    UsageCopy.detailSummary(snapshot, now: now)
+  }
+}
+enum NotchDetailLayout {
+  static func height(rows: [ProviderGlance], availableHeight: CGFloat) -> CGFloat {
+    let windows = rows.map { $0.snapshot.detailWindows.count }.max() ?? 0
+    let stale = rows.contains { $0.snapshot.state == .stale }
+    let desired = 110 + CGFloat(windows) * 86 + (stale ? 22 : 0)
+    return min(max(0, availableHeight), min(420, max(180, desired)))
   }
 }
 @MainActor @Observable final class NotchPresentation {

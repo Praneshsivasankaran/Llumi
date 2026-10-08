@@ -1,3 +1,5 @@
+Current macOS release: [Llumi 1.1.2 publication receipt](../releases/2026-10-macos-1.1.2.md).
+
 # Llumi 1.1.1 for macOS
 
 Published 27 September 2026. This launch release is frozen; see [source, tag and checksum](../releases/2026-09-launch.md).

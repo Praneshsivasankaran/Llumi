@@ -735,6 +735,19 @@
 				<string>EE540803E30B6C12A7313729</string>
 				<string>7B7915B18772F6AD4F5D2F82</string>
 				<string>735E830F18D6A28E57FE5459</string>
+				<string>E4D9D766F272A7E3FEB810FC</string>
+				<string>7C2A0670AA19EEC4614AF319</string>
+				<string>3FB3427609BA259F435CF30E</string>
+				<string>7F14502247A7A70B12909EA8</string>
+				<string>4EDA4703C7113CA06169A01A</string>
+				<string>D1077575F2730351B590C02F</string>
+				<string>636473C9AA33494CDF120867</string>
+				<string>362E27761DEBF9B113AE7285</string>
+				<string>E6CF3723812289A35A380120</string>
+				<string>60D0E4B04EB2F838DA46D3F0</string>
+				<string>E15CA295EED010389CDEF204</string>
+				<string>607C381752E06C8A0293C1DF</string>
+				<string>145CF528E3E712BAB476EB6D</string>
 			</array>
 			<key>sourceTree</key>
 			<string>&lt;group&gt;</string>
@@ -848,9 +861,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.1</string>
+				<string>1.1.3</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>1</string>
+				<string>3</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi</string>
 				<key>INFOPLIST_FILE</key>
@@ -884,9 +897,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.1</string>
+				<string>1.1.3</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>1</string>
+				<string>3</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi</string>
 				<key>INFOPLIST_FILE</key>
@@ -940,9 +953,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.1</string>
+				<string>1.1.3</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>1</string>
+				<string>3</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi.tests</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
@@ -976,9 +989,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.1</string>
+				<string>1.1.3</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>1</string>
+				<string>3</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi.tests</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
@@ -1040,6 +1053,11 @@
 				<string>54B171D60ABF3FEB82DD0164</string>
 				<string>F735F07F82FE845C513272D7</string>
 				<string>CE107BDD051CA48FB887A709</string>
+				<string>3A9D0D16AB3CBC9CD5CC89F1</string>
+				<string>7ADF3EE76C4E17474B88AABE</string>
+				<string>00BA9CF1314C99EFFE42FCDF</string>
+				<string>02D2E12B2914E549F46FDE33</string>
+				<string>987698A66248A1B2DC91A8F8</string>
 			</array>
 			<key>runOnlyForDeploymentPostprocessing</key>
 			<integer>0</integer>
@@ -1051,7 +1069,9 @@
 			<key>buildActionMask</key>
 			<integer>2147483647</integer>
 			<key>files</key>
-			<array/>
+			<array>
+				<string>AC7B27D7F490407398A642B5</string>
+			</array>
 			<key>runOnlyForDeploymentPostprocessing</key>
 			<integer>0</integer>
 		</dict>
@@ -1067,6 +1087,10 @@
 				<string>A2E507222222222222222222</string>
 				<string>B6E76D2E293E89A76173606B</string>
 				<string>508801BE463ED8D7DA062161</string>
+				<string>52242CC88E3C6465C36BD9DF</string>
+				<string>684D74399B64930908FE1D62</string>
+				<string>DED86DC0A4474CD7675A6907</string>
+				<string>D0B9EBA73C7D20A3CCD60C88</string>
 			</array>
 			<key>runOnlyForDeploymentPostprocessing</key>
 			<integer>0</integer>
@@ -1095,6 +1119,10 @@
 			<string>763D774377779C412BB71F6F</string>
 			<key>productType</key>
 			<string>com.apple.product-type.application</string>
+			<key>packageProductDependencies</key>
+			<array>
+				<string>D35ABA03F5804C1E8D4CED19</string>
+			</array>
 		</dict>
 		<key>798B65A4B63A4D08FDD4C755</key>
 		<dict>
@@ -1129,6 +1157,14 @@
 				<string>D7FFA7514123ED0493F6F89F</string>
 				<string>C6668677415F4DA294E2AC83</string>
 				<string>B333B3767C94CC3C2580BECA</string>
+				<string>CCFE7AF73E631A75CEFC0449</string>
+				<string>CD83C446721B16B988AFE765</string>
+				<string>A23184609F4EC88FF310D7E1</string>
+				<string>BCFDF85D2B8F74AA172FFB97</string>
+				<string>2AF190DA3CA5392515A8F53A</string>
+				<string>FB45C4253723AB0959991C49</string>
+				<string>95D2C13AD25DFFECF06E1C4B</string>
+				<string>95501FF8ECC2B16CCE84AAE7</string>
 			</array>
 			<key>runOnlyForDeploymentPostprocessing</key>
 			<integer>0</integer>
@@ -1151,7 +1187,12 @@
 			<key>buildActionMask</key>
 			<integer>2147483647</integer>
 			<key>files</key>
-			<array/>
+			<array>
+				<string>F07265E18B202D9800E17557</string>
+				<string>2B85DED3F56D4A5E8AD27F32</string>
+				<string>38935E6BBBC789214770D26C</string>
+				<string>0A85B526FB2C0201AF426FAB</string>
+			</array>
 			<key>runOnlyForDeploymentPostprocessing</key>
 			<integer>0</integer>
 		</dict>
@@ -1214,6 +1255,10 @@
 			<array>
 				<string>AC44A5EE06496B21A17CA082</string>
 				<string>3A0C9CEF9D8F3BC090274361</string>
+			</array>
+			<key>packageReferences</key>
+			<array>
+				<string>CC7EEA54B3974A20BE15E612</string>
 			</array>
 		</dict>
 		<key>A2E507111111111111111111</key>
@@ -1319,6 +1364,326 @@
 			<string>PBXBuildFile</string>
 			<key>fileRef</key>
 			<string>735E830F18D6A28E57FE5459</string>
+		</dict>
+		<key>CC7EEA54B3974A20BE15E612</key>
+		<dict>
+			<key>isa</key>
+			<string>XCRemoteSwiftPackageReference</string>
+			<key>repositoryURL</key>
+			<string>https://github.com/sparkle-project/Sparkle</string>
+			<key>requirement</key>
+			<dict>
+				<key>kind</key>
+				<string>exactVersion</string>
+				<key>version</key>
+				<string>2.10.0</string>
+			</dict>
+		</dict>
+		<key>D35ABA03F5804C1E8D4CED19</key>
+		<dict>
+			<key>isa</key>
+			<string>XCSwiftPackageProductDependency</string>
+			<key>package</key>
+			<string>CC7EEA54B3974A20BE15E612</string>
+			<key>productName</key>
+			<string>Sparkle</string>
+		</dict>
+		<key>AC7B27D7F490407398A642B5</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>productRef</key>
+			<string>D35ABA03F5804C1E8D4CED19</string>
+		</dict>
+		<key>E4D9D766F272A7E3FEB810FC</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeter/Presentation/UpdatePresentation.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>3A9D0D16AB3CBC9CD5CC89F1</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>E4D9D766F272A7E3FEB810FC</string>
+		</dict>
+		<key>CCFE7AF73E631A75CEFC0449</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>E4D9D766F272A7E3FEB810FC</string>
+		</dict>
+		<key>7C2A0670AA19EEC4614AF319</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeter/App/UpdaterCoordinator.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>7ADF3EE76C4E17474B88AABE</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>7C2A0670AA19EEC4614AF319</string>
+		</dict>
+		<key>3FB3427609BA259F435CF30E</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeter/Views/SetupDemoView.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>00BA9CF1314C99EFFE42FCDF</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>3FB3427609BA259F435CF30E</string>
+		</dict>
+		<key>CD83C446721B16B988AFE765</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>3FB3427609BA259F435CF30E</string>
+		</dict>
+		<key>7F14502247A7A70B12909EA8</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeterTests/Release113Tests.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>A23184609F4EC88FF310D7E1</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>7F14502247A7A70B12909EA8</string>
+		</dict>
+		<key>4EDA4703C7113CA06169A01A</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeterTests/NotchGeometryTests.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>BCFDF85D2B8F74AA172FFB97</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>4EDA4703C7113CA06169A01A</string>
+		</dict>
+		<key>D1077575F2730351B590C02F</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>image.gif</string>
+			<key>path</key>
+			<string>AgentMeter/Resources/SetupDemos/CodexSetup.gif</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>52242CC88E3C6465C36BD9DF</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>D1077575F2730351B590C02F</string>
+		</dict>
+		<key>F07265E18B202D9800E17557</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>D1077575F2730351B590C02F</string>
+		</dict>
+		<key>636473C9AA33494CDF120867</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>image.png</string>
+			<key>path</key>
+			<string>AgentMeter/Resources/SetupDemos/CodexSetup.png</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>684D74399B64930908FE1D62</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>636473C9AA33494CDF120867</string>
+		</dict>
+		<key>2B85DED3F56D4A5E8AD27F32</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>636473C9AA33494CDF120867</string>
+		</dict>
+		<key>362E27761DEBF9B113AE7285</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>image.gif</string>
+			<key>path</key>
+			<string>AgentMeter/Resources/SetupDemos/ClaudeSetup.gif</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>DED86DC0A4474CD7675A6907</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>362E27761DEBF9B113AE7285</string>
+		</dict>
+		<key>38935E6BBBC789214770D26C</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>362E27761DEBF9B113AE7285</string>
+		</dict>
+		<key>E6CF3723812289A35A380120</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>image.png</string>
+			<key>path</key>
+			<string>AgentMeter/Resources/SetupDemos/ClaudeSetup.png</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>D0B9EBA73C7D20A3CCD60C88</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>E6CF3723812289A35A380120</string>
+		</dict>
+		<key>0A85B526FB2C0201AF426FAB</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>E6CF3723812289A35A380120</string>
+		</dict>
+		<key>60D0E4B04EB2F838DA46D3F0</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeter/Presentation/UpdateCompletion.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>02D2E12B2914E549F46FDE33</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>60D0E4B04EB2F838DA46D3F0</string>
+		</dict>
+		<key>2AF190DA3CA5392515A8F53A</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>60D0E4B04EB2F838DA46D3F0</string>
+		</dict>
+		<key>E15CA295EED010389CDEF204</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeter/Views/UpdatePromptView.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>987698A66248A1B2DC91A8F8</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>E15CA295EED010389CDEF204</string>
+		</dict>
+		<key>FB45C4253723AB0959991C49</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>E15CA295EED010389CDEF204</string>
+		</dict>
+		<key>607C381752E06C8A0293C1DF</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeterTests/UpdateCompletionTests.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>95D2C13AD25DFFECF06E1C4B</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>607C381752E06C8A0293C1DF</string>
+		</dict>
+		<key>145CF528E3E712BAB476EB6D</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeterTests/UpdatePresentationTests.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>95501FF8ECC2B16CCE84AAE7</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>145CF528E3E712BAB476EB6D</string>
 		</dict>
 	</dict>
 	<key>rootObject</key>

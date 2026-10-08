@@ -13,13 +13,28 @@ struct MainView: View {
           Label(destination.title, systemImage: destination.symbol).tag(destination)
         }.listStyle(.sidebar)
       }.navigationSplitViewColumnWidth(min: 150, ideal: 166, max: 190)
+        .toolbar(removing: .sidebarToggle)
     } detail: {
-      Group {
-        switch model.destination ?? .usage {
-        case .usage: UsageView(model: model)
-        case .settings:
-          SettingsView(preferences: model.preferences, login: model.loginItem, checks: model)
-        case .about: AboutView()
+      VStack(spacing: 0) {
+        if let version = model.updates.availableVersion {
+          HStack(spacing: 12) {
+            Image(systemName: "arrow.down.circle.fill").font(.title2).foregroundStyle(.tint)
+            Text("Llumi \(version) is available").font(.callout.weight(.medium))
+            Spacer(minLength: 8)
+            Button("Later") { model.updates.dismissAction() }
+            Button("Update…") { model.updates.checkAction() }
+              .buttonStyle(.borderedProminent).disabled(!model.updates.canCheck)
+          }.padding(14)
+            .background(.tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 12))
+            .padding(.horizontal, 24).padding(.top, 20)
+        }
+        Group {
+          switch model.destination ?? .usage {
+          case .usage: UsageView(model: model)
+          case .settings:
+            SettingsView(preferences: model.preferences, login: model.loginItem, checks: model)
+          case .about: AboutView()
+          }
         }
       }.frame(minWidth: 410, minHeight: 420).background(Color(nsColor: .windowBackgroundColor))
     }.navigationSplitViewStyle(.balanced)
@@ -41,8 +56,14 @@ struct SettingsView: View {
             if let message = login.message {
               Text(message).font(.caption).foregroundStyle(.secondary)
             }
-            Toggle(isOn: $preferences.notchEnabled) {
-              Label("Notch Monitor", systemImage: "macbook")
+            HStack {
+              Toggle(isOn: $preferences.notchEnabled) {
+                Label("Notch Monitor", systemImage: "macbook")
+              }
+              if let checks {
+                Button("Reset Position") { checks.resetNotchPositionAction() }
+                  .help("Move the notch back to the top center of the screen")
+              }
             }
             Toggle(isOn: $preferences.menuEnabled) {
               Label("Menu Bar Icon", systemImage: "menubar.rectangle")
@@ -56,6 +77,19 @@ struct SettingsView: View {
             }
           }
           if let checks {
+            Section("Updates") {
+              HStack {
+                Label("Llumi \(releaseVersion)", systemImage: "arrow.down.circle")
+                Spacer()
+                if checks.updates.checking { ProgressView().controlSize(.small) }
+                Button("Check for Updates…") { checks.updates.checkAction() }
+                  .disabled(!checks.updates.canCheck)
+              }
+              Toggle("Automatically check and download updates", isOn: Binding(
+                get: { checks.updates.automaticUpdates },
+                set: { checks.updates.automaticUpdates = $0 }))
+                .toggleStyle(.switch)
+            }
             Section {
               CheckSetupView(model: checks).id("setup-checks")
             }
@@ -70,10 +104,11 @@ struct SettingsView: View {
             proxy.scrollTo("setup-checks", anchor: .top)
           }
       }
-      Text("Llumi remains available from the Dock when the menu-bar icon is hidden.").font(
-        .caption
-      ).foregroundStyle(.secondary)
     }.padding(24).onAppear { login.synchronize() }
+  }
+  private var releaseVersion: String {
+    Bundle.main.object(forInfoDictionaryKey: "LlumiReleaseVersion") as? String
+      ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1.3"
   }
 }
 private struct AboutView: View {
@@ -82,7 +117,7 @@ private struct AboutView: View {
       MeterMark().scaleEffect(2).frame(height: 50)
       Text("Llumi").font(.title.bold())
       Text(
-        "Version \(Bundle.main.object(forInfoDictionaryKey:"LlumiReleaseVersion") as? String ?? "1.1.1")"
+        "Version \(Bundle.main.object(forInfoDictionaryKey:"LlumiReleaseVersion") as? String ?? "1.1.3")"
       ).font(.callout).foregroundStyle(.secondary)
       Text("Track your AI coding usage.").font(.callout).foregroundStyle(.secondary)
     }.frame(maxWidth: .infinity, maxHeight: .infinity)

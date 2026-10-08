@@ -56,6 +56,8 @@ enum AppAppearance: String, CaseIterable, Identifiable {
   }
 }
 @MainActor @Observable final class Preferences {
+  static let lightMigrationKey = "llumi113LightAppearanceMigrated"
+  static let enabledProvidersKey = "enabledProviders"
   private let defaults: UserDefaults
   var changed: () -> Void = {}
   var notchEnabled: Bool {
@@ -76,11 +78,34 @@ enum AppAppearance: String, CaseIterable, Identifiable {
       changed()
     }
   }
+  var enabledProviders: Set<ProviderID> {
+    didSet {
+      guard enabledProviders != oldValue else { return }
+      defaults.set(ProviderID.allCases.filter(enabledProviders.contains).map(\.rawValue),
+        forKey: Self.enabledProvidersKey)
+      changed()
+    }
+  }
+  func isEnabled(_ provider: ProviderID) -> Bool { enabledProviders.contains(provider) }
+  func setEnabled(_ provider: ProviderID, _ enabled: Bool) {
+    if enabled { enabledProviders.insert(provider) } else { enabledProviders.remove(provider) }
+  }
   init(defaults: UserDefaults = .standard) {
     self.defaults = defaults
+    // Recognize the previous installation before adding new preferences to a fresh one.
+    SetupCompletion.recognizeExisting(defaults: defaults, old: [:])
+    if BetaPreferences.boolean(defaults.object(forKey: Self.lightMigrationKey)) != true {
+      defaults.set(AppAppearance.light.rawValue, forKey: "appearance")
+      defaults.set(true, forKey: Self.lightMigrationKey)
+    }
     notchEnabled = defaults.object(forKey: "notchEnabled") as? Bool ?? true
     menuEnabled = defaults.object(forKey: "menuEnabled") as? Bool ?? true
-    appearance = AppAppearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .system
+    appearance = AppAppearance(rawValue: defaults.string(forKey: "appearance") ?? "") ?? .light
+    if let values = defaults.array(forKey: Self.enabledProvidersKey) as? [String] {
+      enabledProviders = Set(values.compactMap(ProviderID.init(rawValue:)))
+    } else {
+      enabledProviders = Set(ProviderID.allCases)
+    }
   }
 }
 @MainActor @Observable final class LoginItem {

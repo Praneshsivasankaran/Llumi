@@ -1,24 +1,30 @@
 import AppKit
 import SwiftUI
 
-@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+@MainActor final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSMenuItemValidation {
   let model = Presentation()
   private var store: UsageStore!
   private var activity: ActivityMonitor!
   private var notch: NotchController!
   private var window: NSWindow!
   private var setupWindow: NSWindow?
-  private let setup = SetupFlow()
+  private var updateWindow: NSWindow?
+  private lazy var setup = SetupFlow(preferences: model.preferences)
   private var status: NSStatusItem!
   private var schedule: Task<Void, Never>?
   private var wake: Task<Void, Never>?
   private var observers: [NSObjectProtocol] = []
   private var quitting = false
+  private lazy var updates = UpdaterCoordinator(presentation: model.updates)
+  private var appliedProviders: Set<ProviderID>?
   func applicationDidFinishLaunching(_ notification: Notification) {
     DistributedNotificationCenter.default().addObserver(
-      self, selector: #selector(openMain), name: InstanceLease.reopen, object: nil)
+      self, selector: #selector(reopenMain), name: InstanceLease.reopen, object: nil)
     Diagnostics.shared.record("launch")
     createApplicationMenu()
+    model.updates.showPromptAction = { [weak self] in self?.showUpdatePrompt() }
+    model.updates.hidePromptAction = { [weak self] in self?.updateWindow?.orderOut(nil) }
+    startUpdaterIfReady()
     let discovery = ProviderDiscovery()
     activity = ActivityMonitor { [weak self] snapshot in
       guard let self, !self.quitting else { return }
@@ -35,7 +41,7 @@ import SwiftUI
     }
     let discovered: @Sendable (ProviderID, Installation) -> Void = { [weak self] p, install in
       Task { @MainActor in
-        guard let self, !self.quitting else { return }
+        guard let self, !self.quitting, self.model.preferences.isEnabled(p) else { return }
         self.model.installations[p] = install
         self.activity.update(p, install)
       }
@@ -43,7 +49,7 @@ import SwiftUI
     store = UsageStore(sources: [
       .codex: ProviderAdapter(provider: .codex, discovery: discovery, discovered: discovered),
       .claude: ProviderAdapter(provider: .claude, discovery: discovery, discovered: discovered),
-    ]) { [weak self] snapshot in
+    ], enabledProviders: model.preferences.enabledProviders) { [weak self] snapshot in
       Task { @MainActor in
         guard let self, !self.quitting else { return }
         self.model.usage = snapshot
@@ -52,7 +58,9 @@ import SwiftUI
       }
     }
     model.refreshAction = { [weak self] in self?.manualRefresh() }
+    model.setupRetryAction = { [weak self] provider in self?.performManualRefresh(provider) }
     notch = NotchController(open: { [weak self] in self?.openMain() })
+    model.resetNotchPositionAction = { [weak self] in self?.notch.resetPosition() }
     model.preferences.changed = { [weak self] in self?.applyPreferences() }
     applyPreferences()
     let event = NSAppleEventManager.shared().currentAppleEvent
@@ -81,11 +89,44 @@ import SwiftUI
       ) { [weak self] _ in MainActor.assumeIsolated { self?.didWake() } })
     startValidationIfRequested()
   }
-  func applicationDidBecomeActive(_ notification: Notification) { model.loginItem.synchronize() }
+  func applicationDidBecomeActive(_ notification: Notification) {
+    model.loginItem.synchronize()
+    if model.updates.promptVisible { showUpdatePrompt() }
+  }
+  private func startUpdaterIfReady() {
+    updates.startIfReady(setupComplete: !setup.needsAutomaticSetup)
+  }
+  private func showUpdatePrompt() {
+    guard !quitting, model.updates.promptVisible else { return }
+    if updateWindow == nil {
+      let view = NSHostingView(rootView: UpdatePromptView(updates: model.updates))
+      let dialog = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 536, height: 230),
+        styleMask: [.titled, .closable], backing: .buffered, defer: false)
+      dialog.title = "Llumi"
+      dialog.level = .floating
+      dialog.hidesOnDeactivate = true
+      dialog.isReleasedWhenClosed = false
+      dialog.delegate = self
+      dialog.contentView = view
+      dialog.center()
+      updateWindow = dialog
+    }
+    updateWindow?.makeKeyAndOrderFront(nil)
+    NSApp.activate(ignoringOtherApps: true)
+  }
+  @objc private func checkForUpdates() { updates.checkForUpdates() }
+  func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+    menuItem.action != #selector(checkForUpdates) || model.updates.canCheck
+  }
   private func createApplicationMenu() {
     let main = NSMenu()
     let appItem = NSMenuItem(title: "Llumi", action: nil, keyEquivalent: "")
     let appMenu = NSMenu(title: "Llumi")
+    let update = NSMenuItem(title: "Check for Updates…",
+      action: #selector(checkForUpdates), keyEquivalent: "")
+    update.target = self
+    appMenu.addItem(update)
+    appMenu.addItem(.separator())
     for (title, action, key) in [
       ("Settings…", #selector(openSettings), ","), ("Quit Llumi", #selector(quit), "q"),
     ] {
@@ -100,6 +141,9 @@ import SwiftUI
     let open = NSMenuItem(title: "Open Llumi", action: #selector(openMain), keyEquivalent: "0")
     open.target = self
     windowMenu.addItem(open)
+    let details = NSMenuItem(title: "Allowance Details", action: #selector(openMain), keyEquivalent: "1")
+    details.target = self
+    windowMenu.addItem(details)
     windowMenu.addItem(
       NSMenuItem(title: "Close", action: #selector(NSWindow.performClose(_:)), keyEquivalent: "w"))
     windowMenu.addItem(
@@ -160,6 +204,7 @@ import SwiftUI
   }
   @objc func openMain() {
     guard !quitting else { return }
+    let newlyVisible = window?.isVisible != true
     if window == nil {
       window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 850, height: 560),
@@ -177,6 +222,7 @@ import SwiftUI
     window.deminiaturize(nil)
     window.makeKeyAndOrderFront(nil)
     NSApp.activate(ignoringOtherApps: true)
+    if newlyVisible { updates.foregroundOpened() }
     Diagnostics.shared.record("window-open")
   }
   private func applyPreferences() {
@@ -188,6 +234,12 @@ import SwiftUI
       self.status = nil
     }
     notch?.update(model)
+    let enabled = model.preferences.enabledProviders
+    if appliedProviders != enabled {
+      appliedProviders = enabled
+      activity?.setEnabledProviders(enabled)
+      Task { [weak self] in await self?.store?.setEnabledProviders(enabled) }
+    }
   }
   @objc func openSetup() {
     guard !quitting else { return }
@@ -195,10 +247,12 @@ import SwiftUI
       let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 610),
         styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
       w.title = "Setup Llumi"
+      w.appearance = NSAppearance(named: .aqua)
       w.isReleasedWhenClosed = false
       w.delegate = self
       w.contentView = NSHostingView(rootView: SetupView(model: model, flow: setup) { [weak self] in
         self?.setupWindow?.orderOut(nil)
+        self?.startUpdaterIfReady()
         self?.openMain()
       })
       w.center()
@@ -220,10 +274,13 @@ import SwiftUI
     model.destination = .settings
   }
   @objc func manualRefresh() {
+    performManualRefresh(nil)
+  }
+  private func performManualRefresh(_ provider: ProviderID?) {
     guard !quitting, !model.manuallyRefreshing else { return }
     model.manuallyRefreshing = true
     Task {
-      await store.refresh()
+      await store.refresh(provider, intent: .userInitiated)
       await store.waitForIdle()
       model.manuallyRefreshing = false
     }
@@ -234,10 +291,23 @@ import SwiftUI
   }
   @objc func quit() { NSApp.terminate(nil) }
   func windowWillClose(_ notification: Notification) { Diagnostics.shared.record("window-close") }
+  func windowShouldClose(_ sender: NSWindow) -> Bool {
+    if sender === updateWindow { model.updates.dismissPrompt() }
+    return true
+  }
   func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
   func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
-    openMain()
+    reopenMain()
     return true
+  }
+  @objc private func reopenMain() {
+    if model.updates.promptVisible {
+      showUpdatePrompt()
+      return
+    }
+    let alreadyVisible = window?.isVisible == true
+    openMain()
+    if alreadyVisible { updates.foregroundOpened() }
   }
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard !quitting else { return .terminateLater }
@@ -250,6 +320,7 @@ import SwiftUI
     status = nil
     window?.orderOut(nil)
     setupWindow?.orderOut(nil)
+    updateWindow?.orderOut(nil)
     let service = store!
     Task.detached {
       await service.stop()
@@ -352,6 +423,10 @@ import SwiftUI
           case "menu-refresh": self.status?.menu?.performActionForItem(at: 1)
           case "menu-quit": self.status?.menu?.performActionForItem(at: 4)
           case "open": self.openMain()
+          case "setup": self.openSetup()
+          case "setup-next": self.setup.next()
+          case "setup-back": self.setup.back()
+          case "fixture-usage": self.applyUsageFixture()
           case "settings": self.openSettings()
           case "login-on": self.model.loginItem.setEnabled(true)
           case "login-off": self.model.loginItem.setEnabled(false)
@@ -374,7 +449,8 @@ import SwiftUI
               let file = URL(fileURLWithPath: root).appendingPathComponent(name + ".png")
               if item["surface"].string == "notch" {
                 self.notch.capture(to: file)
-              } else if let view = self.window.contentView,
+              } else if let view = (item["surface"].string == "setup"
+                ? self.setupWindow?.contentView : self.window?.contentView),
                 let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
               {
                 view.cacheDisplay(in: view.bounds, to: bitmap)
@@ -402,4 +478,31 @@ import SwiftUI
       }
     #endif
   }
+  #if DEBUG
+    private func applyUsageFixture() {
+      Task { [weak self] in
+        guard let self else { return }
+        await self.store.suspend()
+        let now = Date()
+        for provider in ProviderID.allCases {
+          let short = try! UsageWindow(id: "five_hour", bucket: provider.rawValue, label: "5-hour",
+            durationMinutes: 300, used: provider == .codex ? 24 : 18,
+            reset: now.addingTimeInterval(7_200))
+          let weekly = try! UsageWindow(id: "seven_day", bucket: provider.rawValue, label: "Weekly",
+            durationMinutes: 10_080, used: provider == .codex ? 37 : 42,
+            reset: now.addingTimeInterval(345_600))
+          var windows = [short, weekly]
+          if provider == .claude {
+            windows.append(try! UsageWindow(id: "seven_day_sonnet", bucket: "sonnet", label: "Sonnet",
+              durationMinutes: 10_080, used: 12, reset: now.addingTimeInterval(345_600)))
+          }
+          var snapshot = UsageSnapshot(provider: provider)
+          snapshot.apply(.success(.init(binding: "synthetic-preview", windows: windows, date: now)))
+          self.model.usage[provider] = snapshot
+        }
+        self.notch.update(self.model)
+        self.validationEvent("fixture-usage")
+      }
+    }
+  #endif
 }

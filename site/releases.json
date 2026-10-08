@@ -1,0 +1,82 @@
+{
+  "schema_version": 1,
+  "releases": [
+    {
+      "platform": "macos",
+      "version": "1.1.3",
+      "build": 3,
+      "status": "published",
+      "published_at": "2026-10-05",
+      "title": "A clearer view of your usage.",
+      "summary": "Simpler setup, more complete allowance details and a monitor you can move.",
+      "sections": [
+        {
+          "title": "Getting started",
+          "items": [
+            "A lighter welcome screen with the Llumi app icon.",
+            "Turn Codex and Claude Code monitoring on or off during setup and in Settings.",
+            "Simpler setup steps with slower installation illustrations.",
+            "Check Setup separates sign-in readiness from monitoring availability. Retry explains when another check can run while respecting provider rate limits."
+          ]
+        },
+        {
+          "title": "Usage and allowances",
+          "items": [
+            "View the supported limits your account reports, with clear labels, remaining percentages and reset times when available.",
+            "The compact monitor prioritizes the five-hour limit, then the weekly limit. If neither is reported, it uses another supported time window.",
+            "Clearer missing, unsupported, unavailable and stale states. Saved readings are cleared if your account changes or cannot be verified.",
+            "Codex and Claude usage cards have equal sizing, clearer light-mode boundaries and consistent provider artwork."
+          ]
+        },
+        {
+          "title": "Your monitor",
+          "items": [
+            "Drag the monitor to a position that suits you. Llumi saves its position and keeps it within the display.",
+            "Expanded details show the supported limits for each provider. Command-1 opens the complete Usage view."
+          ]
+        },
+        {
+          "title": "Updates",
+          "items": [
+            "One Settings switch enables automatic checking and downloading. With it off, updates remain manual.",
+            "Check for Updates checks and downloads an available application update without changing your automatic-update choice.",
+            "When a downloaded update is ready, choose Restart and update or Later. Later keeps Llumi running; the prepared update can install when you quit.",
+            "After a verified update, Llumi shows a one-time confirmation with a link to that version’s release notes.",
+            "Your first update from 1.1.2 uses its existing updater. The new completion popup stays quiet unless installation can be verified."
+          ]
+        }
+      ],
+      "notice": "Requires macOS 14 or later. Existing 1.1.2 users can update through Llumi.",
+      "source_documents": [
+        "docs/releases/2026-10-macos-1.1.3.md",
+        "docs/releases/2026-10-macos-1.1.3-preview.md",
+        "docs/releases/2026-10-macos-1.1.3-allowance-review.md",
+        "docs/releases/2026-10-macos-1.1.3-setup-retry-review.md",
+        "docs/macos/UPDATES.md"
+      ]
+    },
+    {
+      "platform": "macos",
+      "version": "1.1.2",
+      "build": 2,
+      "status": "published",
+      "published_at": "2026-10-03",
+      "title": "In-app updates arrive.",
+      "summary": "Update support for future macOS releases and clearer Claude usage labels.",
+      "sections": [
+        {
+          "title": "What's new",
+          "items": [
+            "Adds in-app update support for future macOS releases.",
+            "Prevents internal Claude usage bucket names from appearing in the Usage interface."
+          ]
+        }
+      ],
+      "notice": "Existing Llumi 1.1.1 users need to install 1.1.2 manually once. Future compatible macOS updates can then be installed directly from Llumi.",
+      "source_documents": [
+        "docs/releases/2026-10-macos-1.1.2.md",
+        "site/appcast.xml"
+      ]
+    }
+  ]
+}

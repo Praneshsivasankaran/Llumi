@@ -18,3 +18,9 @@ test("canonical routes pass through to static assets with original status", asyn
   } } });
   assert.equal(result.status, 404);
 });
+
+test("release version URLs survive canonical redirects", async () => {
+  const result = await worker.fetch(new Request("http://www.tryllumi.com/releases/macos/1.1.2/?from=app"), {});
+  assert.equal(result.status, 301);
+  assert.equal(result.headers.get("location"), "https://tryllumi.com/releases/macos/1.1.2/?from=app");
+});

@@ -1,6 +1,10 @@
 # Usage
 
-Windows 2.1.3 locally adopts the macOS 1.1.3 allowance contract. [Windows catch-up requirements](windows-213.md) records the current Windows presentation, setup and intentional native differences.
+macOS 1.1.3 follows [the approved allowance requirements](allowance-113.md). Windows 2.1.3 adopts that allowance contract; [Windows catch-up requirements](windows-213.md) records its presentation, setup and intentional native differences. The rules below supersede the earlier longest-window, five-hour-only and weekly-secondary behavior.
+
+macOS 1.1.3 shows only enabled providers in equal-width, equal-height cards aligned at headings, primary values and bars. Reserve whitespace for differing window counts rather than inventing data. Both providers off shows a Settings action. Remove the introductory allowance subtitle and signed-in-provider footer; retain observation age and refresh. Windows retains its native card layout described in the Windows requirements.
+
+macOS navigation keeps Usage, Settings and About in the sidebar. Remove the default Show/Hide Sidebar toolbar button; retain the existing sidebar layout and navigation.
 
 Llumi is one product with native platform implementations. Its primary destinations are Usage, Settings and About. Provider names are Codex and Claude Code. The official Llumi icon identifies the app. Windows uses its full-color icon in the notification area; macOS retains its native monochrome menu-bar variant.
 
