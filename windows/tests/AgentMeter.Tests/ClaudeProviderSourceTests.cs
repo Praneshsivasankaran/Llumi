@@ -233,12 +233,21 @@ public sealed class ClaudeProviderSourceTests
             finally { finished.TrySetResult(); }
         });
         var cli = Good(ClaudeClient.Code);
-        IClaudeUsageSource[] sources = verifiedPeerAvailable ? [source, Constant(cli)] : [source];
-        var provider = new ClaudeProvider(sources, () => Now, TimeSpan.FromMilliseconds(250));
+        var peerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var peer = new Source(ClaudeClient.Code, _ =>
+        {
+            peerStarted.TrySetResult();
+            return Task.FromResult(cli);
+        });
+        IClaudeUsageSource[] sources = verifiedPeerAvailable ? [source, peer] : [source];
+        // The deadline includes ThreadPool dispatch. Leave room for parallel CI work;
+        // this checks timeout isolation and duplicate suppression, not scheduling speed.
+        var provider = new ClaudeProvider(sources, () => Now, TimeSpan.FromSeconds(2));
         try
         {
             var first = provider.QueryAsync(CancellationToken.None);
             await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (verifiedPeerAvailable) await peerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var firstResult = await first.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(verifiedPeerAvailable ? FailureKind.None : FailureKind.Timeout, firstResult.Failure);
             Assert.Same(verifiedPeerAvailable ? cli.Usage.Snapshot : null, firstResult.Snapshot);
@@ -246,11 +255,14 @@ public sealed class ClaudeProviderSourceTests
             Assert.Equal(verifiedPeerAvailable ? FailureKind.None : FailureKind.Timeout, second.Failure);
             Assert.Same(verifiedPeerAvailable ? cli.Usage.Snapshot : null, second.Snapshot);
             Assert.Equal(1, source.Calls);
+            Assert.Equal(verifiedPeerAvailable ? 2 : 0, peer.Calls);
         }
         finally
         {
             release.TrySetResult(Good(ClaudeClient.Desktop));
-            await finished.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            // A deadline can cancel a queued delegate before it starts. In that case
+            // no worker can signal finished; do not mask the original start failure.
+            if (started.Task.IsCompleted) await finished.Task.WaitAsync(TimeSpan.FromSeconds(5));
         }
     }
 
