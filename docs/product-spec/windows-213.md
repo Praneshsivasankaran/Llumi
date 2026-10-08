@@ -2,6 +2,8 @@
 
 The local owner-review candidate is v2.1.3 (Windows file/assembly version 2.1.3.0). Its first-time review window shows this version so the reviewed build is identifiable. Microsoft Store submission remains on hold until the owner explicitly approves it.
 
+The owner approved the tested build for Microsoft Store submission, GitHub release notes and website publication on 2026-10-08, superseding the local-only distribution hold in this historical review contract. Record actual submission and publication separately in the [Windows 2.1.3 release record](../releases/2026-10-windows-2.1.3.md); approval alone does not establish Store availability. The accepted application behavior below remains the release contract.
+
 Reference: macOS 1.1.3 tag `llumi-macos-1.1.3`, particularly `allowance-113.md`. This Windows contract supersedes the earlier five-hour-only Claude and longest-Codex selection rules. macOS source and published releases remain unchanged.
 
 Preserve supported general, model and additional time windows with explicit scope, duration, percentage and optional reset. Compact selects usable general five-hour, then weekly, then deterministic shortest duration. Unknown identifiers and credit/spend metadata never become consumer allowances. Zero percent used and zero remaining are valid. Missing values remain unknown. Merge equivalent Codex legacy/map windows and reject contradictory mirrors. Claude Sonnet, Opus and labeled model_scoped weekly windows remain model-specific.

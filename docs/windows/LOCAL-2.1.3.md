@@ -1,5 +1,7 @@
 # Windows 2.1.3 local review
 
+The owner accepted the tested local build and authorized Microsoft Store submission, GitHub release notes and website publication on 2026-10-08. That authorization supersedes the local-only hold recorded below; the implementation and validation history remains unchanged. Submission, certification and public availability are separate verified steps. See the [Windows 2.1.3 release record](../releases/2026-10-windows-2.1.3.md) for current release status and customer notes.
+
 Local catch-up implementation based on the macOS 1.1.3 allowance/setup requirements. Reference behavior is taken from the released tag, not from the different platform version numbers. This supersedes the earlier Windows 2.0.3 restriction to general Claude windows.
 
 ## Changes

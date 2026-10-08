@@ -1,2 +1,4 @@
 # Preserve the upstream rich-text license byte for byte.
 windows/packaging/licenses/Microsoft.Windows.SDK-LICENSE.rtf binary
+# Preserve the signed macOS feed across Windows checkouts and site deployments.
+site/appcast.xml -text

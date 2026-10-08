@@ -8,7 +8,7 @@ const root = path.resolve(__dirname, "../..");
 const config = JSON.parse(fs.readFileSync(path.join(root, "site/config.json"), "utf8"));
 const releases = JSON.parse(fs.readFileSync(path.join(root, "site/releases.json"), "utf8"));
 const releaseRoutes = releases.releases
-  .filter((release) => release.status === "published")
+  .filter((release) => ["published", "submitted"].includes(release.status))
   .map((release) => `releases/${release.platform}/${release.version}/`);
 const output = path.join(root, ".review");
 fs.mkdirSync(output, { recursive: true });

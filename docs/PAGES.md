@@ -31,6 +31,8 @@ The browser harness covers Chromium, Firefox and WebKit; desktop and narrow layo
 
 `wrangler.jsonc` declares only the two owner-confirmed website domains. `site/worker.mjs` implements canonical redirects, then delegates to static assets. The builder also copies the finalized Sparkle-signed `site/appcast.xml` byte for byte to `/appcast.xml`; verify the deployed feed and its enclosure signature against the public DMG. Deployment is explicit with `wrangler deploy` after build, tests and authorization. Do not alter unrelated DNS or mail records. The GitHub website workflow validates and packages output; it does not deploy automatically.
 
+The owner authorized the Windows 2.1.3 release and its website notes on 2026-10-08. Keep its entry in `site/releases.json` as `preview` until a real Store submission is verified. Then use `submitted`, its verified `submitted_at` date and a null `published_at`; public output labels it Microsoft Store review. Keep the Windows download version at the last verified public version until Store publication is confirmed. Promote to `published` with the actual publication date only after that check. Mac entries, download URLs and the signed feed are preserved throughout.
+
 ## Historical Store URL compatibility
 
 Preserve these exact, case-sensitive historical routes while Store propagation and installed-client migration still depend on them:

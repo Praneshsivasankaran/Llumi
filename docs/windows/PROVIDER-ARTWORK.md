@@ -7,7 +7,7 @@ Windows uses a shared renderer for Usage, setup, Settings and the compact/expand
 
 The source assets were verified against the immutable `llumi-macos-1.1.3` tag. Windows checkout line endings and the mascot's final newline differ; normalizing CRLF to LF and ensuring exactly one final newline reproduces the source hashes above. No geometry, scripts or external references were added. The older sunburst asset is retained and embedded by the project resource wildcard, but is not selected by the Windows renderer; the package inventory records it separately from the current mascot.
 
-The official Llumi Raspberry gauge is original Llumi artwork. Its embedded Windows icon supplies the welcome, dashboard, tray and application identity. It replaces the historical three-bars identity.
+The official Llumi Raspberry gauge is original Llumi artwork. Setup welcome and completion downsample the embedded 1024-pixel `assets/brand/llumi-dark.png`; the embedded Windows icon supplies the dashboard, tray and application identity. These replace the historical three-bars identity.
 
 Provider marks remain vendor property under their applicable artwork and trademark terms; this provenance record does not grant redistribution rights or imply endorsement. See [third-party notices](../../THIRD-PARTY-NOTICES.md). The exact delivered package inventory records the hashes of its built payload.
 

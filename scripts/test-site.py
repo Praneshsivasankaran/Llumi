@@ -108,11 +108,11 @@ class SiteTests(unittest.TestCase):
                 for item in builder.load_releases(include_review=True)}
             self.assertEqual(files, expected)
             self.assertFalse((output / "review").exists())
-            archive = (output / "releases/index.html").read_text()
+            archive = (output / "releases/index.html").read_text(encoding="utf-8")
             self.assertNotIn("Preview the update flow", archive)
             self.assertNotIn("update-flow", archive)
             for item in builder.load_releases(include_review=True):
-                text = (output / builder.release_route(item) / "index.html").read_text()
+                text = (output / builder.release_route(item) / "index.html").read_text(encoding="utf-8")
                 self.assertIn('name="robots" content="noindex, nofollow"', text)
                 if item["status"] == "preview":
                     self.assertIn("Not released yet", text)
@@ -126,7 +126,7 @@ class SiteTests(unittest.TestCase):
                 # Rebuilding the same public pages must remove review noindex.
                 builder.build(output, include_review=False)
                 for item in builder.load_releases():
-                    text = (output / builder.release_route(item) / "index.html").read_text()
+                    text = (output / builder.release_route(item) / "index.html").read_text(encoding="utf-8")
                     self.assertNotIn('name="robots" content="noindex, nofollow"', text)
 
     def test_removed_browser_preview_output_requires_a_fresh_directory(self):
@@ -140,7 +140,7 @@ class SiteTests(unittest.TestCase):
                     builder.build(output, include_review=include_review)
 
     def test_release_metadata_rejects_invalid_identity_and_release_claims(self):
-        original = json.loads((ROOT / "site/releases.json").read_text())
+        original = json.loads((ROOT / "site/releases.json").read_text(encoding="utf-8"))
         # Keep malformed-preview coverage after all actual release entries ship.
         original["releases"][0].update(status="preview", published_at=None)
         for patch_key, patch_value in (("version", "../../oops"), ("build", True), ("status", "latest"), ("published_at", "2026-10-05")):
@@ -164,6 +164,59 @@ class SiteTests(unittest.TestCase):
             self.assertNotIn("<script>", rendered)
             self.assertNotIn("<img src=x", rendered)
             self.assertIn("&lt;script&gt;", rendered)
+
+    def test_store_submission_is_visible_without_claiming_publication_or_changing_downloads(self):
+        published = [item for item in builder.load_releases() if item["status"] == "published"]
+        original = json.loads((ROOT / "site/releases.json").read_text(encoding="utf-8"))
+        candidate = json.loads(json.dumps(original["releases"][0]))
+        candidate.update(platform="windows", version="9.8.7", build=1, status="submitted",
+                         published_at=None, submitted_at="2099-10-08",
+                         notice="Submitted to Microsoft Store. Availability awaits review.")
+        metadata = {"schema_version": 1, "releases": [candidate, *published]}
+        with patch.object(builder.json, "loads", return_value=metadata):
+            selected = builder.load_releases()
+        self.assertIn(candidate, selected)
+        config = builder.load_config()
+        with tempfile.TemporaryDirectory() as directory, patch.object(builder, "load_releases", return_value=selected):
+            output = Path(directory)
+            builder.build(output)
+            archive = (output / "releases/index.html").read_text(encoding="utf-8")
+            detail = (output / builder.release_route(candidate) / "index.html").read_text(encoding="utf-8")
+            for text in (archive, detail):
+                self.assertIn("Microsoft Store review", text)
+                self.assertIn("Submitted 8 October 2099", text)
+                self.assertNotIn("Local preview", text)
+                self.assertNotIn('name="robots" content="noindex, nofollow"', text)
+            latest = max(published, key=lambda item: (item["published_at"], item["build"]))
+            platform = "macOS" if latest["platform"] == "macos" else "Windows"
+            self.assertIn(f'Latest available release <strong>{platform} {latest["version"]}</strong>', archive)
+            home = (output / "index.html").read_text(encoding="utf-8")
+            self.assertIn("Version " + config["windows"]["version"], home)
+            self.assertNotIn("Version 9.8.7", home)
+            self.assertEqual((output / "appcast.xml").read_bytes(), (ROOT / "site/appcast.xml").read_bytes())
+
+    def test_store_submission_requires_windows_and_verified_date_without_publication_claim(self):
+        original = json.loads((ROOT / "site/releases.json").read_text(encoding="utf-8"))
+        candidate = original["releases"][0]
+        candidate.update(platform="windows", version="9.8.7", status="submitted", published_at=None, submitted_at="2099-10-08")
+        for changes in ({"platform": "macos"}, {"published_at": "2099-10-08"},
+                        {"submitted_at": None}, {"submitted_at": True}, {"submitted_at": "not-a-date"},
+                        {"status": "preview"}):
+            with self.subTest(changes=changes):
+                metadata = json.loads(json.dumps(original))
+                metadata["releases"][0].update(changes)
+                with patch.object(builder.json, "loads", return_value=metadata), self.assertRaises(ValueError):
+                    builder.load_releases(include_review=True)
+
+    def test_published_windows_notes_name_the_platform_in_latest_release(self):
+        candidate = dict(builder.load_releases()[0])
+        candidate.update(platform="windows", version="9.8.7", status="published", published_at="2099-10-09")
+        with tempfile.TemporaryDirectory() as directory, patch.object(builder, "load_releases", return_value=[candidate]):
+            output = Path(directory)
+            builder.build(output)
+            archive = (output / "releases/index.html").read_text(encoding="utf-8")
+            self.assertIn("Latest available release <strong>Windows 9.8.7</strong>", archive)
+            self.assertNotIn("macOS 9.8.7", archive)
 
     def test_signed_appcast_is_preserved_without_rendering(self):
         feed = (SITE / "appcast.xml").read_bytes()
