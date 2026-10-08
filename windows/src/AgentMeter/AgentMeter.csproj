@@ -20,6 +20,7 @@
   </PropertyGroup>
   <ItemGroup>
     <EmbeddedResource Include="Assets/Llumi.ico" />
+    <EmbeddedResource Include="../../../assets/brand/llumi-dark.png" LogicalName="AgentMeter.Assets.Llumi.png" />
     <EmbeddedResource Include="Assets/*.svg" />
     <EmbeddedResource Include="Assets/SetupGuides/*.gif" />
     <EmbeddedResource Include="Assets/SetupGuides/*.png" />

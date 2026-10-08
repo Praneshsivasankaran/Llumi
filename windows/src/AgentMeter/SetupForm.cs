@@ -23,6 +23,7 @@ internal sealed class SetupForm : Form
     private readonly Panel welcome = new() { Dock = DockStyle.Fill, Name = "welcome", Visible = false };
     private readonly Panel welcomeGroup = new() { Name = "welcomeGroup" };
     private readonly Panel welcomeLogo = new() { Name = "welcomeLogo", AccessibleName = "Llumi logo" };
+    private readonly Bitmap logoArtwork = AppIcon.LoadArtwork();
     private readonly Label welcomeName = new() { Text = "Llumi", AutoSize = true, TextAlign = ContentAlignment.MiddleCenter };
     private readonly Button next = Palette.Button("Continue", "Continue");
     private readonly Button back = Palette.Button("Back", "Back");
@@ -60,7 +61,7 @@ internal sealed class SetupForm : Form
         body.Controls.Add(page); page.Controls.Add(content); page.Controls.Add(navigation);
         welcome.Controls.Add(welcomeGroup); welcomeGroup.Controls.Add(welcomeLogo); welcomeGroup.Controls.Add(welcomeName);
         welcomeName.Font = welcomeFont;
-        welcomeLogo.Paint += (_, e) => { using var mark = AppIcon.Load(welcomeLogo.Width); e.Graphics.DrawIcon(mark, welcomeLogo.ClientRectangle); };
+        welcomeLogo.Paint += (_, e) => DrawLogo(e.Graphics, welcomeLogo.ClientRectangle);
         welcome.SizeChanged += (_, _) => LayoutWelcome();
         welcomeName.SizeChanged += (_, _) => LayoutWelcome();
         next.AutoSize = back.AutoSize = true; next.AutoSizeMode = back.AutoSizeMode = AutoSizeMode.GrowAndShrink;
@@ -84,6 +85,17 @@ internal sealed class SetupForm : Form
         Shown += (_, _) => FocusPageStart();
     }
     private int S(int value) => initialized ? (int)Math.Round(value * DeviceDpi / 96d) : value;
+    private void DrawLogo(Graphics graphics, Rectangle bounds)
+    {
+        var state = graphics.Save();
+        try
+        {
+            graphics.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            graphics.DrawImage(logoArtwork, bounds, 0, 0, logoArtwork.Width, logoArtwork.Height, GraphicsUnit.Pixel);
+        }
+        finally { graphics.Restore(state); }
+    }
     private void TextLine(string text, bool heading = false, int spacing = 12, FlowLayoutPanel? parent = null)
     {
         (parent ?? content).Controls.Add(new Label { Text = text, AutoSize = true, MaximumSize = new Size(S(520), 0),
@@ -325,7 +337,7 @@ internal sealed class SetupForm : Form
                 appearance.Margin = Padding.Empty; appearance.Width = S(180); appearanceRow.Controls.Add(appearance); break;
             case SetupStep.Done:
                 var finishLogo = new Panel { Name = "finishLogo", Height = S(96), Margin = Padding.Empty, AccessibleName = "Llumi logo" };
-                finishLogo.Paint += (_, e) => { using var mark = AppIcon.Load(S(72)); e.Graphics.DrawIcon(mark, new Rectangle((finishLogo.Width - S(72)) / 2, 0, S(72), S(72))); };
+                finishLogo.Paint += (_, e) => DrawLogo(e.Graphics, new Rectangle((finishLogo.Width - S(72)) / 2, 0, S(72), S(72)));
                 content.Controls.Add(finishLogo);
                 content.Controls.Add(new Label { Name = "finishHeading", Text = "You’re all set", AutoSize = true, Font = headingFont, TextAlign = ContentAlignment.MiddleCenter, Margin = Padding.Empty }); break;
         }
@@ -488,7 +500,7 @@ internal sealed class SetupForm : Form
         next.FlatAppearance.MouseDownBackColor = Color.FromArgb(0, 70, 130);
     }
     protected override void Dispose(bool disposing)
-    { base.Dispose(disposing); if (disposing) { countdown.Dispose(); retryMessage.Dispose(); Icon?.Dispose(); bodyFont.Dispose(); headingFont.Dispose(); welcomeFont.Dispose(); commandFont.Dispose(); } }
+    { base.Dispose(disposing); if (disposing) { countdown.Dispose(); retryMessage.Dispose(); Icon?.Dispose(); logoArtwork.Dispose(); bodyFont.Dispose(); headingFont.Dispose(); welcomeFont.Dispose(); commandFont.Dispose(); } }
 
     private sealed class SetupViewport : Panel
     {
