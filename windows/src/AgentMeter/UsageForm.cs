@@ -89,7 +89,6 @@ internal sealed class UsageForm : Form
         appearanceLabel.Location = new(S(20), S(164)); appearance.SetBounds(S(20), S(194), S(200), S(30));
         usageTab.Click += (_, _) => ShowUsage(); settingsTab.Click += (_, _) => ShowSettings(); aboutTab.Click += (_, _) => ShowAbout();
         refresh.Click += (_, _) => RefreshRequested?.Invoke();
-        actions.Items.Add("Open Llumi", null, (_, _) => ShowUsage());
         actions.Items.Add("Refresh", null, (_, _) => RefreshRequested?.Invoke());
         actions.Items.Add("Settings", null, (_, _) => ShowSettings());
         actions.Items.Add("About Llumi", null, (_, _) => ShowAbout());
