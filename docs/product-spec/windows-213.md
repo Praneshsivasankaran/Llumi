@@ -18,7 +18,7 @@ Windows keeps native WinForms/tray, PowerShell copy-only setup instructions, aut
 
 Windows omits Setup Llumi reopen actions and their reserved layout space from Settings and application/tray menus. First-launch onboarding and its completion flag remain unchanged. The separate development harness retains its setup controls. Provider Retry and normal preferences remain in Settings; Copy Diagnostics is omitted from Windows consumer surfaces. This cleanup does not change macOS.
 
-The main Windows app's overflow menu omits Open Llumi because the app is already open. Keep Refresh, Settings, About Llumi and Quit there. Retain Open Llumi in the notification-area and compact-monitor menus, where it opens the main window. macOS menus remain unchanged.
+The main Windows app's overflow menu contains Settings, About Llumi and Quit. Omit Open Llumi because the app is already open, and omit the duplicate Refresh action because the header provides it. Retain Open Llumi and Refresh in the notification-area and compact-monitor menus. macOS menus remain unchanged.
 
 Windows review refinements: keep general labels such as 5-hour limit and Weekly limit; use Spark limit for the Spark allowance and only the model name (Opus, Sonnet) for model rows. Preserve duration/scope metadata for reset, selection and accessibility without the verbose visible prefixes. The dashboard identity uses the same official Llumi icon as the application and setup welcome. Provide the complete first-time setup journey in a fresh local review profile; synthetic provider statuses must remain identified as examples. Resetting the review profile does not imply uninstalling the Store app or deleting provider credentials.
 
