@@ -19,6 +19,29 @@ public sealed class PhysicalReviewTests
         return bitmap.GetPixel(bitmap.Width / 2, bitmap.Height - Math.Max(4, form.DeviceDpi / 24)).GetBrightness() > .65;
     }
     [Theory]
+    [InlineData(1)] [InlineData(2)]
+    public Task DashboardHeaderRendersOfficialLlumiTileWithTitleAlignment(int appearance) => Sta(() =>
+    {
+        try
+        {
+            Palette.Apply((Appearance)appearance);
+            using var form = new UsageForm(["Codex"], SystemIcons.Application);
+            form.SetPreferences(new(Appearance: (Appearance)appearance)); form.Show();
+            var header = form.Controls.OfType<Panel>().Single(panel => panel.Controls.OfType<Label>().Any(label => label.Text == "Llumi"));
+            var title = header.Controls.OfType<Label>().Single(label => label.Text == "Llumi");
+            using var bitmap = new Bitmap(header.Width, header.Height); header.DrawToBitmap(bitmap, header.ClientRectangle);
+            int S(int value) => (int)Math.Round(value * form.DeviceDpi / 96f);
+            var bounds = new Rectangle(S(18), S(14), S(24), S(24));
+            var left = bitmap.GetPixel(bounds.Left + (int)(bounds.Width * .23), bounds.Top + (int)(bounds.Height * .55));
+            var right = bitmap.GetPixel(bounds.Left + (int)(bounds.Width * .77), bounds.Top + (int)(bounds.Height * .55));
+            Assert.True(left.B > left.G, "Header must retain the official tile's purple left side.");
+            Assert.True(right.R > right.G && right.R > right.B, "Header must retain the official tile's raspberry right side.");
+            Assert.Equal(Palette.Background.ToArgb(), bitmap.GetPixel(bounds.Left, bounds.Top).ToArgb());
+            Assert.True(title.Left > bounds.Right); Assert.InRange(Math.Abs(title.Top + title.Height / 2 - bounds.Top - bounds.Height / 2), 0, 1);
+        }
+        finally { Palette.Apply(Appearance.System); }
+    });
+    [Theory]
     [InlineData(1, false, true)] [InlineData(2, true, false)]
     [InlineData(0, true, true)] [InlineData(0, false, false)]
     public Task MonitorUsesEffectiveAppearance(int preference, bool osLight, bool expectedLight) => Sta(() =>
@@ -55,22 +78,108 @@ public sealed class PhysicalReviewTests
         finally { Palette.Apply(Appearance.System); }
     });
     [Fact]
-    public Task SettingsContainsLiveChecksAndSanitizedDiagnostics() => Sta(() =>
+    public Task CleanVisibleLabelsKeepModelAndAdditionalPeriodsAccessible() => Sta(() =>
+    {
+        var now = DateTimeOffset.UtcNow;
+        var state = new ProviderState("Claude", ProviderStatus.Ready, new([
+            new("five_hour", "raw general", 20, now.AddHours(5)),
+            new("sonnet", "raw model", 40, now.AddDays(3), 10080, UsageScope.Model, "Sonnet"),
+            new("spark", "raw additional", 80, now.AddHours(5), 300, UsageScope.Additional, "Spark")], now, "fixture"));
+        using var hints = new ToolTip(); using var card = new ProviderCard(hints) { Width = 390 };
+        card.Render(state, now, 1);
+        var model = card.Controls.OfType<Label>().Single(label => label.Text == "Sonnet");
+        var additional = card.Controls.OfType<Label>().Single(label => label.Text == "Spark limit");
+        Assert.Equal("Sonnet", hints.GetToolTip(model)); Assert.Equal("Spark limit", hints.GetToolTip(additional));
+        Assert.Contains("Weekly model allowance", model.AccessibleName);
+        Assert.Contains("5-hour additional allowance", additional.AccessibleName);
+        Assert.Contains("Weekly model allowance", card.AccessibleDescription);
+        using var monitor = new MonitorForm(["Claude"], SystemIcons.Application); monitor.Render([state], now);
+        var accessible = monitor.AccessibilityObject.GetChild(0)!.Name!;
+        Assert.Contains("Sonnet · Weekly model allowance", accessible); Assert.Contains("Spark limit · 5-hour additional allowance", accessible);
+        Assert.DoesNotContain("Model:", accessible); Assert.DoesNotContain("Additional:", accessible);
+    });
+    [Fact]
+    public Task SettingsRetainsLiveChecksWithoutDiagnosticsOrSetupActions() => Sta(() =>
     {
         using var icon = AppIcon.Load(); using var form = new UsageForm(["Codex", "Claude Code"], icon);
         form.Show(); form.ShowSettings();
         var refreshes = 0; form.RefreshRequested += () => refreshes++;
-        form.Render([new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "private@example.test")),
-            new("Claude Code", ProviderStatus.Error, Detail: "secret-token", Failure: FailureKind.LoggedOut)], false, false);
+        form.Render([new("Codex", ProviderStatus.Ready, new([], DateTimeOffset.UtcNow, "private@example.test"), Authentication: AuthenticationStatus.Verified),
+            new("Claude Code", ProviderStatus.Error, Detail: "secret-token", Failure: FailureKind.LoggedOut, Authentication: AuthenticationStatus.SignedOut)], false, false);
         var controls = Controls(form).ToArray();
-        Assert.Contains(controls.OfType<Label>(), c => c.Visible && c.Text.Contains("Authentication: verified"));
-        Assert.Contains(controls.OfType<Label>(), c => c.Visible && c.Text.Contains("Authentication: signed-out"));
-        controls.OfType<Button>().Single(b => b.Text == "Check Again").PerformClick(); Assert.Equal(1, refreshes);
-        Assert.Contains(controls.OfType<Button>(), b => b.Text == "Copy Diagnostics" && b.Parent?.Name == "settings");
-        Assert.DoesNotContain("private", form.DiagnosticReport()); Assert.DoesNotContain("secret", form.DiagnosticReport());
+        Assert.Contains(controls.OfType<Label>(), c => c.Visible && c.Text.Contains("Signed in") && c.Text.Contains("Allowances not reported"));
+        Assert.Contains(controls.OfType<Label>(), c => c.Visible && c.Text.Contains("Sign in required"));
+        controls.OfType<Button>().Single(b => b.Text == "Retry").PerformClick(); Assert.Equal(1, refreshes);
+        Assert.DoesNotContain(controls.OfType<Button>(), b => b.Text == "Copy Diagnostics");
+        Assert.DoesNotContain(controls, c => c.Text.Contains("private") || c.Text.Contains("secret"));
+        var menu = (ContextMenuStrip)typeof(UsageForm).GetField("actions", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)!.GetValue(form)!;
+        Assert.DoesNotContain(menu.Items.Cast<ToolStripItem>(), item => item.Text?.Contains("Setup Llumi") == true);
         form.Render([new("Codex", ProviderStatus.Error, Failure: FailureKind.Timeout)], false, false);
-        Assert.DoesNotContain(controls.OfType<Label>(), c => c.Text.Contains("Authentication: verified"));
-        form.ShowUsage(); Assert.False(controls.OfType<Button>().Single(b => b.Text == "Copy Diagnostics").Visible);
+        Assert.DoesNotContain(controls.OfType<Label>(), c => c.Text.Contains("Signed in"));
+        form.ShowUsage(); Assert.DoesNotContain(Controls(form), c => c.Text.Contains("Diagnostics copied"));
+    });
+    [Fact]
+    public Task SettingsStatusAccessibilityTracksCheckingMalformedStaleAndDisabledStates() => Sta(() =>
+    {
+        using var form = new UsageForm(["Codex"], SystemIcons.Application);
+        form.Show(); form.ShowSettings();
+        var label = Controls(form).OfType<Label>().Single(control => control.AccessibleName == "Codex setup status");
+        var now = DateTimeOffset.UtcNow;
+        var state = new ProviderState("Codex", ProviderStatus.Error, Failure: FailureKind.Malformed);
+        form.Render([state], false, false);
+        Assert.Contains("Sign-in not verified", label.AccessibilityObject.Description);
+        Assert.Contains("Allowance format not supported", label.AccessibilityObject.Description);
+        state = new("Codex", ProviderStatus.Ready,
+            new([new("five_hour", "fixture", 25, now.AddHours(5))], now.AddMinutes(-5), "private-source@example.test", IsCached: true),
+            Failure: FailureKind.Network, Authentication: AuthenticationStatus.Verified, Detail: "private-notice@example.test");
+        form.Render([state], false, false);
+        var description = label.AccessibilityObject.Description!;
+        Assert.Contains("Signed in", description); Assert.Contains("stale", description);
+        Assert.Contains("cached reading", description); Assert.Contains("last retrieval failed", description);
+        Assert.DoesNotContain("private-", description);
+        form.Render([state with { Status = ProviderStatus.Loading }], true, false);
+        Assert.Contains("Signed in", label.AccessibilityObject.Description);
+        Assert.Contains("Checking allowances", label.AccessibilityObject.Description);
+        form.SetPreferences(new(CodexEnabled: false));
+        Assert.Equal("Monitoring off", label.AccessibilityObject.Description);
+        Assert.DoesNotContain("Updated", label.AccessibilityObject.Description);
+    });
+
+    [Fact]
+    public Task SettingsRetryStillHonorsEveryProviderGuard() => Sta(() =>
+    {
+        using var form = new UsageForm(["Codex", "Claude Code"], SystemIcons.Application);
+        form.Show(); form.ShowSettings();
+        var retry = Controls(form).OfType<Button>().Single(control => control.AccessibleName == "Retry provider checks");
+        var now = DateTimeOffset.UtcNow;
+        ProviderState[] states = [new("Codex", ProviderStatus.Loading),
+            new("Claude Code", ProviderStatus.Error, Failure: FailureKind.RateLimited, RetryAt: now.AddMinutes(5))];
+        form.Render(states, true, false);
+        Assert.False(retry.Enabled); Assert.Equal("Checking…", retry.Text);
+        states[1] = states[1] with { RetryAt = now.AddSeconds(-1) };
+        form.Render(states, true, false);
+        Assert.True(retry.Enabled); Assert.Equal("Retry", retry.Text);
+        form.SetPreferences(new(ClaudeEnabled: false));
+        Assert.False(retry.Enabled);
+        form.SetPreferences(new(CodexEnabled: false, ClaudeEnabled: false));
+        Assert.False(retry.Enabled); Assert.Equal("Retry", retry.Text);
+    });
+
+    [Fact]
+    public Task UsageExpandsIntoRemovedFooterAndKeepsErrorNotice() => Sta(() =>
+    {
+        using var form = new UsageForm(["Codex"], SystemIcons.Application);
+        var state = new ProviderState("Codex", ProviderStatus.Ready,
+            new([new("five_hour", "raw", 25, DateTimeOffset.UtcNow.AddHours(5))], DateTimeOffset.UtcNow, "fixture"));
+        form.Show(); form.Render([state], false, false);
+        var content = Controls(form).OfType<ProviderCard>().Single().Parent!;
+        var cleanHeight = content.Height;
+        Assert.DoesNotContain(Controls(form).OfType<Label>(), c => c.Text.Contains("Last updated") || c.Text.Contains("Refreshes automatically"));
+        form.Render([state], false, true);
+        Assert.True(content.Height < cleanHeight);
+        Assert.Contains(Controls(form).OfType<Label>(), c => c.Visible && c.Text == "Diagnostic log unavailable");
+        form.Render([state], false, false); Assert.Equal(cleanHeight, content.Height);
+        Assert.DoesNotContain(Controls(form).OfType<Label>(), c => c.Visible && c.Text == "Diagnostic log unavailable");
     });
     [Fact]
     public Task SettingsActionsRemainReachableOnShortAndNarrowWindows() => Sta(() =>

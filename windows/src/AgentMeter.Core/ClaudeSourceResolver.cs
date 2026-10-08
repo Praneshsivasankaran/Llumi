@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace AgentMeter.Core;
 
 public enum ClaudeClient { Desktop, Code }
@@ -5,7 +7,7 @@ public enum ClaudeAuthentication { Missing, SignedOut, Authenticated, Unknown }
 
 // Sources create bindings only after verifying current authentication. Account and
 // organization identifiers belong to different namespaces and must never substitute.
-public sealed record ClaudeAccountBinding(string? AccountId, string? OrganizationId = null)
+public sealed record ClaudeAccountBinding([property: JsonIgnore] string? AccountId, [property: JsonIgnore] string? OrganizationId = null)
 {
     public bool IsComplete => IsIdentifier(AccountId) &&
         (OrganizationId is null || IsIdentifier(OrganizationId));
@@ -17,7 +19,7 @@ public sealed record ClaudeAccountBinding(string? AccountId, string? Organizatio
 }
 
 public sealed record ClaudeSourceResult(ClaudeClient Client, ClaudeAuthentication Authentication,
-    ClaudeAccountBinding? Binding, ProviderResult Usage);
+    [property: JsonIgnore] ClaudeAccountBinding? Binding, ProviderResult Usage);
 
 public interface IClaudeUsageSource
 {
@@ -27,7 +29,7 @@ public interface IClaudeUsageSource
 
 // Binding remains available for a failed usage query when current identity is known.
 // The provider can then invalidate an older snapshot after an account switch.
-public sealed record ClaudeResolution(ProviderResult Result, ClaudeAccountBinding? Binding = null,
+public sealed record ClaudeResolution(ProviderResult Result, [property: JsonIgnore] ClaudeAccountBinding? Binding = null,
     ClaudeClient? Client = null);
 
 public static class ClaudeSourceResolver
@@ -39,6 +41,7 @@ public static class ClaudeSourceResolver
     {
         ArgumentNullException.ThrowIfNull(sources);
         var results = sources.ToArray();
+        if (results.Length == 0) return new(ProviderResult.Fail(FailureKind.NotInstalled));
         if (results.Any(source => !Enum.IsDefined(source.Client) || !Enum.IsDefined(source.Authentication)) ||
             results.Select(source => source.Client).Distinct().Count() != results.Length)
             return Ambiguous();
@@ -87,8 +90,6 @@ public static class ClaudeSourceResolver
             return result with { Snapshot = null };
         if (result.Snapshot is not { } snapshot || snapshot.ObservedAt > now.AddMinutes(1))
             return ProviderResult.Fail(FailureKind.Malformed);
-        if (snapshot.Windows.Count == 0 || !snapshot.Windows.Any(window => window.UsedPercent is not null || window.ResetsAt is not null))
-            return ProviderResult.Fail(FailureKind.Unsupported);
         return result;
     }
 
@@ -117,12 +118,15 @@ public static class ClaudeSourceResolver
     private static int FailurePriority(FailureKind failure) => failure switch
     {
         FailureKind.Malformed => 0,
+        FailureKind.AccountChanged => 0,
+        FailureKind.RateLimited => 1,
         FailureKind.AccessDenied => 1,
         FailureKind.Timeout => 2,
         FailureKind.Network => 3,
         FailureKind.ProcessExited => 4,
         FailureKind.Unexpected => 5,
         FailureKind.Unsupported => 6,
+        FailureKind.UnsupportedBilling => 6,
         FailureKind.LoggedOut => 7,
         FailureKind.NotInstalled => 8,
         _ => 9

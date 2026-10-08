@@ -88,6 +88,81 @@ public sealed class ActivityParityTests
     }
 
     [Fact]
+    public void ProviderFlagsMigrateFromOldPreferencesAndRoundTripAsTypedBooleans()
+    {
+        var directory = Path.Combine(Path.GetTempPath(), "Llumi.ProviderPreferenceTest." + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        var path = Path.Combine(directory, "preferences.json"); var store = new PreferenceStore(path);
+        try
+        {
+            File.WriteAllText(path, "{\"CompactMonitor\":false,\"TrayIcon\":true,\"Appearance\":1}");
+            var old = store.Load();
+            Assert.False(old.CompactMonitor); Assert.Equal(Appearance.Light, old.Appearance);
+            Assert.True(old.CodexEnabled); Assert.True(old.ClaudeEnabled);
+            var selected = old with { CodexEnabled = false, ClaudeEnabled = false };
+            Assert.True(store.Save(selected)); Assert.Equal(selected, store.Load());
+            Assert.True(store.HasValidExistingPreferences());
+            foreach (var invalid in new[] { "{\"CodexEnabled\":\"false\"}", "{\"CompactMonitor\":true,\"CodexEnabled\":\"false\"}", "{\"ClaudeEnabled\":0}", "{\"CodexEnabled\":false,\"CodexEnabled\":true}", new string(' ', 4097) })
+            { File.WriteAllText(path, invalid); Assert.Equal(new Preferences(), store.Load()); Assert.False(store.HasValidExistingPreferences()); }
+        }
+        finally { Directory.Delete(directory, true); }
+    }
+
+    [Fact]
+    public void DisabledActivityProviderIsNeverDiscoveredOrScannedAndEnableClearsDiscoveryCache()
+    {
+        var cx = 0; var cl = 0; var scans = 0;
+        var source = new WindowsActivitySource(() => { cx++; return "cx"; }, () => { cl++; return "cl"; },
+            (codex, claude, cxPath, clPath) =>
+            {
+                scans++;
+                Assert.Equal(codex ? "cx" : null, cxPath); Assert.Equal(claude ? "cl" : null, clPath);
+                return new(new(true, true), new(true, true));
+            });
+        source.SetEnabled(false, true);
+        Assert.Equal(new[] { "Claude Code" }, source.Capture().Providers);
+        Assert.Equal(0, cx); Assert.Equal(1, cl);
+        source.Capture(); Assert.Equal(1, cl);
+        source.SetEnabled(false, false);
+        Assert.Empty(source.Capture().Providers); Assert.Equal(2, scans);
+        source.SetEnabled(true, false);
+        Assert.Equal(new[] { "Codex" }, source.Capture().Providers);
+        Assert.Equal(1, cx); Assert.Equal(1, cl);
+    }
+
+    [Fact]
+    public async Task DisablingSynchronizesWithRunningActivityCapture()
+    {
+        using var release = new ManualResetEventSlim();
+        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var disableStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var source = new WindowsActivitySource(() => "cx", () => "cl", (_, _, _, _) =>
+        { started.TrySetResult(); release.Wait(TimeSpan.FromSeconds(3)); return new(new(true), new(true)); });
+        var capture = Task.Run(source.Capture);
+        try
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            var disabled = Task.Run(() => { disableStarted.TrySetResult(); source.SetEnabled(false, false); });
+            await disableStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await Task.Delay(30); Assert.False(disabled.IsCompleted);
+            release.Set(); await capture; await disabled;
+            Assert.Empty(source.Capture().Providers);
+        }
+        finally { release.Set(); await capture; }
+    }
+
+    [Theory]
+    [InlineData("codex", false, false, true, false)]
+    [InlineData("ChatGPT", true, false, true, false)]
+    [InlineData("claude", true, true, false, false)]
+    [InlineData("codex", false, true, false, true)]
+    [InlineData("ChatGPT", false, true, false, false)]
+    [InlineData("ChatGPT", true, true, false, true)]
+    [InlineData("claude", false, false, true, true)]
+    public void DisabledProcessCandidatesAreExcludedBeforePathAndModeRead(string name, bool foreground, bool codex, bool claude, bool expected) =>
+        Assert.Equal(expected, WindowsActivitySource.CandidateProcess(name, foreground, codex, claude));
+
+    [Fact]
     public async Task OwnedUsageHelperNeverCountsAsInteractiveAndIsUnregisteredAfterCleanup()
     {
         var host = Path.Combine(AppContext.BaseDirectory, "AgentMeter.ProcessHost.exe");

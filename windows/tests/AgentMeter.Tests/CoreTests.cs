@@ -5,7 +5,7 @@ namespace AgentMeter.Tests;
 public sealed class CoreTests
 {
     private static readonly DateTimeOffset Now = new(2026, 9, 15, 13, 0, 0, TimeSpan.Zero);
-    private static UsageSnapshot Snapshot(bool cached = false) => new([new("weekly", "Weekly", 43, Now.AddDays(2))], Now, "test", cached);
+    private static UsageSnapshot Snapshot(bool cached = false) => new([new("weekly", "Weekly", 43, Now.AddDays(2), 10080, UsageScope.General)], Now, "test", cached);
 
     [Theory]
     [InlineData(-1)] [InlineData(101)] [InlineData(double.NaN)] [InlineData(double.PositiveInfinity)]
@@ -54,6 +54,7 @@ public sealed class CoreTests
     {
         var state = new ProviderState("Test", ProviderStatus.Error, Snapshot(), FailureKind.Network);
         var text = UsageText.Provider(state, Now);
+        Assert.Contains("Stale", text);
         Assert.Contains("network", text);
         Assert.Contains("57% remaining (stale)", text);
     }
@@ -61,7 +62,7 @@ public sealed class CoreTests
     [Fact]
     public void ExpiredResetMakesHeaderAndTooltipStale()
     {
-        var snapshot = new UsageSnapshot([new("id", "Weekly", 100, Now)], Now, "test");
+        var snapshot = new UsageSnapshot([new("id", "Weekly", 100, Now, 10080, UsageScope.General)], Now, "test");
         var state = new ProviderState("Test", ProviderStatus.Ready, snapshot);
         Assert.StartsWith("Stale", UsageText.Provider(state, Now));
         Assert.Contains("stale", UsageText.Tooltip([state], Now));
@@ -136,10 +137,10 @@ public sealed class CoreTests
     [Fact]
     public async Task FailureKeepsLastSuccessAndLogoutClearsIt()
     {
-        var next = new ProviderResult(Snapshot());
+        var next = new ProviderResult(Snapshot()) { VerifiedBinding = new("fixture"), Authentication = AuthenticationStatus.Verified };
         var coordinator = new RefreshCoordinator([new FakeProvider("Test", _ => Task.FromResult(next))], minimumInterval: TimeSpan.Zero);
         await coordinator.RefreshAsync();
-        next = ProviderResult.Fail(FailureKind.Network);
+        next = ProviderResult.Fail(FailureKind.Network) with { VerifiedBinding = new("fixture"), Authentication = AuthenticationStatus.Verified };
         await coordinator.RefreshAsync();
         Assert.NotNull(coordinator.States[0].Snapshot);
         Assert.True(coordinator.States[0].IsStale(Now));

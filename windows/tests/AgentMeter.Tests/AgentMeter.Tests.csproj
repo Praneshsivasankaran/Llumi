@@ -17,5 +17,6 @@
     <ProjectReference Include="../../src/AgentMeter/AgentMeter.csproj" />
     <ProjectReference Include="../AgentMeter.ProcessHost/AgentMeter.ProcessHost.csproj" />
     <Using Include="Xunit" />
+    <Compile Include="../AgentMeter.ReviewHost/LiveFirstRunReview.cs" Link="ReviewHost/LiveFirstRunReview.cs" />
   </ItemGroup>
 </Project>

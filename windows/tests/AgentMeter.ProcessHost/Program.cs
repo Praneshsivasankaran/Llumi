@@ -33,6 +33,48 @@ if (args.Length == 2 && args[0] == "--environment")
     return;
 }
 
+// Run the production control adapter against this synthetic executable. Privacy
+// preferences live only in this owned fixture process and its owned children.
+if (args.SequenceEqual(new[] { "--claude-control-query" }))
+{
+    var names = new[] { "DISABLE_TELEMETRY", "CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC", "DO_NOT_TRACK" };
+    var before = names.Select(Environment.GetEnvironmentVariable).ToArray();
+    Environment.SetEnvironmentVariable("LLUMI_SYNTHETIC_CONTROL_PROTOCOL", "1");
+    var source = new ClaudeControlTransport(() => Environment.ProcessPath);
+    var result = await source.QueryAsync(default);
+    Console.WriteLine(JsonSerializer.Serialize(new
+    {
+        success = result.Usage.Failure == FailureKind.None && result.Binding is not null,
+        remaining = result.Usage.Snapshot?.Windows.FirstOrDefault()?.RemainingPercent,
+        parentEnvironmentUnchanged = before.SequenceEqual(names.Select(Environment.GetEnvironmentVariable))
+    }));
+    return;
+}
+
+if (Environment.GetEnvironmentVariable("LLUMI_SYNTHETIC_CONTROL_PROTOCOL") == "1")
+{
+    if (Environment.GetEnvironmentVariable("DISABLE_TELEMETRY") != "1") { Environment.ExitCode = 2; return; }
+    if (args.SequenceEqual(new[] { "auth", "status" }))
+    {
+        Console.WriteLine("""{"loggedIn":true,"authMethod":"claude.ai","apiProvider":"firstParty","email":"fixture@example.invalid","orgId":"00000000-0000-0000-0000-000000000042","orgName":"Fixture","subscriptionType":"pro","analyticsDisabled":true}""");
+        return;
+    }
+    if (!args.SequenceEqual(ClaudeControlTransport.Arguments)) { Environment.ExitCode = 3; return; }
+    using var init = JsonDocument.Parse((await Console.In.ReadLineAsync())!);
+    var initialize = init.RootElement;
+    if (initialize.GetProperty("type").GetString() != "control_request" ||
+        initialize.GetProperty("request").GetProperty("subtype").GetString() != "initialize" ||
+        initialize.GetProperty("request").GetProperty("hooks").EnumerateObject().Any()) { Environment.ExitCode = 4; return; }
+    Console.WriteLine("""{"type":"control_response","response":{"subtype":"success","request_id":"init","response":{"account":{"email":"fixture@example.invalid","organization":"Fixture","apiProvider":"firstParty","apiKeySource":"none","tokenSource":"oauth"}}}}""");
+    using var request = JsonDocument.Parse((await Console.In.ReadLineAsync())!);
+    var controlQuery = request.RootElement;
+    if (controlQuery.GetProperty("type").GetString() != "control_request" ||
+        controlQuery.GetProperty("request").GetProperty("subtype").GetString() != "get_usage" ||
+        !controlQuery.GetProperty("request").GetProperty("skip_behaviors").GetBoolean()) { Environment.ExitCode = 5; return; }
+    Console.WriteLine("""{"type":"control_response","response":{"subtype":"success","request_id":"usage","response":{"rate_limits_available":true,"behaviors":null,"subscription_type":"pro","session":{"total_cost_usd":0,"total_api_duration_ms":0,"model_usage":{}},"rate_limits":{"five_hour":{"utilization":12}}}}}""");
+    return;
+}
+
 // Test-only auth-status fixture verifies that the real source passes its child privacy flag.
 if (args.SequenceEqual(new[] { "auth", "status" }))
 {

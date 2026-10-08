@@ -19,18 +19,21 @@ internal sealed class TrayContext : ApplicationContext
     private readonly ContextMenuStrip menu = new();
     private readonly ToolStripMenuItem pinMenu;
     private readonly ToolStripMenuItem startupMenu = new("Start with Windows");
-    private readonly System.Windows.Forms.Timer poll = new() { Interval = 30_000 };
-    private readonly System.Windows.Forms.Timer display = new() { Interval = 30_000 };
+    private readonly System.Windows.Forms.Timer poll = new() { Interval = 1000 };
+    private readonly System.Windows.Forms.Timer display = new() { Interval = 1000 };
     private readonly System.Windows.Forms.Timer recovery = new() { Interval = 5_000 };
     private readonly System.Windows.Forms.Timer activityTimer = new() { Interval = 1000 };
     private readonly Func<ActivitySnapshot> captureActivity;
+    private readonly WindowsActivitySource? activitySource;
     private readonly PreferenceStore preferenceStore;
     private Preferences preferences;
     private readonly SetupCompletionStore setupStore;
+    private readonly string? reviewTitle;
     private SetupForm? setupWindow;
     private bool needsSetup;
     private ActivitySnapshot activity = ActivitySnapshot.Empty;
     private Task activityTask = Task.CompletedTask;
+    private long activityGeneration;
     private readonly CancellationTokenSource lifetime = new();
     private readonly RegisteredWaitHandle showWait;
     private readonly RegisteredWaitHandle? quitWait;
@@ -42,45 +45,52 @@ internal sealed class TrayContext : ApplicationContext
 
     public TrayContext(RefreshCoordinator coordinator, DiagnosticLog log, EventWaitHandle showEvent,
         MonitorPositionStore? positions = null, IStartupRegistration? startup = null, EventWaitHandle? quitEvent = null,
-        Func<ActivitySnapshot>? captureActivity = null, PreferenceStore? preferenceStore = null, SetupCompletionStore? setupStore = null)
+        Func<ActivitySnapshot>? captureActivity = null, PreferenceStore? preferenceStore = null, SetupCompletionStore? setupStore = null,
+        string? reviewTitle = null)
     {
         this.coordinator = coordinator;
         this.log = log;
+        this.reviewTitle = reviewTitle;
         this.positions = positions ?? MonitorPositionStore.Default(log.Write);
         this.startup = startup ?? (PackagedEnvironment.HasIdentity
             ? new PackagedStartupRegistration(new WindowsStartupTaskAccess(), log.Write)
             : new StartupRegistration(Environment.ProcessPath ?? Application.ExecutablePath, log.Write));
-        this.captureActivity = captureActivity ?? new WindowsActivitySource().Capture;
+        if (captureActivity is null) { activitySource = new WindowsActivitySource(); this.captureActivity = activitySource.Capture; }
+        else this.captureActivity = captureActivity;
         this.preferenceStore = preferenceStore ?? PreferenceStore.Default();
         this.setupStore = setupStore ?? SetupCompletionStore.Default();
         needsSetup = !this.setupStore.RecognizeExisting(this.preferenceStore.HasValidExistingPreferences());
         preferences = this.preferenceStore.Load();
+        coordinator.SetEnabled("Codex", preferences.CodexEnabled);
+        coordinator.SetEnabled("Claude Code", preferences.ClaudeEnabled);
+        activitySource?.SetEnabled(preferences.CodexEnabled, preferences.ClaudeEnabled);
         Palette.Apply(preferences.Appearance);
         var names = coordinator.States.Select(s => s.Name).ToArray();
         popup = new UsageForm(names, icon);
         monitor = new MonitorForm(names, icon);
+        if (reviewTitle is not null) { popup.Text = "Llumi — " + reviewTitle; monitor.Text = "Llumi monitor — " + reviewTitle; }
         tray = new NotifyIcon { Icon = trayIcon, Text = "Llumi — loading", ContextMenuStrip = menu, Visible = true };
         menu.Items.Add("Open Llumi", null, (_, _) => ShowPopup());
         pinMenu = new ToolStripMenuItem("Pin Monitor", null, (_, _) => { if (monitor.Visible) UnpinMonitor(); else OpenMonitor(); });
         menu.Items.Add("Refresh", null, (_, _) => StartRefresh());
-        menu.Items.Add("Setup Llumi…", null, (_, _) => OpenSetup());
         menu.Items.Add("Settings", null, (_, _) => { ShowPopup(); popup.ShowSettings(); });
         startupMenu.Click += (_, _) => ToggleStartup();
         menu.Opening += (_, _) => UpdateStartupState();
         menu.Items.Add("Quit", null, async (_, _) => await ExitAsync());
         tray.MouseClick += (_, e) => { if (e.Button == MouseButtons.Left) ShowPopup(); };
-        popup.SetupRequested += OpenSetup;
         popup.RefreshRequested += StartRefresh;
         popup.ExitRequested += async () => await ExitAsync();
         popup.PinRequested += OpenMonitor;
         popup.StartupToggleRequested += ToggleStartup;
         popup.MenuOpening += UpdateStartupState;
         popup.PreferencesChanged += ChangePreferences;
+        popup.ResetPositionRequested += ResetMonitorPosition;
         popup.SetPreferences(preferences);
         tray.Visible = preferences.TrayIcon;
         monitor.OpenRequested += ShowPopup;
         monitor.UnpinRequested += UnpinMonitor;
         monitor.RefreshRequested += StartRefresh;
+        monitor.ResetPositionRequested += ResetMonitorPosition;
         monitor.ExitRequested += async () => await ExitAsync();
         monitor.PositionCommitted += SavePosition;
         monitor.SurfaceFallbackUsed += () => log.Write("monitor.opaque-fallback");
@@ -96,14 +106,14 @@ internal sealed class TrayContext : ApplicationContext
             log.Write(monitor.Visible ? "monitor.shown" : "monitor.hidden");
         };
         coordinator.Changed += OnChanged;
-        poll.Tick += (_, _) => StartRefresh();
+        poll.Tick += (_, _) => { StartRefresh(RefreshReason.Background); Render(); };
         display.Tick += (_, _) => Render();
         recovery.Tick += (_, _) =>
         {
             recovery.Stop();
             if (suspended || exiting) return;
             poll.Stop(); poll.Start();
-            StartRefresh();
+            StartRefresh(RefreshReason.Reset);
         };
         activityTimer.Tick += (_, _) => SampleActivity();
         showWait = ThreadPool.RegisterWaitForSingleObject(showEvent, (_, _) => OnUi(ShowPopup), null, Timeout.Infinite, false);
@@ -129,8 +139,9 @@ internal sealed class TrayContext : ApplicationContext
     {
         if (setupWindow is null || setupWindow.IsDisposed)
         {
-            setupWindow = new SetupForm(new SetupFlow(setupStore), () => coordinator.States, StartRefresh,
+            setupWindow = new SetupForm(new SetupFlow(setupStore), () => coordinator.States, providerName => StartRefresh(RefreshReason.Manual, providerName),
                 () => preferences, ChangePreferences, startup, ToggleStartup, () => { needsSetup = false; ShowPopup(); });
+            if (reviewTitle is not null) setupWindow.Text = "Setup Llumi — " + reviewTitle;
             setupWindow.FormClosed += (_, _) => { if (!exiting && !preferences.TrayIcon) ShowPopup(); };
         }
         setupWindow.Show(); setupWindow.Activate();
@@ -141,30 +152,63 @@ internal sealed class TrayContext : ApplicationContext
     private void ChangePreferences(Preferences value)
     {
         if (!preferenceStore.Save(value)) { popup.SetPreferences(preferences); popup.PreferenceSaveFailed(); return; }
+        var providerChange = preferences.CodexEnabled != value.CodexEnabled || preferences.ClaudeEnabled != value.ClaudeEnabled;
+        var codexReenabled = !preferences.CodexEnabled && value.CodexEnabled;
+        var claudeReenabled = !preferences.ClaudeEnabled && value.ClaudeEnabled;
         preferences = value; tray.Visible = value.TrayIcon;
+        if (providerChange)
+        {
+            activityGeneration++;
+            coordinator.SetEnabled("Codex", value.CodexEnabled);
+            coordinator.SetEnabled("Claude Code", value.ClaudeEnabled);
+            activitySource?.SetEnabled(value.CodexEnabled, value.ClaudeEnabled);
+            // Disablement also invalidates readings held by cached accessibility
+            // children while the monitor is hidden and ordinary renders are paused.
+            monitor.Render(coordinator.States);
+        }
         Palette.Apply(value.Appearance); popup.SetPreferences(value);
+        popup.PreferenceSaveSucceeded();
         if (setupWindow is { IsDisposed: false }) setupWindow.ApplyTheme();
         monitor.UpdateSurface(); ApplyActivity(activity);
+        Render();
+        if (codexReenabled) StartRefresh(RefreshReason.Enable, "Codex");
+        if (claudeReenabled) StartRefresh(RefreshReason.Enable, coordinator.States.FirstOrDefault(s => UsagePresentation.IsClaude(s.Name))?.Name ?? "Claude Code");
+        if (codexReenabled || claudeReenabled) SampleActivity();
     }
 
     private void SampleActivity()
     {
-        if (exiting || suspended || !activityTask.IsCompleted) return;
-        activityTask = SampleActivityAsync();
+        if (exiting || suspended || !activityTask.IsCompleted || !preferences.CodexEnabled && !preferences.ClaudeEnabled) return;
+        activityTask = SampleActivityAsync(activityGeneration);
     }
-    private async Task SampleActivityAsync()
+    private async Task SampleActivityAsync(long generation)
     {
-        try { var snapshot = await Task.Run(captureActivity, lifetime.Token); if (!exiting) ApplyActivity(snapshot); }
+        try
+        {
+            var snapshot = await Task.Run(captureActivity, lifetime.Token);
+            if (!exiting && !suspended && generation == activityGeneration) ApplyActivity(snapshot);
+        }
         catch (OperationCanceledException) { }
-        catch (Exception) { if (!exiting) { log.Write("activity.unavailable"); ApplyActivity(ActivitySnapshot.Empty); } }
+        catch (Exception) { if (!exiting && !suspended && generation == activityGeneration) { log.Write("activity.unavailable"); ApplyActivity(ActivitySnapshot.Empty); } }
     }
     internal void ApplyActivity(ActivitySnapshot snapshot)
     {
-        activity = snapshot;
-        var names = snapshot.Providers;
+        activity = new(preferences.CodexEnabled ? snapshot.Codex : new(), preferences.ClaudeEnabled ? snapshot.Claude : new());
+        var names = activity.Providers;
         if (!preferences.CompactMonitor || names.Length == 0)
-        { if (monitor.Visible) { SavePosition(); monitor.HideMonitor(preferences.CompactMonitor); } return; }
-        monitor.SetProviders(names); monitor.Render(coordinator.States);
+        {
+            if (monitor.Visible)
+            {
+                SavePosition();
+                monitor.HideMonitor(preferences.CompactMonitor && (preferences.CodexEnabled || preferences.ClaudeEnabled));
+            }
+            // A both-off change hides immediately before removing the previous rows.
+            // Normal contextual exits retain their shape until the native exit completes.
+            if (!preferences.CodexEnabled && !preferences.ClaudeEnabled) monitor.SetProviders([]);
+            return;
+        }
+        monitor.SetProviders(names);
+        monitor.Render(coordinator.States);
         if (!monitor.Visible || !monitor.DesiredVisible) OpenMonitor();
     }
 
@@ -175,13 +219,12 @@ internal sealed class TrayContext : ApplicationContext
         {
             if (monitor.Visible) { monitor.ShowMonitor(monitor.Location); return; }
             var saved = positions.Load();
-            var screen = Screen.AllScreens.FirstOrDefault(s => string.Equals(s.DeviceName, saved?.Display, StringComparison.OrdinalIgnoreCase))
-                ?? Screen.FromPoint(Cursor.Position);
+            var screen = MonitorScreen(saved?.Display);
             // Moving the existing hidden HWND first lets Windows apply the destination DPI.
             monitor.Location = screen.WorkingArea.Location;
             monitor.Render(coordinator.States);
-            var location = MonitorPosition.Restore(saved, screen.DeviceName, screen.WorkingArea, monitor.Size, monitor.DeviceDpi);
-            monitor.ShowMonitor(location);
+            monitor.RestorePosition(saved, screen.DeviceName);
+            monitor.ShowMonitor(monitor.Location, monitor.SavedPosition);
             log.Write("panel.pinned");
         }
         catch (Win32Exception) { MonitorFailed(); }
@@ -200,8 +243,10 @@ internal sealed class TrayContext : ApplicationContext
 
     private void ToggleStartup()
     {
-        if (startup.TryRead(out var enabled)) startup.TrySet(!enabled);
+        var available = startup.TryRead(out var enabled);
+        var saved = available && startup.TrySet(!enabled);
         UpdateStartupState();
+        popup.StartupChangeResult(saved && startupMenu.Checked != enabled, startupMenu.Enabled);
     }
 
     private void ShowPopup()
@@ -214,8 +259,25 @@ internal sealed class TrayContext : ApplicationContext
     private void SavePosition()
     {
         if (!monitor.Visible || monitor.IsDisposed) return;
-        var screen = Screen.FromControl(monitor);
-        positions.Save(MonitorPosition.Capture(monitor.RestingLocation, screen.DeviceName, screen.WorkingArea, monitor.DeviceDpi));
+        positions.Save(monitor.SavedPosition);
+    }
+
+    internal void ResetMonitorPosition()
+    {
+        if (exiting) return;
+        var screen = monitor.Visible ? Screen.FromControl(monitor) : Screen.PrimaryScreen ?? Screen.FromPoint(Cursor.Position);
+        var position = new MonitorPosition(1, screen.DeviceName, 20, 20);
+        // Save first: failed persistence must leave the current position active.
+        if (!positions.Save(position)) { popup.PositionResetFailed(); return; }
+        popup.PositionResetSucceeded();
+        if (!monitor.Visible) return;
+        try
+        {
+            monitor.SetExpanded(false, false);
+            monitor.Location = screen.WorkingArea.Location;
+            monitor.RestorePosition(position, screen.DeviceName);
+        }
+        catch (Win32Exception) { MonitorFailed(); }
     }
 
     private void OnDisplaySettingsChanged(object? sender, EventArgs e) => OnUi(() =>
@@ -223,7 +285,14 @@ internal sealed class TrayContext : ApplicationContext
         var replacement = AppIcon.LoadTray(SystemInformation.SmallIconSize.Width);
         tray.Icon = replacement;
         trayIcon.Dispose(); trayIcon = replacement;
-        if (monitor.Visible) { monitor.KeepOnScreen(); SavePosition(); }
+        if (monitor.Visible)
+        {
+            var saved = monitor.SavedPosition;
+            var screen = MonitorScreen(saved.Display);
+            monitor.Location = screen.WorkingArea.Location;
+            monitor.RestorePosition(saved, screen.DeviceName);
+            SavePosition();
+        }
         if (popup.Visible)
         {
             popup.Render(coordinator.States, coordinator.IsRefreshing, log.WriteFailed);
@@ -231,16 +300,27 @@ internal sealed class TrayContext : ApplicationContext
         }
     });
 
+    private static Screen MonitorScreen(string? savedDisplay)
+    {
+        var screens = Screen.AllScreens;
+        var primary = Screen.PrimaryScreen ?? screens[0];
+        var display = MonitorPosition.SelectDisplay(savedDisplay, primary.DeviceName, screens.Select(screen => screen.DeviceName));
+        return screens.FirstOrDefault(screen => string.Equals(screen.DeviceName, display, StringComparison.OrdinalIgnoreCase)) ?? primary;
+    }
+
     private void OnPowerModeChanged(object sender, PowerModeChangedEventArgs e) => OnUi(() =>
     {
         if (e.Mode == PowerModes.Suspend)
         {
             suspended = true;
+            activityGeneration++;
+            coordinator.Suspend();
             poll.Stop(); recovery.Stop(); display.Stop(); activityTimer.Stop(); monitor.HideMonitor();
         }
         else if (e.Mode == PowerModes.Resume)
         {
             suspended = false;
+            coordinator.Resume();
             activityTimer.Start(); SampleActivity();
             ScheduleRecovery();
             UpdateDisplayTimer();
@@ -297,17 +377,20 @@ internal sealed class TrayContext : ApplicationContext
     }
 
     private void StartRefresh()
+        => StartRefresh(RefreshReason.Manual);
+
+    private void StartRefresh(RefreshReason reason, string? providerName = null)
     {
         if (exiting || suspended) return;
         refreshes.RemoveAll(task => task.IsCompleted);
-        var refresh = RefreshAsync();
+        var refresh = RefreshAsync(reason, providerName);
         if (!refresh.IsCompleted) refreshes.Add(refresh);
         activeRefresh = Task.WhenAll(refreshes);
     }
 
-    private async Task RefreshAsync()
+    private async Task RefreshAsync(RefreshReason reason, string? providerName)
     {
-        try { await coordinator.RefreshAsync(lifetime.Token); }
+        try { await coordinator.RefreshAsync(lifetime.Token, reason, providerName); }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { }
         catch (Exception) { log.Write("refresh.unexpected-error"); }
     }
@@ -321,6 +404,7 @@ internal sealed class TrayContext : ApplicationContext
         display.Stop();
         recovery.Stop();
         activityTimer.Stop();
+        coordinator.Suspend();
         await lifetime.CancelAsync();
         await activeRefresh;
         try { await activityTask.WaitAsync(TimeSpan.FromSeconds(2)); } catch (Exception) { }
@@ -341,6 +425,7 @@ internal sealed class TrayContext : ApplicationContext
             disposed = true;
             SavePosition();
             exiting = true;
+            coordinator.Suspend();
             lifetime.Cancel();
             coordinator.Changed -= OnChanged;
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;

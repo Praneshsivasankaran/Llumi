@@ -8,14 +8,66 @@ namespace AgentMeter.Core;
 /// <summary>Metadata only. No window text, accessibility, terminal content, or screen capture.</summary>
 public sealed class WindowsActivitySource
 {
+    private readonly object captureLock = new();
     private readonly ActivityModeCache modes = new();
-    private string? codex, claude;
+    private readonly Func<IReadOnlyList<string>> findCodex;
+    private readonly Func<IReadOnlyList<string>> findClaude;
+    private readonly Func<DateTime> utcNow;
+    private readonly Func<bool, bool, IReadOnlyList<string>, IReadOnlyList<string>, ActivitySnapshot> collect;
+    private bool codexEnabled = true, claudeEnabled = true;
+    private IReadOnlyList<string> codex = [], claude = [];
     private DateTime nextDiscovery;
+
+    public WindowsActivitySource()
+    {
+        findCodex = CliLocator.CodexCandidates; findClaude = ClaudeCliLocator.StandaloneCandidates; utcNow = () => DateTime.UtcNow;
+        collect = CaptureProcesses;
+    }
+
+    internal WindowsActivitySource(Func<string?> findCodex, Func<string?> findClaude,
+        Func<bool, bool, string?, string?, ActivitySnapshot> collect, Func<DateTime>? utcNow = null)
+        : this(() => findCodex() is { } codex ? [codex] : [], () => findClaude() is { } claude ? [claude] : [],
+            (codexEnabled, claudeEnabled, codex, claude) => collect(codexEnabled, claudeEnabled, codex.FirstOrDefault(), claude.FirstOrDefault()), utcNow) { }
+
+    internal WindowsActivitySource(Func<IReadOnlyList<string>> findCodex, Func<IReadOnlyList<string>> findClaude,
+        Func<bool, bool, IReadOnlyList<string>, IReadOnlyList<string>, ActivitySnapshot> collect, Func<DateTime>? utcNow = null)
+    {
+        this.findCodex = findCodex; this.findClaude = findClaude; this.collect = collect;
+        this.utcNow = utcNow ?? (() => DateTime.UtcNow);
+    }
+
+    public void SetEnabled(bool codexEnabled, bool claudeEnabled)
+    {
+        // Capture and preference changes share the same lock. Once this call returns,
+        // no disabled provider discovery or process metadata read remains in flight.
+        lock (captureLock)
+        {
+            if (this.codexEnabled == codexEnabled && this.claudeEnabled == claudeEnabled) return;
+            this.codexEnabled = codexEnabled; this.claudeEnabled = claudeEnabled;
+            codex = []; claude = []; nextDiscovery = DateTime.MinValue; modes.Retain([]);
+        }
+    }
+
     public ActivitySnapshot Capture()
     {
         if (!OperatingSystem.IsWindows() || !Environment.Is64BitProcess) return ActivitySnapshot.Empty;
-        if (DateTime.UtcNow >= nextDiscovery)
-        { codex = CliLocator.FindCodex(); claude = ClaudeCliLocator.Find(); nextDiscovery = DateTime.UtcNow.AddSeconds(30); }
+        lock (captureLock)
+        {
+            if (!codexEnabled && !claudeEnabled) return ActivitySnapshot.Empty;
+            var now = utcNow();
+            if (now >= nextDiscovery)
+            {
+                codex = codexEnabled ? findCodex().Distinct(StringComparer.OrdinalIgnoreCase).Take(CliLocator.MaximumCandidates).ToArray() : [];
+                claude = claudeEnabled ? findClaude().Distinct(StringComparer.OrdinalIgnoreCase).Take(CliLocator.MaximumCandidates).ToArray() : [];
+                nextDiscovery = now.AddSeconds(30);
+            }
+            var snapshot = collect(codexEnabled, claudeEnabled, codex, claude);
+            return new(codexEnabled ? snapshot.Codex : new(), claudeEnabled ? snapshot.Claude : new());
+        }
+    }
+
+    private ActivitySnapshot CaptureProcesses(bool codexEnabled, bool claudeEnabled, IReadOnlyList<string> codex, IReadOnlyList<string> claude)
+    {
         var foreground = GetForegroundWindow();
         GetWindowThreadProcessId(foreground, out var frontPid);
         var desktopAllowed = ActivityPolicy.DesktopActive(true, IsWindowVisible(foreground), IsIconic(foreground));
@@ -30,8 +82,8 @@ public sealed class WindowsActivitySource
                 {
                     if (process.Id == Environment.ProcessId || ProviderProcess.IsOwned(process.Id)) continue;
                     var name = process.ProcessName;
-                    if (!name.Equals("codex", StringComparison.OrdinalIgnoreCase) && !name.Equals("claude", StringComparison.OrdinalIgnoreCase) &&
-                        !(process.Id == frontPid && name.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase))) continue;
+                    // Skip disabled candidates before opening a handle or reading a path/mode.
+                    if (!CandidateProcess(name, process.Id == frontPid, codexEnabled, claudeEnabled)) continue;
                     using var handle = OpenProcess(0x1000 | 0x10, false, process.Id);
                     if (handle.IsInvalid) continue;
                     var buffer = new StringBuilder(32768); var capacity = buffer.Capacity;
@@ -39,10 +91,10 @@ public sealed class WindowsActivitySource
                     var path = buffer.ToString();
                     if (process.Id == frontPid && desktopAllowed)
                     {
-                        cxDesktop |= DesktopProvider(path) == "Codex";
-                        clDesktop |= DesktopProvider(path) == "Claude Code";
+                        cxDesktop |= codexEnabled && DesktopProvider(path) == "Codex";
+                        clDesktop |= claudeEnabled && DesktopProvider(path) == "Claude Code";
                     }
-                    var provider = Same(path, codex) ? "Codex" : Same(path, claude) ? "Claude Code" : null;
+                    var provider = CandidateProvider(path, codexEnabled, claudeEnabled, codex, claude);
                     if (provider is null) continue;
                     var key = (process.Id, process.StartTime.ToUniversalTime().Ticks);
                     seen.Add(key);
@@ -56,6 +108,10 @@ public sealed class WindowsActivitySource
         return new(new(cxCli, cxDesktop), new(clCli, clDesktop));
     }
 
+    internal static bool CandidateProcess(string name, bool foreground, bool codexEnabled, bool claudeEnabled) =>
+        (codexEnabled && (name.Equals("codex", StringComparison.OrdinalIgnoreCase) || foreground && name.Equals("ChatGPT", StringComparison.OrdinalIgnoreCase))) ||
+        (claudeEnabled && name.Equals("claude", StringComparison.OrdinalIgnoreCase));
+
     public static string? DesktopProvider(string path)
     {
         var apps = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "WindowsApps") + Path.DirectorySeparatorChar;
@@ -68,7 +124,10 @@ public sealed class WindowsActivitySource
             relative[2].Equals("Claude.exe", StringComparison.OrdinalIgnoreCase)) return "Claude Code";
         return null;
     }
-    private static bool Same(string path, string? other) => other is not null && path.Equals(other, StringComparison.OrdinalIgnoreCase);
+    internal static string? CandidateProvider(string path, bool codexEnabled, bool claudeEnabled,
+        IReadOnlyList<string> codex, IReadOnlyList<string> claude) =>
+        codexEnabled && codex.Contains(path, StringComparer.OrdinalIgnoreCase) ? "Codex" :
+        claudeEnabled && claude.Contains(path, StringComparer.OrdinalIgnoreCase) ? "Claude Code" : null;
     private static bool ReadMode(SafeProcessHandle process, string provider, string executable)
     {
         if (!IsWow64Process(process, out var wow64) || wow64) return false;

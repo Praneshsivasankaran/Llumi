@@ -13,7 +13,7 @@ public sealed class PopupTests
 
     private static ProviderState Live(double? used = 47, DateTimeOffset? reset = null) =>
         new("Codex", ProviderStatus.Ready,
-            new UsageSnapshot([new UsageWindow("codex/weekly", "Codex · 7 days", used, reset)], Now, "fixture"));
+            new UsageSnapshot([new UsageWindow("codex/secondary", "Codex · 7 days", used, reset, 10080)], Now, "fixture"));
 
     [Fact]
     public void FreshValueBecomesStaleAfterAgeOrResetWithoutInventingNewAllowance()
@@ -29,10 +29,10 @@ public sealed class PopupTests
     [Theory]
     [InlineData(FailureKind.NotInstalled, "Not installed")]
     [InlineData(FailureKind.LoggedOut, "Not signed in")]
-    [InlineData(FailureKind.Unsupported, "Unavailable")]
+    [InlineData(FailureKind.Unsupported, "Unsupported format")]
     [InlineData(FailureKind.Network, "Unavailable")]
     [InlineData(FailureKind.Timeout, "Unavailable")]
-    [InlineData(FailureKind.Malformed, "Unavailable")]
+    [InlineData(FailureKind.Malformed, "Unsupported format")]
     public void MissingProviderStatusNeverClaimsLive(FailureKind failure, string expected)
     {
         var state = new ProviderState("provider", ProviderStatus.Unavailable, Failure: failure);
@@ -41,14 +41,17 @@ public sealed class PopupTests
     }
 
     [Fact]
-    public void RetainedDataShowsStaleOnFailureAndOriginalObservationAgeDuringRefresh()
+    public void RetainedDataShowsStaleOnFailureAndKeepsCalendarLabelDuringRefresh()
     {
         var failed = Live() with { Status = ProviderStatus.Error, Failure = FailureKind.Network };
         Assert.Equal("Stale", PopupText.Status(failed, Now.AddSeconds(40)));
-        Assert.Equal("Updated 40s ago", PopupText.Summary(failed, Now.AddSeconds(40)));
+        Assert.Equal("Today", PopupText.Summary(failed, Now.AddSeconds(40)));
+        Assert.Contains("Updated 40s ago", UsageAccessibility.Observation(failed, Now.AddSeconds(40)));
+        Assert.Contains("last retrieval failed", UsageAccessibility.Observation(failed, Now.AddSeconds(40)));
         var refreshing = failed with { Status = ProviderStatus.Loading };
         Assert.Equal("Refreshing…", PopupText.Status(refreshing, Now.AddSeconds(40)));
-        Assert.Equal("Updated 40s ago", PopupText.Summary(refreshing, Now.AddSeconds(40)));
+        Assert.Equal("Today", PopupText.Summary(refreshing, Now.AddSeconds(40)));
+        Assert.Contains("Updated 40s ago", UsageAccessibility.Observation(refreshing, Now.AddSeconds(40)));
         Assert.Equal("Checking local provider", PopupText.Summary(new ProviderState("provider", ProviderStatus.Loading), Now));
     }
 
@@ -63,12 +66,67 @@ public sealed class PopupTests
     }
 
     [Fact]
-    public void ProviderNoticeKeepsObservationAgeVisible()
+    public void ProviderNoticeKeepsPreciseObservationAccessibleWithQuietCalendarLabel()
     {
         var state = Live() with { Detail = "Provider has a restriction." };
-        Assert.Equal("Updated 3m ago · provider notice", PopupText.Summary(state, Now.AddMinutes(3)));
+        Assert.Equal("Today", PopupText.Summary(state, Now.AddMinutes(3)));
+        var observation = UsageAccessibility.Observation(state, Now.AddMinutes(3));
+        Assert.Contains("Updated 3m ago", observation);
+        Assert.Contains(Now.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz"), observation);
+        Assert.Contains("provider notice", observation);
         Assert.Equal("Stale", PopupText.Status(state, Now.AddMinutes(3)));
     }
+
+    [Fact]
+    public void ObservationLabelsFollowLocalCalendarDaysAcrossMidnightAndSourceOffsets()
+    {
+        var beforeMidnight = new DateTimeOffset(new DateTime(2026, 10, 7, 23, 59, 50, DateTimeKind.Local));
+        var afterMidnight = beforeMidnight.AddSeconds(20);
+        Assert.Equal("Today", PopupText.ObservationDate(beforeMidnight.ToOffset(TimeSpan.FromHours(-7)), beforeMidnight));
+        Assert.Equal("Yesterday", PopupText.ObservationDate(beforeMidnight.ToOffset(TimeSpan.FromHours(14)), afterMidnight));
+        Assert.Equal("Today", PopupText.ObservationDate(afterMidnight.ToUniversalTime(), afterMidnight));
+        // Yesterday is a calendar relationship even when the reading is more than 24 hours old.
+        var previousMorning = afterMidnight.AddMinutes(-1).AddHours(-23);
+        Assert.Equal("Yesterday", PopupText.ObservationDate(previousMorning, afterMidnight.AddHours(23)));
+    }
+
+    [Theory]
+    [InlineData("en-US", "10/5/2026")]
+    [InlineData("en-GB", "05/10/2026")]
+    public void OlderObservationUsesLocalDateAndCultureWithoutInventingFreshness(string culture, string expected)
+    {
+        var previous = CultureInfo.CurrentCulture;
+        try
+        {
+            CultureInfo.CurrentCulture = CultureInfo.GetCultureInfo(culture);
+            var at = new DateTimeOffset(new DateTime(2026, 10, 7, 12, 0, 0, DateTimeKind.Local));
+            var state = Live() with { Snapshot = Live().Snapshot! with { ObservedAt = at.AddDays(-2) } };
+            Assert.Equal(expected, PopupText.Summary(state, at));
+            Assert.Equal("Stale", PopupText.Status(state, at));
+            Assert.Contains("Updated 2d ago", UsageAccessibility.Observation(state, at));
+        }
+        finally { CultureInfo.CurrentCulture = previous; }
+    }
+
+    [Fact]
+    public void CardCalendarLabelKeepsExactAgeTimestampAndStaleReasonInAccessibilityAndTooltip() => RunSta(() =>
+    {
+        using var hints = new ToolTip(); using var card = new ProviderCard(hints);
+        var at = new DateTimeOffset(new DateTime(2026, 10, 7, 12, 0, 0, DateTimeKind.Local));
+        var observed = at.AddMinutes(-3).AddSeconds(-19);
+        var state = Live() with { Snapshot = Live().Snapshot! with { ObservedAt = observed, IsCached = true } };
+        card.Render(state, at, 1);
+        var date = Assert.Single(card.Controls.OfType<Label>(), label => label.Text == "Today");
+        var exactTime = observed.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz");
+        foreach (var text in new[] { date.AccessibleName, hints.GetToolTip(date), card.AccessibleDescription })
+        {
+            Assert.Contains("Updated 3m ago", text);
+            Assert.Contains(exactTime, text);
+            Assert.Contains("Stale: cached reading", text);
+        }
+        Assert.Contains(card.Controls.OfType<Label>(), label => label.Text == "Stale");
+        Assert.DoesNotContain(card.Controls.OfType<Label>(), label => label.Text.StartsWith("Updated ", StringComparison.Ordinal));
+    });
 
     [Theory]
     [InlineData(59, "59s ago")]
@@ -122,12 +180,12 @@ public sealed class PopupTests
     }
 
     [Fact]
-    public void RemovingRedundantProviderPrefixPreservesDistinctBucketNames()
+    public void LabelsUseConciseScopeNamesWithoutRawProviderGeneratedNames()
     {
-        Assert.Equal("7 days", PopupText.WindowName("Codex", new UsageWindow("one", "Codex · 7 days", 1, null)));
-        Assert.Equal("Spark · 7 days", PopupText.WindowName("Codex", new UsageWindow("two", "Codex · Spark · 7 days", 2, null)));
-        Assert.Equal("Research · 7 days", PopupText.WindowName("Codex", new UsageWindow("three", "Research · 7 days", 3, null)));
-        Assert.Equal("Unknown window", PopupText.WindowName("Codex", new UsageWindow("four", "Unknown window", null, null)));
+        Assert.Equal("Weekly limit", PopupText.WindowName("Codex", new UsageWindow("one", "raw", 1, null, 10080, UsageScope.General)));
+        Assert.Equal("Spark", PopupText.WindowName("Codex", new UsageWindow("two", "raw", 2, null, 10080, UsageScope.Model, "Spark")));
+        Assert.Equal("Research limit", PopupText.WindowName("Codex", new UsageWindow("three", "raw", 3, null, 2880, UsageScope.Additional, "Research")));
+        Assert.Equal("", PopupText.WindowName("Codex", new UsageWindow("four", "raw", null, null)));
     }
 
     [Theory]
@@ -184,16 +242,16 @@ public sealed class PopupTests
         using var form = new UsageForm(["Codex", "Claude Code"], SystemIcons.Application);
         var codex = new ProviderState("Codex", ProviderStatus.Ready,
             new UsageSnapshot([
-                new UsageWindow("codex/primary", "Codex · 5 hours", 47, null),
-                new UsageWindow("spark/secondary", "Spark · 7 days", null, Now.AddHours(1))
+                new UsageWindow("codex/primary", "Codex · 5 hours", 47, null, 300),
+                new UsageWindow("spark/secondary", "Spark · 7 days", null, Now.AddHours(1), 10080, UsageScope.Model, "Spark")
             ], DateTimeOffset.UtcNow, "fixture"));
         var claude = new ProviderState("Claude Code", ProviderStatus.Unavailable, Failure: FailureKind.Unsupported);
         form.Render([codex, claude], false, false);
         var labels = Descendants(form).OfType<Label>().Select(c => c.Text).ToArray();
         Assert.Contains("53% remaining", labels);
         Assert.Contains("—", labels);
-        Assert.Contains("Spark · 7 days", labels);
-        Assert.Contains("Unavailable", labels);
+        Assert.Contains("Spark", labels);
+        Assert.Contains("Unsupported format", labels);
         Assert.False(form.Visible);
         form.Render([codex, claude], true, true);
         Assert.Contains(Descendants(form).OfType<Button>(), button => button.Text == "Refreshing…" && button.Enabled);
@@ -207,10 +265,10 @@ public sealed class PopupTests
         using var form = new UsageForm(["Codex", "Claude Code"], SystemIcons.Application);
         var now = DateTimeOffset.UtcNow;
         var snapshot = new UsageSnapshot([
-            new UsageWindow("codex/primary", "Codex · 5 hours", 0, now.AddHours(5)),
-            new UsageWindow("codex/secondary", "Codex · 7 days", 100, now.AddDays(3).AddHours(21)),
-            new UsageWindow("spark/primary", "Spark · 5 hours", null, null),
-            new UsageWindow("spark/secondary", "Spark · 7 days", 47, now.AddDays(2))
+            new UsageWindow("codex/primary", "Codex · 5 hours", 0, now.AddHours(5), 300),
+            new UsageWindow("codex/secondary", "Codex · 7 days", 100, now.AddDays(3).AddHours(21), 10080),
+            new UsageWindow("spark/primary", "Spark · 5 hours", null, null, 300, UsageScope.Model, "Spark"),
+            new UsageWindow("spark/secondary", "Spark · 7 days", 47, now.AddDays(2), 10080, UsageScope.Model, "Spark")
         ], now.AddSeconds(-18), "sanitized test fixture");
         var claude = new ProviderState("Claude Code", ProviderStatus.Unavailable, Failure: FailureKind.Unsupported,
             Detail: ClaudeProvider.UnverifiedAccountMessage);
@@ -219,7 +277,7 @@ public sealed class PopupTests
         AssertImportantTextFits(form);
         SaveFixtureRender(form, "fixture-live-four-windows.png");
         var expiredWindows = snapshot.Windows.Select(window => new UsageWindow(window.Id, window.Name,
-            window.UsedPercent, window.ResetsAt is null ? null : now.AddSeconds(-10))).ToArray();
+            window.UsedPercent, window.ResetsAt is null ? null : now.AddSeconds(-10), window.DurationMinutes, window.Scope, window.ScopeLabel, window.Bucket)).ToArray();
         var stale = live with
         {
             Status = ProviderStatus.Error, Failure = FailureKind.Network,
@@ -283,9 +341,9 @@ public sealed class PopupTests
         var now = DateTimeOffset.UtcNow;
         var states = new[] {
             new ProviderState("Codex", ProviderStatus.Ready, new UsageSnapshot([
-                new("codex/primary", "Codex · 7 days", 71, now.AddDays(3)),
-                new("codex_bengalfox/primary", "GPT-5.3-Codex-Spark · 5 hours", 0, now.AddHours(5)),
-                new("codex_bengalfox/secondary", "GPT-5.3-Codex-Spark · 7 days", 0, now.AddDays(7))], now, "fixture")),
+                new("codex/primary", "Codex · 7 days", 71, now.AddDays(3), 10080),
+                new("codex_bengalfox/primary", "GPT-5.3-Codex-Spark · 5 hours", 0, now.AddHours(5), 300, UsageScope.Model, "Spark"),
+                new("codex_bengalfox/secondary", "GPT-5.3-Codex-Spark · 7 days", 0, now.AddDays(7), 10080, UsageScope.Model, "Spark")], now, "fixture")),
             new ProviderState("Claude", ProviderStatus.Ready, new UsageSnapshot([
                 new("five_hour", "5 hours", 0, now.AddHours(4)), new("seven_day", "7 days", 8, now.AddHours(6))], now, "fixture")) };
         form.Render(states, false, false, new Rectangle(0, 0, 2400, 2400));
@@ -293,7 +351,7 @@ public sealed class PopupTests
         Assert.Equal(Palette.Background, form.BackColor);
         var bars = Descendants(form).OfType<UsageBar>().ToArray();
         Assert.Equal(7, bars.Length);
-        Assert.All(bars, bar => Assert.Equal(Palette.Accent, bar.Accent));
+        Assert.All(bars, bar => Assert.Contains(bar.Accent, new[] { Palette.Codex, Palette.Claude }));
         Assert.DoesNotContain(Descendants(form).OfType<Label>(), label => label.Text.Contains("every minute", StringComparison.Ordinal));
         AssertImportantTextFits(form);
     });
@@ -321,8 +379,8 @@ public sealed class PopupTests
         var now = DateTimeOffset.UtcNow;
         ProviderState[] states = [
             new("Codex", ProviderStatus.Ready, new UsageSnapshot([
-                new("codex/primary", "Codex · 5 hours", 71, now.AddHours(5).AddMinutes(12)),
-                new("codex/secondary", "Codex · 7 days", 49, now.AddDays(3).AddHours(7))], now, "synthetic demo")),
+                new("codex/primary", "Codex · 5 hours", 71, now.AddHours(5).AddMinutes(12), 300),
+                new("codex/secondary", "Codex · 7 days", 49, now.AddDays(3).AddHours(7), 10080)], now, "synthetic demo")),
             new("Claude", ProviderStatus.Ready, new UsageSnapshot([
                 new("five_hour", "5 hours", 31, now.AddHours(1).AddMinutes(48)),
                 new("seven_day", "7 days", 8, now.AddDays(2).AddHours(6))], now, "synthetic demo"))];
@@ -353,7 +411,7 @@ public sealed class PopupTests
     {
         using var form = new UsageForm(["Codex", "Claude Code"], SystemIcons.Application);
         var windows = Enumerable.Range(1, 8).Select(i =>
-            new UsageWindow($"bucket-{i}/weekly", $"Bucket {i} · 7 days", i * 10, DateTimeOffset.UtcNow.AddDays(i))).ToArray();
+            new UsageWindow($"bucket-{i}/weekly", $"Bucket {i} · 7 days", i * 10, DateTimeOffset.UtcNow.AddDays(i), 10080, UsageScope.Additional, $"Bucket {i}")).ToArray();
         var states = new[]
         {
             new ProviderState("Codex", ProviderStatus.Ready, new UsageSnapshot(windows, DateTimeOffset.UtcNow, "fixture")),
@@ -410,17 +468,42 @@ public sealed class PopupTests
         var state = new ProviderState("Claude Code", ProviderStatus.Ready, new(windows, Now, "fixture"));
         card.Render(state, Now, 1);
         var texts = card.Controls.Cast<Control>().Select(c => c.Text).ToArray();
-        Assert.Contains("5 hours", texts); Assert.Contains("7 days", texts);
-        Assert.Equal(214, card.LogicalHeight);
+        Assert.Contains("5-hour limit", texts); Assert.Contains("Weekly limit", texts);
+        Assert.Equal(282, card.LogicalHeight);
         var content = string.Join("\n", card.Controls.Cast<Control>().Select(c => c.Text + hints.GetToolTip(c) + c.AccessibleName));
         foreach (var name in new[] { "iguana_necktie", "synthetic_model", "provider_generated_" })
             Assert.DoesNotContain(name, content);
         Assert.Equal(4, state.Snapshot!.Windows.Count);
 
         card.Render(state with { Snapshot = new([windows[1], windows[2]], Now, "fixture") }, Now, 1);
-        Assert.Equal(82, card.LogicalHeight);
-        Assert.Contains(card.Controls.Cast<Control>(), c => c.Text == "Verified allowance is temporarily unavailable.");
+        Assert.Equal(132, card.LogicalHeight);
+        Assert.Contains(card.Controls.Cast<Control>(), c => c.Text == "Unsupported format");
         Assert.DoesNotContain(card.Controls.Cast<Control>(), c => c.Text.Contains("%") || c.Text.Contains("iguana_necktie"));
+    });
+
+    [Fact]
+    public void ProviderCardsHaveEqualHeightsSharedSwitchesAndBothOffSettingsAction() => RunSta(() =>
+    {
+        using var form = new UsageForm(["Codex", "Claude"], SystemIcons.Application);
+        var at = DateTimeOffset.UtcNow;
+        ProviderState[] states = [new("Codex", ProviderStatus.Ready, new([
+            new("codex/primary", "raw", 100, at.AddHours(5), 300),
+            new("model", "raw", 0, at.AddDays(2), 10080, UsageScope.Model, "Spark")], at, "fixture")),
+            new("Claude", ProviderStatus.Ready, new([new("seven_day", "raw", 20, at.AddDays(2))], at, "fixture"))];
+        form.Render(states, false, false); form.Show();
+        var cards = Descendants(form).OfType<ProviderCard>().ToArray(); Assert.Equal(cards[0].Height, cards[1].Height);
+        Assert.All(cards.SelectMany(c => c.Controls.OfType<Label>()), label => Assert.Equal(Color.Transparent, label.BackColor));
+        Assert.Contains(Descendants(form).OfType<Label>(), l => l.Text == "0% remaining");
+        Preferences? saved = null; form.PreferencesChanged += value => { saved = value; form.SetPreferences(value); };
+        form.ShowSettings(); var switches = Descendants(form).OfType<CheckBox>().ToArray();
+        switches.Single(c => c.AccessibleName == "Monitor Codex").Checked = false;
+        Assert.NotNull(saved); Assert.False(saved.CodexEnabled); Assert.True(saved.ClaudeEnabled);
+        switches.Single(c => c.AccessibleName == "Monitor Claude Code").Checked = false;
+        form.ShowUsage(); Assert.All(cards, card => Assert.False(card.Visible));
+        var action = Descendants(form).OfType<Button>().Single(b => b.Text == "Open Settings"); Assert.True(action.Visible);
+        action.PerformClick(); Assert.True(switches[0].Parent!.Visible);
+        var resets = 0; form.ResetPositionRequested += () => resets++;
+        Descendants(form).OfType<Button>().Single(b => b.Text == "Reset Position").PerformClick(); Assert.Equal(1, resets);
     });
 
     [Fact]
@@ -436,7 +519,29 @@ public sealed class PopupTests
         typeof(ProviderCard).GetMethod("OnPaintBackground", BindingFlags.Instance | BindingFlags.NonPublic)!
             .Invoke(card, [new PaintEventArgs(graphics, clip)]);
         Assert.Equal(Color.Magenta.ToArgb(), bitmap.GetPixel(30, 50).ToArgb());
-        Assert.Equal(Palette.Background.ToArgb(), bitmap.GetPixel(110, 50).ToArgb());
+        Assert.Equal(Palette.Card.ToArgb(), bitmap.GetPixel(110, 50).ToArgb());
+    });
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    public void ClaudeCardMissingFiveHourUsesGeneralWeeklyBeforeAnyModel(bool fiveHour, bool weekly) => RunSta(() =>
+    {
+        using var hints = new ToolTip();
+        using var card = new ProviderCard(hints) { Size = new Size(390, 280) };
+        var windows = new List<UsageWindow> { new("model:five_hour", "synthetic_internal", 0, null) };
+        if (weekly) windows.Add(new("seven_day", "raw_weekly", 30, null));
+        if (fiveHour) windows.Add(new("five_hour", "raw_primary", 20, null));
+        card.Render(new("Claude Code", ProviderStatus.Ready, new(windows, Now, "fixture")), Now, 1);
+        var texts = card.Controls.Cast<Control>().Select(c => c.Text).ToArray();
+        Assert.Equal(fiveHour, texts.Contains("80% remaining"));
+        Assert.Equal(!fiveHour && weekly, texts.Contains("70% remaining"));
+        Assert.Equal(weekly, texts.Contains("Weekly limit"));
+        var all = string.Join("\n", card.Controls.Cast<Control>().Select(c => c.Text + hints.GetToolTip(c) + c.AccessibleName));
+        foreach (var raw in new[] { "model:", "synthetic_internal", "raw_weekly", "raw_primary" })
+            Assert.DoesNotContain(raw, all);
+        if (!fiveHour && !weekly) Assert.Contains("Unsupported format", texts);
     });
 
     private static void AssertImportantTextFits(UsageForm form)
@@ -447,7 +552,7 @@ public sealed class PopupTests
             var measured = TextRenderer.MeasureText(graphics, label.Text, label.Font,
                 new Size(int.MaxValue, int.MaxValue), TextFormatFlags.SingleLine | TextFormatFlags.NoPrefix);
             Assert.True(measured.Width <= label.ClientSize.Width,
-                $"Label '{label.Text}' requires {measured.Width}px, has {label.ClientSize.Width}px.");
+                $"Label '{label.Text}' in {label.Parent?.Name}/{label.Parent?.GetType().Name} at {label.DeviceDpi} DPI requires {measured.Width}px, has {label.ClientSize.Width}px.");
             Assert.True(measured.Height <= label.ClientSize.Height,
                 $"Label '{label.Text}' requires {measured.Height}px height, has {label.ClientSize.Height}px.");
             Assert.True(label.Parent!.ClientRectangle.Contains(label.Bounds),

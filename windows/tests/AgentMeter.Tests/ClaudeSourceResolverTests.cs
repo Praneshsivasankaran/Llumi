@@ -42,7 +42,7 @@ public sealed class ClaudeSourceResolverTests
     [Fact]
     public void SameAccountSelectsNewestWholeSnapshotWithoutDuplicatingAllowance()
     {
-        var desktop = Good(ClaudeClient.Desktop, Snapshot(Now.AddMinutes(-1), [new("five-hour", "5 hours", 10, null)]));
+        var desktop = Good(ClaudeClient.Desktop, Snapshot(Now.AddMinutes(-1), [new("five_hour", "5 hours", 10, null)]));
         var code = Good(ClaudeClient.Code, Snapshot(Now, [new("weekly", "7 days", 20, Now.AddDays(3))]));
         var result = Resolve(desktop, code);
         Assert.Same(code.Usage.Snapshot, result.Result.Snapshot);
@@ -195,7 +195,7 @@ public sealed class ClaudeSourceResolverTests
         var result = Resolve(historical, code);
         Assert.Same(code.Usage.Snapshot, result.Result.Snapshot);
         Assert.Equal(code.Binding, result.Binding);
-        Assert.Equal("five-hour", Assert.Single(result.Result.Snapshot!.Windows).Id);
+        Assert.Equal("five_hour", Assert.Single(result.Result.Snapshot!.Windows).Id);
     }
 
     [Fact]
@@ -285,17 +285,20 @@ public sealed class ClaudeSourceResolverTests
     }
 
     [Fact]
-    public void EmptyOrEntirelyUnknownSnapshotIsUnavailable()
+    public void SuccessfulEmptyOrMissingObservationRemainsNotReported()
     {
-        Assert.Equal(FailureKind.Unsupported, Resolve(Good(ClaudeClient.Desktop, Snapshot(Now, []))).Result.Failure);
-        var unknown = Snapshot(Now, [new("five-hour", "5 hours", null, null)]);
-        Assert.Equal(FailureKind.Unsupported, Resolve(Good(ClaudeClient.Desktop, unknown)).Result.Failure);
+        var empty = Resolve(Good(ClaudeClient.Desktop, Snapshot(Now, []))).Result;
+        Assert.Equal(FailureKind.None, empty.Failure);
+        Assert.Equal(AllowanceAvailability.NotReported, new ProviderState("Claude Code", ProviderStatus.Ready, empty.Snapshot).Availability);
+        var unknown = Snapshot(Now, [new("five_hour", "5 hours", null, null)]);
+        Assert.Equal(FailureKind.None, Resolve(Good(ClaudeClient.Desktop, unknown)).Result.Failure);
+        Assert.Null(Assert.Single(unknown.Windows).RemainingPercent);
     }
 
     [Fact]
     public void ResetOnlyObservationRetainsUnknownPercentage()
     {
-        var snapshot = Snapshot(Now, [new("five-hour", "5 hours", null, Now.AddHours(1))]);
+        var snapshot = Snapshot(Now, [new("five_hour", "5 hours", null, Now.AddHours(1))]);
         var result = Resolve(Good(ClaudeClient.Desktop, snapshot));
         Assert.Same(snapshot, result.Result.Snapshot);
         Assert.Null(Assert.Single(result.Result.Snapshot!.Windows).RemainingPercent);
@@ -305,7 +308,7 @@ public sealed class ClaudeSourceResolverTests
     public void NewestPartialObservationWinsWithoutBackfillingOlderPercentage()
     {
         var percentage = Good(ClaudeClient.Desktop, Snapshot(Now.AddMinutes(-1), cached: true));
-        var resetOnly = Good(ClaudeClient.Code, Snapshot(Now, [new("five-hour", "5 hours", null, Now.AddHours(2))]));
+        var resetOnly = Good(ClaudeClient.Code, Snapshot(Now, [new("five_hour", "5 hours", null, Now.AddHours(2))]));
         var result = Resolve(percentage, resetOnly);
         Assert.Same(resetOnly.Usage.Snapshot, result.Result.Snapshot);
         var window = Assert.Single(result.Result.Snapshot!.Windows);
@@ -319,7 +322,7 @@ public sealed class ClaudeSourceResolverTests
     [InlineData(100, 0)]
     public void GenuineZeroAndFullPercentageRemainValid(double used, double remaining)
     {
-        var snapshot = Snapshot(Now, [new("five-hour", "5 hours", used, null)]);
+        var snapshot = Snapshot(Now, [new("five_hour", "5 hours", used, null)]);
         Assert.Equal(remaining, Assert.Single(Resolve(Good(ClaudeClient.Desktop, snapshot)).Result.Snapshot!.Windows).RemainingPercent);
     }
 
@@ -358,7 +361,7 @@ public sealed class ClaudeSourceResolverTests
     private static ClaudeSourceResult Failure(ClaudeClient client, ClaudeAuthentication authentication, FailureKind failure,
         ClaudeAccountBinding? binding = null) => new(client, authentication, binding, ProviderResult.Fail(failure, "Safe fixture diagnostic"));
     private static UsageSnapshot Snapshot(DateTimeOffset observedAt, IReadOnlyList<UsageWindow>? windows = null, bool cached = false) =>
-        new(windows ?? [new("five-hour", "5 hours", 20, Now.AddHours(1))], observedAt, "Fixture Claude source", cached);
+        new(windows ?? [new("five_hour", "5 hours", 20, Now.AddHours(1))], observedAt, "Fixture Claude source", cached);
     private static void AssertAmbiguous(ClaudeResolution resolution)
     {
         Assert.Equal(FailureKind.Unsupported, resolution.Result.Failure);

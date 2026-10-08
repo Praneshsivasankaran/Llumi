@@ -1,0 +1,53 @@
+{
+  "platform": "windows",
+  "version": "2.1.3",
+  "build": 1,
+  "status": "preview",
+  "published_at": null,
+  "title": "A clearer Windows experience.",
+  "summary": "Simpler setup, complete allowance details and a steadier compact monitor.",
+  "sections": [
+    {
+      "title": "Getting started",
+      "items": [
+        "A clean Light setup with sharp Llumi artwork, illustrated PowerShell walkthroughs and animated provider switches.",
+        "Setup always uses Light. Existing preferences move to Light once; your later appearance choices stay saved.",
+        "Turn Codex and Claude Code monitoring on or off during setup and in Settings. Disabled providers stop monitoring and leave the Usage view and monitor; both can be off.",
+        "Check Setup separates sign-in readiness from monitoring availability, with Retry when another check can run."
+      ]
+    },
+    {
+      "title": "Usage and allowances",
+      "items": [
+        "See every supported general, model and additional time allowance, with clear labels, remaining percentages and reset times when reported.",
+        "The compact monitor prioritizes a general five-hour limit, then a general weekly limit, then the shortest other supported general window. Model limits stay in the details.",
+        "Clearer Not reported, Unsupported format, Unsupported billing, Unavailable and Stale states preserve the difference between unknown, zero and exhausted allowances.",
+        "Fixes intermittent Claude readings disappearing after a failed usage request. Previous readings remain visibly Stale only after the same account is verified; account changes and sign-out clear them.",
+        "Retries and reset refreshes respect provider limits, with bounded waits after repeated failures and no overlapping requests.",
+        "Softer cards, rounded controls and quieter date labels keep Usage focused on your allowances."
+      ]
+    },
+    {
+      "title": "Your monitor",
+      "items": [
+        "Drag without triggering hover expansion, with a movement threshold that follows display scaling.",
+        "Keep a stable position when expanding details or changing displays. Reset Position returns it to its default location.",
+        "Expanded details include provider names and observation dates. Open Usage shows additional limits when space is limited.",
+        "Clearer keyboard focus, accessible allowance details and brief animations that respect Windows motion preferences."
+      ]
+    },
+    {
+      "title": "About Llumi",
+      "items": [
+        "Find the installed version in About and open release notes on the Llumi website. Simpler menus remove repeated actions.",
+        "Windows updates continue to be managed by Microsoft Store."
+      ]
+    }
+  ],
+  "notice": "Approved for release on 8 October 2026. Microsoft Store submission and publication are not yet verified; this preview does not claim Store availability.",
+  "source_documents": [
+    "docs/releases/2026-10-windows-2.1.3.md",
+    "docs/windows/LOCAL-2.1.3.md",
+    "docs/product-spec/windows-213.md"
+  ]
+}

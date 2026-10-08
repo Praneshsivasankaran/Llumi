@@ -119,7 +119,8 @@ public sealed class ClaudeTests
         var before = ClaudeParser.Parse(Good, Now).Snapshot!;
         var after = ClaudeParser.Parse(Good, Now.AddHours(1)).Snapshot!;
         Assert.Equal(before.ObservedAt, after.ObservedAt);
-        Assert.True(new ProviderState("Claude Code", ProviderStatus.Ready, after).IsStale(Now.AddHours(1)));
+        Assert.True(after.IsCached);
+        Assert.True(Now.AddHours(1) - after.ObservedAt > TimeSpan.FromHours(1));
     }
 
     [Fact]

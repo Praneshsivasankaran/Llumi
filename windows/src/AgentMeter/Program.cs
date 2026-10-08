@@ -1,5 +1,3 @@
-using System.Text.Json;
-using System.Text.Json.Serialization;
 using AgentMeter.Core;
 
 namespace AgentMeter;
@@ -9,6 +7,9 @@ internal static class Program
     [STAThread]
     private static int Main(string[] args)
     {
+        // Reject former developer/export arguments before any UI, instance
+        // signaling, storage migration or provider collection can begin.
+        if (args.Length > 1 || args.Length == 1 && args[0] is not ("--startup" or "--quit")) return 1;
         var instanceName = "Local\\Llumi.V1." + Environment.UserName;
         if (args.Contains("--quit", StringComparer.Ordinal))
         {
@@ -34,15 +35,6 @@ internal static class Program
         if (!PackagedEnvironment.HasIdentity)
             LegacyPreferences.Migrate(Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "AgentMeter"), PackagedEnvironment.DataDirectory);
         var log = new DiagnosticLog(Path.Combine(PackagedEnvironment.DataDirectory, "logs"));
-        if (args.Length == 2 && args[0] == "--probe")
-        {
-            var coordinator = new RefreshCoordinator(CreateProviders(log.Write), log.Write);
-            coordinator.RefreshAsync().GetAwaiter().GetResult();
-            File.WriteAllText(args[1], JsonSerializer.Serialize(coordinator.States, new JsonSerializerOptions
-            { WriteIndented = true, Converters = { new JsonStringEnumConverter() } }));
-            return coordinator.States.Any(s => s.Status == ProviderStatus.Ready) ? 0 : 1;
-        }
-
         using var quitEvent = new EventWaitHandle(false, EventResetMode.AutoReset, instanceName + ".Quit");
         try
         {
@@ -57,5 +49,5 @@ internal static class Program
         finally { legacy.ReleaseMutex(); singleton.ReleaseMutex(); }
     }
 
-    private static IUsageProvider[] CreateProviders(Action<string> log) => [new CodexProvider(), new ClaudeProvider(log)];
+    private static IUsageProvider[] CreateProviders(Action<string> log) => [new CodexProvider(clientVersion: typeof(Program).Assembly.GetName().Version?.ToString(3)), new ClaudeProvider(log)];
 }

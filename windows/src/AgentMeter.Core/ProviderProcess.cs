@@ -4,9 +4,12 @@ using System.Text.Json;
 
 namespace AgentMeter.Core;
 
-public sealed class ProviderQueryException(FailureKind failure) : Exception("Provider query failed")
+public sealed class ProviderQueryException(FailureKind failure, TimeSpan? retryAfter = null) : Exception("Provider query failed")
 {
     public FailureKind Failure { get; } = failure;
+    // No server duration is different from an explicit duration. The scheduler
+    // owns the escalating fallback, including when authentication changes later.
+    public TimeSpan? RetryAfter { get; } = retryAfter;
 }
 
 public interface IProviderRpcProcess : IAsyncDisposable
@@ -98,7 +101,15 @@ public sealed class ProviderProcess : IProviderRpcProcess
             if (type != "control_response") continue;
             var response = message.GetProperty("response");
             if (ClaudeControlTransport.Text(response, "request_id") != id) continue;
-            if (ClaudeControlTransport.Text(response, "subtype") != "success") throw new ProviderQueryException(FailureKind.Unsupported);
+            if (ClaudeControlTransport.Text(response, "subtype") != "success")
+            {
+                var error = ClaudeControlTransport.Get(response, "error");
+                var category = error.ValueKind == JsonValueKind.String ? error.GetString() : ClaudeControlTransport.Text(error, "type");
+                var rateLimited = category is "rate_limit_error" or "rate_limited" or "rate_limit_exceeded" ||
+                    ClaudeControlTransport.Get(error, "code").TryGetInt32Safe(out var errorCode) && errorCode == 429;
+                throw new ProviderQueryException(rateLimited ? FailureKind.RateLimited : FailureKind.Unsupported,
+                    rateLimited ? RetryDelay(error, response) : null);
+            }
             var payload = response.GetProperty("response");
             if (payload.ValueKind != JsonValueKind.Object) throw new ProviderQueryException(FailureKind.Malformed);
             return payload.Clone();
@@ -117,16 +128,33 @@ public sealed class ProviderProcess : IProviderRpcProcess
             if (message.ValueKind != JsonValueKind.Object || message.EnumerateObject().Select(p => p.Name)
                 .Distinct(StringComparer.Ordinal).Count() != message.EnumerateObject().Count())
                 throw new ProviderQueryException(FailureKind.Malformed);
+            ClaudeControlTransport.RequireUnique(message);
             if (!message.TryGetProperty("id", out var responseId) || !responseId.TryGetInt32Safe(out var value) || value != id)
                 continue; // Notifications and unrelated responses are not usage.
             if (message.TryGetProperty("error", out var error) && error.ValueKind != JsonValueKind.Null)
             {
                 var code = error.ValueKind == JsonValueKind.Object && error.TryGetProperty("code", out var property) && property.TryGetInt32Safe(out var number) ? number : 0;
-                throw new ProviderQueryException(code is -32601 or -32602 ? FailureKind.Unsupported : FailureKind.Network);
+                var rateLimited = code is 429 or -32005 or -32001;
+                throw new ProviderQueryException(rateLimited ? FailureKind.RateLimited :
+                    code is -32601 or -32602 ? FailureKind.Unsupported : FailureKind.Network,
+                    rateLimited ? RetryDelay(error, ClaudeControlTransport.Get(error, "data")) : null);
             }
             if (!message.TryGetProperty("result", out var result)) throw new ProviderQueryException(FailureKind.Malformed);
             return result.Clone();
         }
+    }
+
+    // Read fixed numeric fields only; provider error messages never enter diagnostics.
+    private static TimeSpan? RetryDelay(JsonElement error, JsonElement metadata)
+    {
+        foreach (var source in new[] { error, metadata })
+            foreach (var name in new[] { "retryAfterSeconds", "retry_after_seconds" })
+            {
+                var field = ClaudeControlTransport.Get(source, name);
+                if (field.ValueKind == JsonValueKind.Number && field.TryGetDouble(out var seconds) &&
+                    double.IsFinite(seconds) && seconds > 0 && seconds <= 86_400) return TimeSpan.FromSeconds(seconds);
+            }
+        return null;
     }
 
     /// <summary>Reads one finite command's bounded JSON output and exit code.</summary>

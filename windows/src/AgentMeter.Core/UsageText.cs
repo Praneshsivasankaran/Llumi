@@ -10,17 +10,17 @@ public static class UsageText
         var text = new StringBuilder();
         var cached = state.Snapshot?.IsCached == true;
         var stale = state.IsStale(now);
-        var status = state.Status == ProviderStatus.Loading ? "Loading…" : state.Failure != FailureKind.None
-            ? FailureText.For(state.Failure) : cached ? "Cached observation" : stale ? "Stale" : "Live";
+        var status = PopupText.Status(state, now);
         text.AppendLine(status);
         if (state.Detail is not null) text.AppendLine(state.Detail);
+        else if (state.Failure != FailureKind.None) text.AppendLine(FailureText.For(state.Failure));
         if (state.Snapshot is not { } snapshot) return text.Append("Usage and reset times unavailable.").ToString();
         foreach (var window in UsagePresentation.Windows(state))
         {
             var expired = window.ResetPassed(now);
             var remaining = window.RemainingPercent?.ToString("0.#", CultureInfo.InvariantCulture);
             text.AppendLine();
-            text.Append(UsagePresentation.IsClaude(state.Name) ? PopupText.WindowName(state.Name, window) : window.Name)
+            text.Append(PopupText.WindowName(state.Name, window))
                 .Append("   ").Append(remaining is null ? "Unavailable" : remaining + "% remaining");
             if (stale || expired) text.Append(" (stale)");
             text.AppendLine();
@@ -44,12 +44,12 @@ public static class UsageText
 
     public static string Tooltip(IReadOnlyList<ProviderState> states, DateTimeOffset now)
     {
-        var parts = states.Select(s =>
+        var parts = states.Where(s => s.Enabled).Select(s =>
         {
-            var qualifier = s.Status == ProviderStatus.Loading ? "loading" : s.Failure != FailureKind.None ? "unavailable" : s.IsStale(now) ? "cached/stale" : "live";
+            var qualifier = PopupText.Status(s, now).ToLowerInvariant();
             return $"{s.Name}: {qualifier}";
         });
-        var tooltip = "Llumi | " + string.Join(" | ", parts);
+        var tooltip = states.All(s => !s.Enabled) ? "Llumi | Monitoring off" : "Llumi | " + string.Join(" | ", parts);
         return tooltip[..Math.Min(63, tooltip.Length)];
     }
 }

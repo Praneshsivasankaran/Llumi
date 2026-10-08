@@ -68,7 +68,7 @@ public static class ClaudeUsageParser
             binding = new(accountId, organization.ToString("D"));
             if (expectedBinding is not null && binding != expectedBinding)
                 return new(ClaudeClient.Code, ClaudeAuthentication.Unknown, null,
-                    ProviderResult.Fail(FailureKind.Unsupported, "Claude Code account changed during the usage query."));
+                    ProviderResult.Fail(FailureKind.AccountChanged));
         }
 
         if (failure != FailureKind.None)
@@ -83,16 +83,20 @@ public static class ClaudeUsageParser
             return new(ClaudeClient.Code, authentication, binding, ProviderResult.Fail(failure, Detail(detailCode)));
         }
         if (authentication != ClaudeAuthentication.Authenticated || binding is null || detailCode != "usageAvailable" ||
-            !Object(usage, [.. Windows.Select(window => window.Key), "model_scoped"]))
+            !Object(usage, [.. Windows.Select(window => window.Key), "model_scoped", "extra_usage"]))
             return Malformed();
 
         var windows = new List<UsageWindow>();
         var invalidField = false;
+        var unsupported = CodexParser.HasMetadata(ClaudeControlTransport.Get(usage, "extra_usage"));
         foreach (var (key, name) in Windows)
         {
             if (!usage.TryGetProperty(key, out var window) || window.ValueKind == JsonValueKind.Null) continue;
+            // The old bridge can expose opaque OAuth buckets. The verified 1.1.3 time schema
+            // establishes the general and Sonnet/Opus windows only.
+            if (key == "seven_day_oauth_apps") { unsupported = true; continue; }
             if (!ReadWindow(window, key, name, false, out var parsed, ref invalidField)) return Malformed();
-            windows.Add(parsed!);
+            if (!Merge(parsed!, windows)) return Malformed();
         }
         if (usage.TryGetProperty("model_scoped", out var models) && models.ValueKind != JsonValueKind.Null)
         {
@@ -104,14 +108,28 @@ public static class ClaudeUsageParser
                     string.IsNullOrWhiteSpace(name) || name.Length > 100 || name.Any(char.IsControl) || !names.Add(name))
                     return Malformed();
                 if (!ReadWindow(model, "model:" + name, name, true, out var parsed, ref invalidField)) return Malformed();
-                windows.Add(parsed!);
+                if (!Merge(parsed!, windows)) return Malformed();
             }
         }
-        if (windows.Count == 0 || !windows.Any(window => window.UsedPercent is not null || window.ResetsAt is not null))
-            return new(ClaudeClient.Code, authentication, binding, ProviderResult.Fail(FailureKind.Unsupported, Detail("quotaUnavailable")));
+        if (invalidField && !windows.Any(window => window.UsedPercent is not null))
+            return new(ClaudeClient.Code, authentication, binding, ProviderResult.Fail(FailureKind.Malformed));
+        var availability = windows.Any(window => window.UsedPercent is not null) ? AllowanceAvailability.Reported :
+            windows.Count != 0 ? AllowanceAvailability.NotReported : unsupported ? AllowanceAvailability.UnsupportedFormat : AllowanceAvailability.NotReported;
         return new(ClaudeClient.Code, authentication, binding, new ProviderResult(
-            new UsageSnapshot(windows, observedAt, "Claude Code · experimental SDK usage"),
+            new UsageSnapshot(windows, observedAt, "Claude Code · experimental SDK usage", Availability: availability),
             Detail: invalidField ? "Some usage fields were unavailable." : null));
+    }
+
+    private static bool Merge(UsageWindow window, List<UsageWindow> windows)
+    {
+        var index = windows.FindIndex(w => w.Scope == window.Scope && w.ScopeLabel == window.ScopeLabel && w.DurationMinutes == window.DurationMinutes);
+        if (index < 0) { windows.Add(window); return true; }
+        var old = windows[index];
+        if (old.UsedPercent is not null && window.UsedPercent is not null && old.UsedPercent != window.UsedPercent ||
+            old.ResetsAt is not null && window.ResetsAt is not null && old.ResetsAt != window.ResetsAt) return false;
+        windows[index] = new(old.Id, old.Name, old.UsedPercent ?? window.UsedPercent, old.ResetsAt ?? window.ResetsAt,
+            old.DurationMinutes, old.Scope, old.ScopeLabel, old.Bucket);
+        return true;
     }
 
     private static bool ReadWindow(JsonElement value, string id, string name, bool model,
@@ -136,7 +154,9 @@ public static class ClaudeUsageParser
             }
             invalidField |= reset is null;
         }
-        window = new(id, name, used, reset);
+        var modelLabel = model ? name : id switch { "seven_day_opus" => "Opus", "seven_day_sonnet" => "Sonnet", _ => null };
+        window = new(id, name, used, reset, id == "five_hour" ? 300 : 10080,
+            modelLabel is null ? UsageScope.General : UsageScope.Model, modelLabel, "claude");
         return true;
     }
 

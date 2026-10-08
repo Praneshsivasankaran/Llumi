@@ -18,7 +18,7 @@ public sealed class LlumiMigrationTests
             Assert.Equal(Appearance.Light,preferences.Appearance);Assert.False(preferences.CompactMonitor);Assert.True(preferences.TrayIcon);
             Assert.True(new SetupCompletionStore(Path.Combine(current,"setup-completed.json")).IsComplete());
             Assert.DoesNotContain("token",File.ReadAllText(Path.Combine(current,"v2-preferences.json")));
-            File.WriteAllText(Path.Combine(current,"v2-preferences.json"),"{\"Appearance\":0}");
+            Assert.True(new PreferenceStore(Path.Combine(current,"v2-preferences.json")).Save(preferences with { Appearance = Appearance.System }));
             LegacyPreferences.Migrate(old,current);
             Assert.Equal(Appearance.System,new PreferenceStore(Path.Combine(current,"v2-preferences.json")).Load().Appearance);
             Assert.True(File.Exists(Path.Combine(old,"v2-preferences.json")));

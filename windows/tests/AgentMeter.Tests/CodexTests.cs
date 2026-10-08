@@ -14,10 +14,10 @@ public sealed class CodexTests
     }
 
     [Fact]
-    public void MultipleBucketsTakePrecedenceAndUseActualDurations()
+    public void EquivalentLegacyAndMultipleBucketsMergeAndUseActualDurations()
     {
         var result = Parse("""
-            {"rateLimits":{"primary":{"usedPercent":99,"windowDurationMins":300}},
+            {"rateLimits":{"primary":{"usedPercent":43,"windowDurationMins":10080,"resetsAt":1789817100}},
              "rateLimitsByLimitId":{
                "codex":{"limitName":"Codex","primary":{"usedPercent":43,"windowDurationMins":10080,"resetsAt":1789817100}},
                "spark":{"limitName":"Spark","primary":{"usedPercent":0,"windowDurationMins":300,"resetsAt":1789477200},"secondary":{"usedPercent":25.5,"windowDurationMins":10080,"resetsAt":null}}
@@ -41,7 +41,7 @@ public sealed class CodexTests
     [Theory]
     [InlineData("{\"rateLimits\":{\"primary\":{\"usedPercent\":30}}}")]
     [InlineData("{\"rateLimitsByLimitId\":null,\"rateLimits\":{\"primary\":{\"usedPercent\":30}}}")]
-    public void LegacyUsedOnlyWhenMultiBucketViewIsAbsentOrNull(string json)
+    public void LegacyWindowsRemainSupported(string json)
     {
         var result = Parse(json);
         var window = Assert.Single(result.Snapshot!.Windows);
@@ -51,11 +51,11 @@ public sealed class CodexTests
     }
 
     [Fact]
-    public void EmptyNewMapNeverFallsBackToPotentiallyDifferentLegacyAllowance()
+    public void EmptyNewMapCanUseExplicitLegacyAllowanceWithoutInventingWindows()
     {
         var result = Parse("""{"rateLimitsByLimitId":{},"rateLimits":{"primary":{"usedPercent":30}}}""");
-        Assert.Equal(FailureKind.Unsupported, result.Failure);
-        Assert.Null(result.Snapshot);
+        Assert.Equal(FailureKind.None, result.Failure);
+        Assert.Equal(70, Assert.Single(result.Snapshot!.Windows).RemainingPercent);
     }
 
     [Theory]
@@ -76,11 +76,12 @@ public sealed class CodexTests
     [InlineData("{}")]
     [InlineData("{\"rateLimits\":null}")]
     [InlineData("{\"rateLimits\":{\"primary\":null,\"secondary\":null}}")]
-    public void NoWindowsMeansUnsupportedAndDoesNotInventValues(string json)
+    public void NoWindowsMeansNotReportedAndDoesNotInventValues(string json)
     {
         var result = Parse(json);
-        Assert.Equal(FailureKind.Unsupported, result.Failure);
-        Assert.Null(result.Snapshot);
+        Assert.Equal(FailureKind.None, result.Failure);
+        Assert.Empty(result.Snapshot!.Windows);
+        Assert.Equal(AllowanceAvailability.NotReported, result.Snapshot.Availability);
     }
 
     [Theory]
@@ -93,7 +94,8 @@ public sealed class CodexTests
     [InlineData("[]")]
     public void InvalidPercentageStaysUnknown(string percent)
     {
-        var window = Assert.Single(Parse("""{"rateLimits":{"primary":{"usedPercent":PERCENT,"resetsAt":1789817100}}}""".Replace("PERCENT", percent)).Snapshot!.Windows);
+        var result = Parse("""{"rateLimits":{"primary":{"usedPercent":PERCENT,"resetsAt":1789817100},"secondary":{"usedPercent":10,"windowDurationMins":10080}}}""".Replace("PERCENT", percent));
+        var window = Assert.Single(result.Snapshot!.Windows, w => w.Id == "codex/primary");
         Assert.Null(window.UsedPercent);
         Assert.Null(window.RemainingPercent);
         Assert.NotNull(window.ResetsAt);
@@ -153,6 +155,80 @@ public sealed class CodexTests
         Assert.Equal("Provider reports ordinary usage is unavailable.", result.Detail);
         Assert.Equal(90, Assert.Single(result.Snapshot!.Windows).RemainingPercent);
     }
+
+    [Fact]
+    public void ScopeComesFromExactBucketIdentityRatherThanTransportSlotOrLabel()
+    {
+        var result = Parse("""{"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":100,"windowDurationMins":10080},"secondary":{"usedPercent":0,"windowDurationMins":300}},"codex-other":{"limitName":"codex","primary":{"usedPercent":1,"windowDurationMins":300}}}}""");
+        var windows = result.Snapshot!.Windows;
+        Assert.All(windows.Take(2), w => Assert.Equal(UsageScope.General, w.Scope));
+        Assert.Equal(UsageScope.Additional, windows[2].Scope);
+        Assert.Equal(0, windows[0].RemainingPercent);
+        Assert.Equal(100, windows[1].RemainingPercent);
+    }
+
+    [Fact]
+    public void CaseDistinctAdditionalBucketCannotHideGeneralAllowance()
+    {
+        var result = Parse("""{"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":100,"windowDurationMins":300}},"Codex":{"limitName":"Fixture additional","primary":{"usedPercent":0,"windowDurationMins":300}}}}""");
+        Assert.Equal(FailureKind.None, result.Failure);
+        var state = new ProviderState("Codex", ProviderStatus.Ready, result.Snapshot);
+        var windows = UsagePresentation.Windows(state);
+        Assert.Equal(2, windows.Length);
+        var primary = Assert.IsType<UsageWindow>(UsagePresentation.Primary(state));
+        Assert.Equal("codex/primary", primary.Id);
+        Assert.Equal(UsageScope.General, primary.Scope);
+        Assert.Equal("0%", PopupText.Remaining(primary));
+        Assert.Equal(UsageScope.Additional, windows.Single(w => w.Id == "Codex/primary").Scope);
+        Assert.Equal("100%", PopupText.Remaining(windows.Single(w => w.Id == "Codex/primary")));
+        Assert.Equal("Live", PopupText.Status(state, Observed));
+    }
+
+    [Theory]
+    [InlineData("{\"credits\":{\"balance\":3}}")]
+    [InlineData("{\"rateLimits\":{\"spend\":{\"used\":0}}}")]
+    [InlineData("{\"rateLimits\":{\"primary\":{\"monetaryAllowance\":1}}}")]
+    public void MonetaryOrUnknownOnlySuccessIsUnsupportedFormatAndNeverBilling(string json)
+    {
+        var result = Parse(json);
+        Assert.Equal(FailureKind.None, result.Failure);
+        Assert.Equal(AllowanceAvailability.UnsupportedFormat, result.Snapshot!.Availability);
+        Assert.Empty(result.Snapshot.Windows);
+    }
+
+    [Theory]
+    [InlineData("{}")]
+    [InlineData("{\"credits\":{}}")]
+    [InlineData("{\"spend\":null}")]
+    public void MissingOrEmptyMetadataMeansNotReported(string json) =>
+        Assert.Equal(AllowanceAvailability.NotReported, Parse(json).Snapshot!.Availability);
+
+    [Theory]
+    [InlineData("{\"usedPercent\":21,\"windowDurationMins\":300}")]
+    [InlineData("{\"usedPercent\":20,\"windowDurationMins\":300,\"resetsAt\":1789817101}")]
+    public void ContradictoryEquivalentLegacyObservationIsRejected(string legacy)
+    {
+        var result = Parse("{\"rateLimitsByLimitId\":{\"codex\":{\"primary\":{\"usedPercent\":20,\"windowDurationMins\":300,\"resetsAt\":1789817100}}},\"rateLimits\":{\"secondary\":" + legacy + "}}");
+        Assert.Equal(FailureKind.Unsupported, result.Failure);
+        Assert.Null(result.Snapshot);
+    }
+
+    [Fact]
+    public void LegacyMirrorWithMissingDurationMergesByTransportSlotAndCompletesFields()
+    {
+        var result = Parse("""{"rateLimitsByLimitId":{"codex":{"primary":{"usedPercent":0,"windowDurationMins":300}}},"rateLimits":{"primary":{"usedPercent":0,"resetsAt":1789817100}}}""");
+        var window = Assert.Single(result.Snapshot!.Windows);
+        Assert.Equal(300, window.DurationMinutes);
+        Assert.Equal(100, window.RemainingPercent);
+        Assert.NotNull(window.ResetsAt);
+    }
+
+    [Theory]
+    [InlineData("{\"rateLimits\":{\"primary\":{\"usedPercent\":101}}}")]
+    [InlineData("{\"rateLimits\":{\"primary\":{\"windowDurationMins\":0}}}")]
+    [InlineData("{\"rateLimits\":{\"primary\":{\"resetsAt\":0}}}")]
+    public void MalformedOnlyResponseFailsInsteadOfAppearingNotReported(string json) =>
+        Assert.Equal(FailureKind.Malformed, Parse(json).Failure);
 
     [Fact]
     public async Task MissingExecutableReturnsNotInstalled()

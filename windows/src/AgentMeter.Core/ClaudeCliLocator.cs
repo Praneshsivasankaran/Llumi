@@ -28,6 +28,11 @@ public static class ClaudeCliLocator
     public static string? Find(ClaudeCliSearchEnvironment environment) =>
         Candidates(environment, includeManagedCaches: false).FirstOrDefault(candidate => candidate.Origin == ClaudeCliOrigin.Standalone)?.Path;
 
+    public static IReadOnlyList<string> StandaloneCandidates() => StandaloneCandidates(ClaudeCliSearchEnvironment.Current());
+    public static IReadOnlyList<string> StandaloneCandidates(ClaudeCliSearchEnvironment environment) =>
+        Candidates(environment, includeManagedCaches: false).Where(candidate => candidate.Origin == ClaudeCliOrigin.Standalone)
+            .Select(candidate => candidate.Path).Distinct(StringComparer.OrdinalIgnoreCase).Take(CliLocator.MaximumCandidates).ToArray();
+
     // Diagnostic discovery preserves managed installation evidence without treating
     // Desktop/extension binaries as the user's independently installed CLI.
     public static IReadOnlyList<ClaudeCliCandidate> Discover() => Discover(ClaudeCliSearchEnvironment.Current());

@@ -7,18 +7,18 @@ namespace AgentMeter;
 internal static class ProviderSetup
 {
     // Fixed official destinations only; no provider-provided URL or credentials reach the shell.
-    internal static Uri? For(ProviderState state) => state.Snapshot is null &&
+    internal static Uri? For(ProviderState state) => state.Enabled && state.Snapshot is null &&
         state.Failure is FailureKind.NotInstalled or FailureKind.LoggedOut
         ? state.Name switch
         {
-            "Codex" => new("https://developers.openai.com/codex/cli/"),
+            "Codex" => new("https://learn.chatgpt.com/docs/codex/cli"),
             "Claude" or "Claude Code" => new("https://code.claude.com/docs/en/quickstart"),
             _ => null
         } : null;
 
     internal static bool Open(Uri destination)
     {
-        if (destination.Scheme != Uri.UriSchemeHttps || destination.Host is not ("developers.openai.com" or "code.claude.com"))
+        if (destination.Scheme != Uri.UriSchemeHttps || destination.Host is not ("developers.openai.com" or "learn.chatgpt.com" or "code.claude.com"))
             return false;
         try
         {

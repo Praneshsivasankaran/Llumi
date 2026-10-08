@@ -14,9 +14,23 @@ internal sealed class UsageBar : Control
     public UsageBar()
     {
         SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer | ControlStyles.SupportsTransparentBackColor, true);
+        SetStyle(ControlStyles.Selectable, false);
         BackColor = Color.Transparent; TabStop = false;
-        AccessibleRole = AccessibleRole.ProgressBar;
+        AccessibleRole = AccessibleRole.StaticText;
         AccessibleName = "Remaining allowance unavailable";
+    }
+
+    protected override AccessibleObject CreateAccessibilityInstance() => new AllowanceAccessibleObject(this);
+
+    // A generic Control with ProgressBar role acquires a default UIA range value
+    // unrelated to our painted reading. Expose truthful read-only text instead.
+    private sealed class AllowanceAccessibleObject(UsageBar owner) : ControlAccessibleObject(owner)
+    {
+        public override AccessibleRole Role => AccessibleRole.StaticText;
+        public override AccessibleStates State => (base.State & ~(AccessibleStates.Focusable | AccessibleStates.Focused)) | AccessibleStates.ReadOnly;
+        public override string? Value { get => owner.AccessibleName; set { } }
+        public override string? DefaultAction => null;
+        public override void DoDefaultAction() { }
     }
 
     public void UpdateValue(double? value, bool isStale)
@@ -25,6 +39,11 @@ internal sealed class UsageBar : Control
         if (remaining == value && stale == isStale) return;
         remaining = value; stale = isStale;
         AccessibleName = value is { } v ? $"{v:0.#} percent remaining{(isStale ? ", stale" : "")}" : "Remaining allowance unavailable";
+        if (IsHandleCreated)
+        {
+            AccessibilityNotifyClients(AccessibleEvents.NameChange, -1);
+            AccessibilityNotifyClients(AccessibleEvents.ValueChange, -1);
+        }
         Invalidate();
     }
 

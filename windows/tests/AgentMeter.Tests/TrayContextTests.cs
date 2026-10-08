@@ -21,7 +21,8 @@ public sealed class TrayContextTests
             return await releaseSlow.Task.WaitAsync(token);
         });
         var fast = new FakeProvider("Codex", _ => Task.FromResult(GoodResult()));
-        var coordinator = new RefreshCoordinator([fast, slow], minimumInterval: TimeSpan.Zero);
+        var clock = new TrayClock();
+        var coordinator = new RefreshCoordinator([fast, slow], minimumInterval: TimeSpan.Zero, clock: clock);
         coordinator.Changed += () =>
         {
             if (coordinator.States[0].Status == ProviderStatus.Ready) fastReady.TrySetResult();
@@ -37,6 +38,8 @@ public sealed class TrayContextTests
             Assert.False(popup.Visible);
             Assert.True(popup.ShowInTaskbar);
             Assert.True(Field<NotifyIcon>(context, "tray").Visible);
+            Assert.DoesNotContain(Field<ContextMenuStrip>(context, "menu").Items.Cast<ToolStripItem>(),
+                item => item.Text?.Contains("Setup Llumi", StringComparison.Ordinal) == true);
             Assert.True(Field<System.Windows.Forms.Timer>(context, "poll").Enabled);
             Assert.False(Field<System.Windows.Forms.Timer>(context, "display").Enabled);
             Assert.False(Field<Task>(context, "activeRefresh").IsCompleted);
@@ -57,7 +60,8 @@ public sealed class TrayContextTests
             Assert.Equal(FailureKind.Network, coordinator.States[1].Failure);
             // Exercise the actual periodic Tick wiring with a short test-only interval.
             var poll = Field<System.Windows.Forms.Timer>(context, "poll");
-            Assert.Equal(30_000, poll.Interval);
+            Assert.Equal(1000, poll.Interval);
+            clock.Advance(TimeSpan.FromSeconds(31));
             poll.Interval = 100;
             await secondFinished.Task.WaitAsync(TimeSpan.FromSeconds(3));
             poll.Stop();
@@ -68,17 +72,149 @@ public sealed class TrayContextTests
     }
 
     [Fact]
+    public async Task SettingsRetryChecksAnEligibleProviderWhileTheOtherQueryRemainsInFlight()
+    {
+        var slowStarted = NewSignal(); var fastReady = NewSignal(); var fastRetried = NewSignal();
+        var slow = new FakeProvider("Claude Code", async token =>
+        {
+            slowStarted.TrySetResult();
+            await Task.Delay(Timeout.Infinite, token);
+            return GoodResult();
+        });
+        var fast = new FakeProvider("Codex", _ => Task.FromResult(GoodResult()));
+        var coordinator = new RefreshCoordinator([fast, slow], minimumInterval: TimeSpan.Zero);
+        coordinator.Changed += () =>
+        {
+            if (coordinator.States[0].Status != ProviderStatus.Ready) return;
+            fastReady.TrySetResult();
+            if (fast.Calls >= 2) fastRetried.TrySetResult();
+        };
+        await RunMessageLoop(coordinator, async (context, popup) =>
+        {
+            await slowStarted.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            await fastReady.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            context.OpenPanel(); popup.ShowSettings();
+            var retry = Descendants(popup).OfType<Button>().Single(button => button.AccessibleName == "Retry provider checks");
+            Assert.True(coordinator.IsRefreshing); Assert.True(retry.Enabled); Assert.Equal("Retry", retry.Text);
+            retry.PerformClick();
+            await fastRetried.Task.WaitAsync(TimeSpan.FromSeconds(3));
+            Assert.Equal(2, fast.Calls); Assert.Equal(1, slow.Calls);
+            Assert.Equal(ProviderStatus.Loading, coordinator.States[1].Status);
+        });
+    }
+
+    [Fact]
+    public async Task HiddenMonitorClearsCachedAccessibilityReadingsWhenProvidersAreDisabled()
+    {
+        var coordinator = new RefreshCoordinator([
+            new FakeProvider("Codex", _ => Task.FromResult(GoodResult())),
+            new FakeProvider("Claude Code", _ => Task.FromResult(GoodResult()))
+        ]);
+        await RunMessageLoop(coordinator, async (context, popup) =>
+        {
+            await Field<Task>(context, "activeRefresh");
+            var monitor = Field<MonitorForm>(context, "monitor");
+            Assert.False(monitor.Visible);
+            monitor.Render(coordinator.States);
+            var codex = monitor.AccessibilityObject.GetChild(0)!;
+            var claude = monitor.AccessibilityObject.GetChild(1)!;
+            Assert.Equal("53%", codex.Value); Assert.Equal("53%", claude.Value);
+
+            Change(context, new Preferences(CodexEnabled: false));
+            Assert.False(monitor.Visible);
+            Assert.Null(codex.Value); Assert.True(codex.State.HasFlag(AccessibleStates.Unavailable));
+            Assert.Equal("53%", claude.Value);
+            Assert.Equal(1, monitor.AccessibilityObject.GetChildCount());
+
+            Change(context, new Preferences(CodexEnabled: false, ClaudeEnabled: false));
+            Assert.False(monitor.Visible);
+            Assert.Null(codex.Value); Assert.Null(claude.Value);
+            Assert.True(claude.State.HasFlag(AccessibleStates.Unavailable));
+            Assert.Equal(0, monitor.AccessibilityObject.GetChildCount());
+        });
+    }
+
+    [Fact]
+    public async Task SettingsStartupFailuresShowFeedbackRestoreTheSwitchAndRecover()
+    {
+        var coordinator = new RefreshCoordinator([new FakeProvider("Codex", _ => Task.FromResult(GoodResult()))]);
+        await RunMessageLoop(coordinator, (context, popup) =>
+        {
+            var registration = (MemoryStartup)Field<IStartupRegistration>(context, "startup");
+            context.OpenPanel(); popup.ShowSettings();
+            var launch = Descendants(popup).OfType<ToggleSwitch>().Single(control => control.Text == "Launch at Startup");
+            registration.RejectWrites = true;
+            launch.Checked = true;
+            Assert.Equal(1, registration.Writes); Assert.False(launch.Checked); Assert.True(launch.Enabled);
+            var feedback = Descendants(popup).OfType<Label>().Single(label => label.Visible && label.Text == "Startup setting could not be saved. Please try again.");
+            var panel = (Panel)feedback.Parent!;
+            Assert.True(panel.ClientRectangle.Contains(feedback.Bounds), "Rejected startup feedback must be brought into the visible viewport.");
+            Change(context, new Preferences(CompactMonitor: false));
+            context.ResetMonitorPosition();
+            Assert.True(feedback.Visible); Assert.Contains("Startup setting could not be saved", feedback.Text);
+            registration.RejectWrites = false;
+            launch.Checked = true;
+            Assert.Equal(2, registration.Writes); Assert.True(launch.Checked); Assert.True(registration.Enabled);
+            Assert.False(feedback.Visible); Assert.Equal("", feedback.Text);
+            registration.BecomeUnavailableAfterWrite = true;
+            launch.Checked = false;
+            Assert.Equal(3, registration.Writes); Assert.False(launch.Checked); Assert.False(launch.Enabled);
+            Assert.True(feedback.Visible); Assert.Equal("Startup setting is unavailable. Please try again.", feedback.Text);
+            return Task.CompletedTask;
+        });
+    }
+
+    [Fact]
+    public async Task SettingsPreferenceAndPositionErrorsClearOnlyAfterTheirOwnSuccessfulRetry()
+    {
+        var directory = "";
+        var coordinator = new RefreshCoordinator([new FakeProvider("Codex", _ => Task.FromResult(GoodResult()))]);
+        await RunMessageLoop(coordinator, (context, popup) =>
+        {
+            context.OpenPanel(); popup.ShowSettings();
+            var compact = Descendants(popup).OfType<ToggleSwitch>().Single(control => control.Text == "Show monitor");
+            var temporaryPreference = Path.Combine(directory, "preferences.json.tmp");
+            Directory.CreateDirectory(temporaryPreference);
+            compact.Checked = false;
+            Assert.True(compact.Checked);
+            var feedback = Descendants(popup).OfType<Label>().Single(label => label.Visible && label.Text.Contains("previous preferences remain active"));
+            context.ResetMonitorPosition();
+            Assert.True(feedback.Visible); Assert.Contains("previous preferences remain active", feedback.Text);
+            Directory.Delete(temporaryPreference);
+            compact.Checked = false;
+            Assert.False(compact.Checked); Assert.False(feedback.Visible); Assert.Equal("", feedback.Text);
+
+            var positionPath = Path.Combine(directory, "position.json");
+            File.Delete(positionPath); Directory.CreateDirectory(positionPath);
+            context.ResetMonitorPosition();
+            Assert.True(feedback.Visible); Assert.Equal("Monitor position could not be saved. Try again.", feedback.Text);
+            compact.Checked = true;
+            var launch = Descendants(popup).OfType<ToggleSwitch>().Single(control => control.Text == "Launch at Startup");
+            launch.Checked = true;
+            Assert.True(launch.Checked); Assert.True(compact.Checked);
+            Assert.True(feedback.Visible); Assert.Equal("Monitor position could not be saved. Try again.", feedback.Text);
+            Directory.Delete(positionPath);
+            context.ResetMonitorPosition();
+            Assert.False(feedback.Visible); Assert.Equal("", feedback.Text);
+            Assert.NotNull(Field<MonitorPositionStore>(context, "positions").Load());
+            return Task.CompletedTask;
+        }, storageReady: path => directory = path);
+    }
+
+    [Fact]
     public async Task RecoveryBurstsDebounceToOneRefreshAndKeepBothWindowsHidden()
     {
         var recovered = NewSignal();
         var provider = new FakeProvider("Codex", _ => Task.FromResult(GoodResult()));
-        var coordinator = new RefreshCoordinator([provider], minimumInterval: TimeSpan.Zero);
+        var clock = new TrayClock();
+        var coordinator = new RefreshCoordinator([provider], minimumInterval: TimeSpan.Zero, clock: clock);
         coordinator.Changed += () => { if (!coordinator.IsRefreshing && provider.Calls == 2) recovered.TrySetResult(); };
         await RunMessageLoop(coordinator, async (context, popup) =>
         {
             await Field<Task>(context, "activeRefresh");
             var timer = Field<System.Windows.Forms.Timer>(context, "recovery");
             Assert.Equal(5_000, timer.Interval);
+            clock.Advance(TimeSpan.FromSeconds(31));
             timer.Interval = 100;
             for (var i = 0; i < 20; i++) context.ScheduleRecovery();
             Assert.True(timer.Enabled);
@@ -153,7 +289,7 @@ public sealed class TrayContextTests
         var first = NewSignal(); var second = NewSignal();
         var count = 0;
         var provider = new FakeProvider("Codex", _ => Task.FromResult(new ProviderResult(new UsageSnapshot(
-            [new UsageWindow("codex/primary", "Core", Interlocked.Increment(ref count) * 10, DateTimeOffset.UtcNow.AddDays(1))],
+            [new UsageWindow("codex/primary", "Core", Interlocked.Increment(ref count) * 10, DateTimeOffset.UtcNow.AddDays(1), 10080)],
             DateTimeOffset.UtcNow, "fixture"))));
         var coordinator = new RefreshCoordinator([provider], minimumInterval: TimeSpan.Zero);
         coordinator.Changed += () =>
@@ -239,7 +375,7 @@ public sealed class TrayContextTests
     {
         var now = DateTimeOffset.UtcNow;
         var coordinator = new RefreshCoordinator([
-            new FakeProvider("Codex", _ => Task.FromResult(new ProviderResult(new UsageSnapshot([new("codex/primary", "7 days", 15, now.AddDays(2))], now, "fixture")))),
+            new FakeProvider("Codex", _ => Task.FromResult(new ProviderResult(new UsageSnapshot([new("codex/primary", "7 days", 15, now.AddDays(2), 10080)], now, "fixture")))),
             new FakeProvider("Claude Code", _ => Task.FromResult(new ProviderResult(new UsageSnapshot([new("five_hour", "5 hours", 3, now.AddHours(2))], now, "fixture"))))]);
         await RunMessageLoop(coordinator, async (context, popup) =>
         {
@@ -292,7 +428,7 @@ public sealed class TrayContextTests
     [Fact]
     public async Task BothIncludesUnavailableProviderAndSurvivesIndependentRefresh()
     {
-        var ready = new ProviderResult(new UsageSnapshot([new("codex/primary", "7 days", 15, DateTimeOffset.UtcNow.AddDays(1))], DateTimeOffset.UtcNow, "fixture"));
+        var ready = new ProviderResult(new UsageSnapshot([new("codex/primary", "7 days", 15, DateTimeOffset.UtcNow.AddDays(1), 10080)], DateTimeOffset.UtcNow, "fixture"));
         var coordinator = new RefreshCoordinator([
             new FakeProvider("Codex", _ => Task.FromResult(ready)),
             new FakeProvider("Claude Code", _ => Task.FromResult(ProviderResult.Fail(FailureKind.Malformed)))]);
@@ -321,7 +457,9 @@ public sealed class TrayContextTests
     }
 
     private static async Task RunMessageLoop(RefreshCoordinator coordinator,
-        Func<TrayContext, UsageForm, Task> scenario)
+        Func<TrayContext, UsageForm, Task> scenario, Preferences? initialPreferences = null,
+        Func<ActivitySnapshot>? captureActivity = null, bool waitInitialActivity = true, bool rejectPreferenceWrites = false,
+        bool setupComplete = true, string? reviewTitle = null, Action<string>? storageReady = null)
     {
         var completed = NewSignal();
         var logDirectory = Path.Combine(Path.GetTempPath(), "AgentMeter.TrayTests." + Guid.NewGuid().ToString("N"));
@@ -333,8 +471,11 @@ public sealed class TrayContextTests
             {
                 using var showEvent = new EventWaitHandle(false, EventResetMode.AutoReset);
                 var setupStore = new SetupCompletionStore(Path.Combine(logDirectory, "setup.json"));
-                setupStore.Save(true);
-                context = new TrayContext(coordinator, new DiagnosticLog(logDirectory), showEvent, new MonitorPositionStore(Path.Combine(logDirectory, "position.json")), new MemoryStartup(), captureActivity: () => ActivitySnapshot.Empty, preferenceStore: new PreferenceStore(Path.Combine(logDirectory, "preferences.json")), setupStore: setupStore);
+                if (setupComplete) setupStore.Save(true);
+                var preferenceStore = new PreferenceStore(rejectPreferenceWrites ? logDirectory : Path.Combine(logDirectory, "preferences.json"));
+                if (initialPreferences is not null) Assert.True(preferenceStore.Save(initialPreferences));
+                context = new TrayContext(coordinator, new DiagnosticLog(logDirectory), showEvent, new MonitorPositionStore(Path.Combine(logDirectory, "position.json")), new MemoryStartup(), captureActivity: captureActivity ?? (() => ActivitySnapshot.Empty), preferenceStore: preferenceStore, setupStore: setupStore, reviewTitle: reviewTitle);
+                storageReady?.Invoke(logDirectory);
                 var popup = Field<UsageForm>(context, "popup");
                 var tray = Field<NotifyIcon>(context, "tray");
                 using var watchdog = new System.Threading.Timer(_ =>
@@ -350,7 +491,7 @@ public sealed class TrayContextTests
                         // Scenarios inject explicit activity snapshots. Finish the constructor's
                         // sample and stop periodic Empty samples from hiding the monitor mid-test.
                         Field<System.Windows.Forms.Timer>(context, "activityTimer").Stop();
-                        await Field<Task>(context, "activityTask");
+                        if (waitInitialActivity) await Field<Task>(context, "activityTask");
                         await scenario(context, popup);
                     }
                     catch (Exception exception) { failure = exception; }
@@ -405,6 +546,242 @@ public sealed class TrayContextTests
         });
     }
 
+    [Fact]
+    public async Task FreshReviewContextTraversesEveryNativeSetupStepAndCompletesOnlyAtFinish()
+    {
+        var binding = new AccountBinding("synthetic-first-run-account");
+        ProviderResult SignedIn(ProviderResult value) => value with { Authentication = AuthenticationStatus.Verified, VerifiedBinding = binding };
+        var coordinator = new RefreshCoordinator([
+            new FakeProvider("Codex", _ => Task.FromResult(SignedIn(GoodResult()))),
+            new FakeProvider("Claude Code", _ => Task.FromResult(SignedIn(new(new UsageSnapshot([new("five_hour", "fixture", 10, DateTimeOffset.UtcNow.AddHours(2))], DateTimeOffset.UtcNow, "synthetic first-run fixture")))))
+        ], minimumInterval: TimeSpan.Zero);
+        await RunMessageLoop(coordinator, async (context, popup) =>
+        {
+            await Field<Task>(context, "activeRefresh");
+            var setup = Field<SetupForm>(context, "setupWindow");
+            var flow = (SetupFlow)typeof(SetupForm).GetField("flow", BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(setup)!;
+            var completion = Field<SetupCompletionStore>(context, "setupStore");
+            var saved = Field<PreferenceStore>(context, "preferenceStore");
+            var startup = Assert.IsType<MemoryStartup>(Field<IStartupRegistration>(context, "startup"));
+            Assert.True(setup.Visible); Assert.False(popup.Visible);
+            Assert.Equal(SetupStep.Welcome, flow.Step); Assert.Equal(Enum.GetValues<SetupStep>(), flow.Steps);
+            Assert.False(completion.IsComplete()); Assert.False(saved.HasValidExistingPreferences());
+            Assert.Equal(new Preferences(), Field<Preferences>(context, "preferences"));
+            Assert.Equal(Appearance.Light, Field<Preferences>(context, "preferences").Appearance);
+            Assert.Contains("local first-time test", setup.Text); Assert.Contains("local first-time test", popup.Text);
+            Assert.Contains("local first-time test", Field<MonitorForm>(context, "monitor").Text);
+            var visited = new List<SetupStep>();
+            foreach (var step in Enum.GetValues<SetupStep>())
+            {
+                Assert.Equal(step, flow.Step); visited.Add(step);
+                Assert.False(completion.IsComplete());
+                Assert.True(Palette.IsLight); Assert.Equal(Color.FromArgb(247, 248, 250), setup.BackColor);
+                if (step == SetupStep.Providers)
+                {
+                    var codex = Descendants(setup).OfType<CheckBox>().Single(c => c.AccessibleName == "Monitor Codex");
+                    codex.Checked = false; Assert.False(saved.Load().CodexEnabled);
+                    Assert.False(coordinator.States[0].Enabled);
+                    Assert.False(completion.RecognizeExisting(saved.HasValidExistingPreferences()));
+                    codex.Checked = true; await Field<Task>(context, "activeRefresh");
+                    Assert.True(saved.Load().CodexEnabled); Assert.True(coordinator.States[0].Enabled);
+                }
+                if (step == SetupStep.Preferences)
+                {
+                    var compact = Descendants(setup).OfType<CheckBox>().Single(c => c.Text == "Compact Monitor");
+                    compact.Checked = false; Assert.False(saved.Load().CompactMonitor);
+                    var launch = Descendants(setup).OfType<CheckBox>().Single(c => c.Text == "Launch at Startup");
+                    typeof(Control).GetMethod("OnClick", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(launch, [EventArgs.Empty]);
+                    Assert.True(startup.Enabled); Assert.True(launch.Checked); Assert.Equal(1, startup.Writes);
+                    var appearance = Assert.Single(Descendants(setup).OfType<ComboBox>());
+                    Assert.Equal((int)Appearance.Light, appearance.SelectedIndex);
+                    Assert.Equal(Appearance.Light, saved.Load().Appearance);
+                }
+                if (step != SetupStep.Done)
+                {
+                    var next = Assert.IsAssignableFrom<Button>(setup.AcceptButton);
+                    Assert.True(next.Enabled); next.PerformClick();
+                }
+            }
+            Assert.Equal(Enum.GetValues<SetupStep>(), visited);
+            Assert.True(Field<bool>(context, "needsSetup"));
+            var finish = Descendants(setup).OfType<Button>().Single(b => b.Text == "Start Llumi");
+            finish.PerformClick();
+            Assert.True(completion.IsComplete()); Assert.False(Field<bool>(context, "needsSetup"));
+            Assert.True(popup.Visible); Assert.True(setup.IsDisposed);
+            Assert.Equal(new Preferences(CompactMonitor: false, Appearance: Appearance.Light), saved.Load());
+            Assert.True(startup.Enabled); Assert.Equal(1, startup.Writes);
+            Assert.True(Palette.IsLight); Assert.Equal(Color.FromArgb(247, 248, 250), popup.BackColor);
+            popup.ShowSettings();
+            var appAppearance = Descendants(popup).OfType<ComboBox>().Single(c => c.AccessibleName == "Appearance");
+            Assert.Equal((int)Appearance.Light, appAppearance.SelectedIndex);
+            appAppearance.SelectedIndex = (int)Appearance.Dark;
+            Assert.Equal(Appearance.Dark, saved.Load().Appearance); Assert.False(Palette.IsLight);
+            Assert.Equal(Color.FromArgb(32, 33, 36), popup.BackColor);
+        }, setupComplete: false, reviewTitle: "local first-time test");
+    }
+
+    [Fact]
+    public async Task SavedDisabledProvidersAreAppliedBeforeAnyQueryOrActivityCapture()
+    {
+        var codex = new FakeProvider("Codex", _ => Task.FromResult(GoodResult()));
+        var claude = new FakeProvider("Claude Code", _ => Task.FromResult(GoodResult()));
+        var captures = 0;
+        var coordinator = new RefreshCoordinator([codex, claude]);
+        await RunMessageLoop(coordinator, (context, popup) =>
+        {
+            Assert.Equal(0, codex.Calls); Assert.Equal(0, claude.Calls); Assert.Equal(0, captures);
+            Assert.All(coordinator.States, state => Assert.False(state.Enabled));
+            context.ApplyActivity(new(new(true, true), new(true, true)));
+            Assert.False(Field<MonitorForm>(context, "monitor").Visible);
+            Assert.Empty(Field<MonitorForm>(context, "monitor").ProviderNames);
+            return Task.CompletedTask;
+        }, new Preferences(CodexEnabled: false, ClaudeEnabled: false),
+            () => { Interlocked.Increment(ref captures); return new(new(true), new(true)); });
+    }
+
+    [Fact]
+    public async Task DisablingCancelsQueryFiltersPendingActivityAndEnableStartsFreshQuery()
+    {
+        var querying = NewSignal(); var cancelled = NewSignal(); var captureStarted = NewSignal();
+        using var releaseActivity = new ManualResetEventSlim();
+        var captures = 0;
+        var calls = 0;
+        var provider = new FakeProvider("Codex", async token =>
+        {
+            if (Interlocked.Increment(ref calls) > 1) return GoodResult();
+            querying.TrySetResult();
+            try { await Task.Delay(Timeout.Infinite, token); }
+            finally { if (token.IsCancellationRequested) cancelled.TrySetResult(); }
+            return GoodResult();
+        });
+        var coordinator = new RefreshCoordinator([provider], minimumInterval: TimeSpan.Zero);
+        try
+        {
+            await RunMessageLoop(coordinator, async (context, popup) =>
+            {
+                await querying.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                await captureStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                Change(context, new Preferences(CodexEnabled: false, ClaudeEnabled: false));
+                await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+                releaseActivity.Set();
+                await Field<Task>(context, "activityTask");
+                Assert.Empty(Field<ActivitySnapshot>(context, "activity").Providers);
+                Assert.False(Field<MonitorForm>(context, "monitor").Visible);
+                Assert.Null(coordinator.States[0].Snapshot);
+                await Field<Task>(context, "activeRefresh");
+                Change(context, new Preferences(CodexEnabled: true, ClaudeEnabled: false));
+                await Field<Task>(context, "activeRefresh");
+                await Field<Task>(context, "activityTask");
+                Assert.Equal(2, provider.Calls);
+                Assert.True(coordinator.States[0].Enabled);
+                Assert.Equal(ProviderStatus.Ready, coordinator.States[0].Status);
+                Assert.Equal(new[] { "Codex" }, Field<MonitorForm>(context, "monitor").ProviderNames);
+            }, captureActivity: () =>
+            {
+                if (Interlocked.Increment(ref captures) == 1)
+                { captureStarted.TrySetResult(); releaseActivity.Wait(TimeSpan.FromSeconds(3)); }
+                return new(new(true), new(true));
+            }, waitInitialActivity: false);
+        }
+        finally { releaseActivity.Set(); }
+    }
+
+    [Fact]
+    public async Task FailedPreferenceSaveLeavesProviderQueriesAndActivityEnabled()
+    {
+        var provider = new FakeProvider("Codex", _ => Task.FromResult(GoodResult()));
+        var coordinator = new RefreshCoordinator([provider], minimumInterval: TimeSpan.Zero);
+        await RunMessageLoop(coordinator, async (context, popup) =>
+        {
+            await Field<Task>(context, "activeRefresh");
+            Change(context, new Preferences(CodexEnabled: false, ClaudeEnabled: false));
+            Assert.True(Field<Preferences>(context, "preferences").CodexEnabled);
+            Assert.True(coordinator.States[0].Enabled);
+            context.ApplyActivity(new(new(true), new()));
+            Assert.True(Field<MonitorForm>(context, "monitor").Visible);
+            Assert.Equal(new[] { "Codex" }, Field<MonitorForm>(context, "monitor").ProviderNames);
+        }, rejectPreferenceWrites: true);
+    }
+
+    [Fact]
+    public async Task ResetPositionRestoresDpiScaledDefaultAndPersistsForNextOpen()
+    {
+        var coordinator = new RefreshCoordinator([new FakeProvider("Codex", _ => Task.FromResult(GoodResult()))]);
+        await RunMessageLoop(coordinator, async (context, popup) =>
+        {
+            await Field<Task>(context, "activeRefresh");
+            context.ApplyActivity(new(new(true), new()));
+            var monitor = Field<MonitorForm>(context, "monitor");
+            monitor.MotionAllowed = () => false;
+            await Settle(monitor);
+            var screen = Screen.FromControl(monitor);
+            monitor.Location = new(screen.WorkingArea.Left + 175, screen.WorkingArea.Top + 140);
+            monitor.CommitPosition();
+            var reset = Assert.Single(monitor.ContextMenuStrip!.Items.OfType<ToolStripMenuItem>(), item => item.Text == "Reset Position");
+            reset.PerformClick();
+            var saved = Field<MonitorPositionStore>(context, "positions").Load();
+            Assert.NotNull(saved); Assert.Equal(20, saved.Left); Assert.Equal(20, saved.Top);
+            var expected = MonitorPosition.Restore(saved, screen.DeviceName, screen.WorkingArea, monitor.Size, monitor.DeviceDpi);
+            Assert.Equal(expected, monitor.Location);
+            context.ApplyActivity(ActivitySnapshot.Empty);
+            context.ApplyActivity(new(new(true), new()));
+            Assert.Equal(expected, monitor.Location);
+        });
+    }
+
+    [Fact]
+    public async Task SleepResumePreservesProviderRateLimitEmbargo()
+    {
+        var clock = new TrayClock();
+        var provider = new FakeProvider("Codex", _ => Task.FromResult(ProviderResult.Fail(FailureKind.RateLimited) with { RetryAfter = TimeSpan.FromMinutes(2) }));
+        var coordinator = new RefreshCoordinator([provider], minimumInterval: TimeSpan.Zero, clock: clock);
+        await RunMessageLoop(coordinator, async (context, popup) =>
+        {
+            await Field<Task>(context, "activeRefresh");
+            var power = typeof(TrayContext).GetMethod("OnPowerModeChanged", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            power.Invoke(context, [context, new Microsoft.Win32.PowerModeChangedEventArgs(Microsoft.Win32.PowerModes.Suspend)]);
+            // Power events marshal through the same message loop as the actual native callback.
+            await Task.Delay(20);
+            Assert.False(Field<System.Windows.Forms.Timer>(context, "poll").Enabled);
+            Assert.False(Field<System.Windows.Forms.Timer>(context, "activityTimer").Enabled);
+            clock.Advance(TimeSpan.FromSeconds(30));
+            power.Invoke(context, [context, new Microsoft.Win32.PowerModeChangedEventArgs(Microsoft.Win32.PowerModes.Resume)]);
+            await Task.Delay(20);
+            Click(popup, "Refresh usage");
+            await Field<Task>(context, "activeRefresh");
+            Assert.Equal(1, provider.Calls);
+            Assert.NotNull(coordinator.States[0].RetryAt);
+        });
+    }
+
+    [Fact]
+    public async Task SleepCancelsTheActiveProviderThroughNativePowerEventWiring()
+    {
+        var started = NewSignal(); var cancelled = NewSignal();
+        var provider = new FakeProvider("Codex", async token =>
+        {
+            started.TrySetResult();
+            try { await Task.Delay(Timeout.Infinite, token); }
+            finally { if (token.IsCancellationRequested) cancelled.TrySetResult(); }
+            return GoodResult();
+        });
+        var coordinator = new RefreshCoordinator([provider]);
+        await RunMessageLoop(coordinator, async (context, popup) =>
+        {
+            await started.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            var power = typeof(TrayContext).GetMethod("OnPowerModeChanged", BindingFlags.Instance | BindingFlags.NonPublic)!;
+            power.Invoke(context, [context, new Microsoft.Win32.PowerModeChangedEventArgs(Microsoft.Win32.PowerModes.Suspend)]);
+            await cancelled.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            await Field<Task>(context, "activeRefresh");
+            Assert.False(coordinator.IsRefreshing); Assert.Null(coordinator.States[0].Snapshot);
+            Assert.False(Field<System.Windows.Forms.Timer>(context, "poll").Enabled);
+            Assert.False(Field<System.Windows.Forms.Timer>(context, "activityTimer").Enabled);
+        });
+    }
+
+    private static void Change(TrayContext context, Preferences value) =>
+        typeof(TrayContext).GetMethod("ChangePreferences", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(context, [value]);
+
     private static T Field<T>(TrayContext context, string name) =>
         (T)typeof(TrayContext).GetField(name, BindingFlags.Instance | BindingFlags.NonPublic)!.GetValue(context)!;
 
@@ -426,8 +803,18 @@ public sealed class TrayContextTests
     }
 
     private static TaskCompletionSource NewSignal() => new(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    private sealed class TrayClock : TimeProvider
+    {
+        private DateTimeOffset now = DateTimeOffset.UtcNow;
+        private long stamp;
+        public override DateTimeOffset GetUtcNow() => now;
+        public override long GetTimestamp() => stamp;
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        internal void Advance(TimeSpan interval) { now += interval; stamp += interval.Ticks; }
+    }
     private static ProviderResult GoodResult() => new(new UsageSnapshot([
-        new UsageWindow("weekly", "Codex Â· 7 days", 47, DateTimeOffset.UtcNow.AddDays(1))
+        new UsageWindow("codex/primary", "Codex 7 days", 47, DateTimeOffset.UtcNow.AddDays(1), 10080)
     ], DateTimeOffset.UtcNow, "test fixture"));
 
     private sealed class FakeProvider(string name, Func<CancellationToken, Task<ProviderResult>> query) : IUsageProvider
@@ -445,7 +832,15 @@ public sealed class TrayContextTests
     private sealed class MemoryStartup : IStartupRegistration
     {
         internal bool Enabled, RejectWrites;
-        public bool TryRead(out bool enabled) { enabled = Enabled; return true; }
-        public bool TrySet(bool enabled) { if (RejectWrites) return false; Enabled = enabled; return true; }
+        internal bool Available = true, BecomeUnavailableAfterWrite;
+        internal int Writes;
+        public bool TryRead(out bool enabled) { enabled = Enabled; return Available; }
+        public bool TrySet(bool enabled)
+        {
+            Writes++; if (RejectWrites) return false;
+            Enabled = enabled;
+            if (BecomeUnavailableAfterWrite) Available = false;
+            return true;
+        }
     }
 }

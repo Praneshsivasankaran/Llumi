@@ -6,7 +6,9 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $project = Join-Path $root 'src/AgentMeter/AgentMeter.csproj'
 $version = [string]([xml](Get-Content $project -Raw)).Project.PropertyGroup.Version
-if ($version -notmatch '^\d+\.\d+\.\d+$' -or [version]"$version.0" -le [version]'2.0.1.0') { throw 'Release version must advance beyond 2.0.1.0.' }
+if ($version -notmatch '^\d+\.\d+\.\d+$') { throw 'Release version must have three numeric components.' }
+. "$PSScriptRoot/release-version.ps1"
+Assert-NextWindowsPackageVersion -PackageVersion "$version.0"
 $compiler = (Resolve-Path -LiteralPath $CompilerPath).Path
 $signature = Get-AuthenticodeSignature -LiteralPath $compiler
 if ($signature.Status -ne 'Valid' -or $signature.SignerCertificate.Subject -notmatch 'Pyrsys B\.V\.') { throw 'Use the signature-verified established Inno compiler.' }

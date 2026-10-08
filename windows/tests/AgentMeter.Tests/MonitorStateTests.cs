@@ -4,7 +4,19 @@ namespace AgentMeter.Tests;
 
 public sealed class MonitorStateTests
 {
-    private static UsageWindow W(string id, double? used = 30) => new(id, "Localized arbitrary label", used, null);
+    [Theory]
+    [InlineData("removed", "primary")]
+    [InlineData(null, "primary")]
+    [InlineData("SECONDARY", "secondary")]
+    public void SavedDisplayWinsWhenPresentAndMissingDisplayFallsBackToPrimary(string? saved, string expected)
+    {
+        Assert.Equal(expected, MonitorPosition.SelectDisplay(saved, "primary", ["secondary", "primary"]));
+        if (expected == "primary")
+            Assert.Equal(new Point(20, 60), MonitorPosition.Restore(new(2, saved ?? "removed", .8, .5),
+                expected, new(0, 40, 1600, 900), new(202, 34), 96));
+    }
+
+    private static UsageWindow W(string id, double? used = 30) => new(id, "Localized arbitrary label", used, null, id == "codex/secondary" ? 10080 : 300);
     private static ProviderState State(string name, params UsageWindow[] windows) => new(name, ProviderStatus.Ready,
         new UsageSnapshot(windows, DateTimeOffset.UtcNow, "test"));
 
@@ -28,7 +40,7 @@ public sealed class MonitorStateTests
         Assert.NotNull(result.Snapshot);
         var selected = MonitorSelection.Select(new ProviderState("Codex", ProviderStatus.Ready, result.Snapshot));
         Assert.NotNull(selected);
-        Assert.Equal("Codex/primary", selected.Id);
+        Assert.Equal("codex/primary", selected.Id);
         Assert.Equal(29, selected.RemainingPercent);
     }
 
@@ -36,7 +48,7 @@ public sealed class MonitorStateTests
     public void MainUnknownPercentageDoesNotBecomeBonusAllowance()
     {
         var main = W("codex/primary", null);
-        Assert.Same(main, MonitorSelection.Select(State("Codex", main, W("codex/secondary", 0))));
+        Assert.Equal("codex/secondary", MonitorSelection.Select(State("Codex", main, W("codex/secondary", 0)))!.Id);
         Assert.Null(MonitorSelection.Select(State("Codex", W("codex_bengalfox/primary", 0))));
         Assert.Null(MonitorSelection.Select(State("Codex", W("invented/primary", 0))));
     }
@@ -63,8 +75,9 @@ public sealed class MonitorStateTests
     [Fact]
     public void DuplicateAndUnknownSemanticsDoNotGuess()
     {
-        Assert.Null(MonitorSelection.Select(State("Claude", W("seven_day"), W("seven_day"))));
-        Assert.Null(MonitorSelection.Select(State("Other", W("seven_day"))));
+        Assert.Equal("seven_day", MonitorSelection.Select(State("Claude", W("seven_day"), W("seven_day")))!.Id);
+        Assert.Null(MonitorSelection.Select(State("Claude", W("seven_day", 10), W("seven_day", 50))));
+        Assert.Null(MonitorSelection.Select(State("Other", W("opaque"))));
         Assert.Null(MonitorSelection.Select(new ProviderState("Claude", ProviderStatus.Unavailable)));
     }
 
@@ -80,7 +93,7 @@ public sealed class MonitorStateTests
     public void LogicalPositionRestoresAcrossDpi(int dpi)
     {
         var work = new Rectangle(-2400, -100, 2400, 1500);
-        var saved = MonitorPosition.Capture(new Point(-2200, 100), "second", work, 96);
+        var saved = new MonitorPosition(1, "second", 200, 200);
         var restored = MonitorPosition.Restore(saved, "second", work, new Size(350 * dpi / 96, 112 * dpi / 96), dpi);
         Assert.Equal(new Point(work.Left + 200 * dpi / 96, work.Top + 200 * dpi / 96), restored);
     }
@@ -124,6 +137,31 @@ public sealed class MonitorStateTests
         Assert.Single(Directory.GetFiles(directory.Path));
         Assert.DoesNotContain("pinned", File.ReadAllText(path), StringComparison.OrdinalIgnoreCase);
         Assert.DoesNotContain("provider", File.ReadAllText(path), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Theory]
+    [InlineData(96)] [InlineData(144)] [InlineData(192)]
+    public void NormalizedAnchorPreservesRelativePositionAcrossResolutionAndDpi(int dpi)
+    {
+        var oldWork = new Rectangle(-2400, -100, 2400, 1500);
+        var saved = MonitorPosition.Capture(new Point(-1900, 500), "second", oldWork, new Size(200, 34));
+        Assert.Equal(2, saved.Version); Assert.Equal(.25, saved.Left); Assert.Equal(.4, saved.Top);
+        var newWork = new Rectangle(-1600, 80, 1600, 1000);
+        var size = MonitorForm.SizeForDpi(dpi);
+        var restored = MonitorPosition.Restore(saved, "second", newWork, size, dpi);
+        Assert.InRange(Math.Abs(restored.X + size.Width / 2d - (-1200)), 0, .5);
+        Assert.Equal(480, restored.Y);
+    }
+
+    [Fact]
+    public void NormalizedPositionRoundTripsWhileLegacySchemaStillLoads()
+    {
+        using var directory = new TempDirectory(); var path = Path.Combine(directory.Path, "position.json");
+        var store = new MonitorPositionStore(path);
+        var saved = MonitorPosition.Capture(new(100, 80), "screen", new(0, 0, 1000, 800), new(200, 34));
+        Assert.True(store.Save(saved)); Assert.Equal(saved, store.Load());
+        File.WriteAllText(path, """{"Version":1,"Display":"screen","Left":12.5,"Top":18}""");
+        Assert.Equal(new MonitorPosition(1, "screen", 12.5, 18), store.Load());
     }
 
     [Theory]

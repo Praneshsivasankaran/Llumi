@@ -42,14 +42,14 @@ public sealed class ClaudeProviderSourceTests
         var source = Dynamic(ClaudeClient.Desktop, () => current);
         var coordinator = Coordinator(Provider(source));
         await coordinator.RefreshAsync();
-        Assert.Same(current.Usage.Snapshot, Assert.Single(coordinator.States).Snapshot);
+        Assert.Same(current.Usage.Snapshot!.Windows, Assert.Single(coordinator.States).Snapshot!.Windows);
 
         current = Failed(ClaudeClient.Desktop, FailureKind.Malformed, SecondAccount);
         await coordinator.RefreshAsync();
         var failed = Assert.Single(coordinator.States);
         Assert.Null(failed.Snapshot);
-        Assert.Equal(FailureKind.Unsupported, failed.Failure);
-        Assert.Equal(ProviderStatus.Unavailable, failed.Status);
+        Assert.Equal(FailureKind.Malformed, failed.Failure);
+        Assert.Equal(ProviderStatus.Error, failed.Status);
 
         // A later failure on that same new account must not resurrect the first one.
         current = Failed(ClaudeClient.Desktop, FailureKind.Network, SecondAccount);
@@ -67,7 +67,7 @@ public sealed class ClaudeProviderSourceTests
 
         current = new(ClaudeClient.Desktop, ClaudeAuthentication.Unknown, null, ProviderResult.Fail(FailureKind.Malformed));
         await coordinator.RefreshAsync();
-        Assert.Equal(FailureKind.Unsupported, Assert.Single(coordinator.States).Failure);
+        Assert.Equal(FailureKind.Malformed, Assert.Single(coordinator.States).Failure);
         Assert.Null(Assert.Single(coordinator.States).Snapshot);
         await coordinator.RefreshAsync();
         Assert.Equal(FailureKind.Malformed, Assert.Single(coordinator.States).Failure);
@@ -84,7 +84,7 @@ public sealed class ClaudeProviderSourceTests
         current = Failed(ClaudeClient.Desktop, FailureKind.Network, FirstAccount);
         await coordinator.RefreshAsync();
         var state = Assert.Single(coordinator.States);
-        Assert.Same(original.Usage.Snapshot, state.Snapshot);
+        Assert.Same(original.Usage.Snapshot!.Windows, state.Snapshot!.Windows);
         Assert.Equal(FailureKind.Network, state.Failure);
         Assert.True(state.IsStale(Now));
         Assert.Equal("Stale", PopupText.Status(state, Now));
@@ -99,12 +99,12 @@ public sealed class ClaudeProviderSourceTests
         var replacement = Good(ClaudeClient.Desktop, SecondAccount, 78);
         current = replacement;
         await coordinator.RefreshAsync();
-        Assert.Same(replacement.Usage.Snapshot, Assert.Single(coordinator.States).Snapshot);
+        Assert.Same(replacement.Usage.Snapshot!.Windows, Assert.Single(coordinator.States).Snapshot!.Windows);
 
         current = Failed(ClaudeClient.Desktop, FailureKind.Network, SecondAccount);
         await coordinator.RefreshAsync();
         Assert.Equal(FailureKind.Network, Assert.Single(coordinator.States).Failure);
-        Assert.Same(replacement.Usage.Snapshot, Assert.Single(coordinator.States).Snapshot);
+        Assert.Same(replacement.Usage.Snapshot!.Windows, Assert.Single(coordinator.States).Snapshot!.Windows);
     }
 
     [Fact]
@@ -138,19 +138,19 @@ public sealed class ClaudeProviderSourceTests
             ProviderResult.Fail(FailureKind.Unsupported, "Fixture historical accounts are ambiguous"));
         var coordinator = Coordinator(Provider(Constant(desktop), Dynamic(ClaudeClient.Code, () => currentCli)));
         await coordinator.RefreshAsync();
-        Assert.Same(cliUsage.Usage.Snapshot, Assert.Single(coordinator.States).Snapshot);
+        Assert.Same(cliUsage.Usage.Snapshot!.Windows, Assert.Single(coordinator.States).Snapshot!.Windows);
 
         currentCli = Failed(ClaudeClient.Code, FailureKind.Network, FirstAccount);
         await coordinator.RefreshAsync();
         var stale = Assert.Single(coordinator.States);
         Assert.Equal(FailureKind.Network, stale.Failure);
-        Assert.Same(cliUsage.Usage.Snapshot, stale.Snapshot);
+        Assert.Same(cliUsage.Usage.Snapshot!.Windows, stale.Snapshot!.Windows);
         Assert.True(stale.IsStale(Now));
 
         currentCli = new(ClaudeClient.Code, ClaudeAuthentication.Unknown, null, ProviderResult.Fail(FailureKind.Malformed));
         await coordinator.RefreshAsync();
         Assert.Null(Assert.Single(coordinator.States).Snapshot);
-        Assert.Equal(FailureKind.Unsupported, Assert.Single(coordinator.States).Failure);
+        Assert.Equal(FailureKind.Malformed, Assert.Single(coordinator.States).Failure);
     }
 
     [Fact]
@@ -176,17 +176,17 @@ public sealed class ClaudeProviderSourceTests
         var currentCli = Absent(ClaudeClient.Code);
         var coordinator = Coordinator(Provider(Dynamic(ClaudeClient.Desktop, () => currentDesktop), Dynamic(ClaudeClient.Code, () => currentCli)));
         await coordinator.RefreshAsync();
-        Assert.Same(originalDesktop.Usage.Snapshot, Assert.Single(coordinator.States).Snapshot);
+        Assert.Same(originalDesktop.Usage.Snapshot!.Windows, Assert.Single(coordinator.States).Snapshot!.Windows);
 
         currentDesktop = originalDesktop with { Authentication = ClaudeAuthentication.Unknown };
         var replacement = Good(ClaudeClient.Code, SecondAccount, 73);
         currentCli = replacement;
         await coordinator.RefreshAsync();
-        Assert.Same(replacement.Usage.Snapshot, Assert.Single(coordinator.States).Snapshot);
+        Assert.Same(replacement.Usage.Snapshot!.Windows, Assert.Single(coordinator.States).Snapshot!.Windows);
 
         currentCli = Failed(ClaudeClient.Code, FailureKind.Network, SecondAccount);
         await coordinator.RefreshAsync();
-        Assert.Same(replacement.Usage.Snapshot, Assert.Single(coordinator.States).Snapshot);
+        Assert.Same(replacement.Usage.Snapshot!.Windows, Assert.Single(coordinator.States).Snapshot!.Windows);
         Assert.Equal(FailureKind.Network, Assert.Single(coordinator.States).Failure);
     }
 
@@ -233,12 +233,21 @@ public sealed class ClaudeProviderSourceTests
             finally { finished.TrySetResult(); }
         });
         var cli = Good(ClaudeClient.Code);
-        IClaudeUsageSource[] sources = verifiedPeerAvailable ? [source, Constant(cli)] : [source];
-        var provider = new ClaudeProvider(sources, () => Now, TimeSpan.FromMilliseconds(250));
+        var peerStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var peer = new Source(ClaudeClient.Code, _ =>
+        {
+            peerStarted.TrySetResult();
+            return Task.FromResult(cli);
+        });
+        IClaudeUsageSource[] sources = verifiedPeerAvailable ? [source, peer] : [source];
+        // The deadline includes ThreadPool dispatch. Leave room for parallel CI work;
+        // this checks timeout isolation and duplicate suppression, not scheduling speed.
+        var provider = new ClaudeProvider(sources, () => Now, TimeSpan.FromSeconds(2));
         try
         {
             var first = provider.QueryAsync(CancellationToken.None);
             await started.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            if (verifiedPeerAvailable) await peerStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
             var firstResult = await first.WaitAsync(TimeSpan.FromSeconds(5));
             Assert.Equal(verifiedPeerAvailable ? FailureKind.None : FailureKind.Timeout, firstResult.Failure);
             Assert.Same(verifiedPeerAvailable ? cli.Usage.Snapshot : null, firstResult.Snapshot);
@@ -246,11 +255,14 @@ public sealed class ClaudeProviderSourceTests
             Assert.Equal(verifiedPeerAvailable ? FailureKind.None : FailureKind.Timeout, second.Failure);
             Assert.Same(verifiedPeerAvailable ? cli.Usage.Snapshot : null, second.Snapshot);
             Assert.Equal(1, source.Calls);
+            Assert.Equal(verifiedPeerAvailable ? 2 : 0, peer.Calls);
         }
         finally
         {
             release.TrySetResult(Good(ClaudeClient.Desktop));
-            await finished.Task.WaitAsync(TimeSpan.FromSeconds(5));
+            // A deadline can cancel a queued delegate before it starts. In that case
+            // no worker can signal finished; do not mask the original start failure.
+            if (started.Task.IsCompleted) await finished.Task.WaitAsync(TimeSpan.FromSeconds(5));
         }
     }
 
@@ -364,7 +376,7 @@ public sealed class ClaudeProviderSourceTests
     private static ClaudeClient Other(ClaudeClient client) => client == ClaudeClient.Desktop ? ClaudeClient.Code : ClaudeClient.Desktop;
     private static ClaudeSourceResult Good(ClaudeClient client, ClaudeAccountBinding? binding = null, double used = 20) =>
         new(client, ClaudeAuthentication.Authenticated, binding ?? FirstAccount,
-            new(new UsageSnapshot([new("five-hour", "5 hours", used, Now.AddHours(1))], Now, $"Fixture {client}")));
+            new(new UsageSnapshot([new("five_hour", "5 hours", used, Now.AddHours(1))], Now, $"Fixture {client}")));
     private static ClaudeSourceResult Failed(ClaudeClient client, FailureKind failure, ClaudeAccountBinding binding) =>
         new(client, ClaudeAuthentication.Authenticated, binding, ProviderResult.Fail(failure));
     private static ClaudeSourceResult Absent(ClaudeClient client, ClaudeAuthentication authentication = ClaudeAuthentication.Missing) =>

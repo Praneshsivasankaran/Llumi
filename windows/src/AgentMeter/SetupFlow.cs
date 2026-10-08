@@ -12,8 +12,8 @@ internal sealed class SetupFlow(SetupCompletionStore store)
     internal SetupStep[] Steps => new[] { SetupStep.Welcome, SetupStep.Providers }
         .Concat(Codex ? new[] { SetupStep.Codex } : []).Concat(Claude ? new[] { SetupStep.Claude } : [])
         .Concat([SetupStep.Verify, SetupStep.Preferences, SetupStep.Done]).ToArray();
-    internal void Next() { var i = Array.IndexOf(Steps, Step); if (i >= 0 && i + 1 < Steps.Length) Step = Steps[i + 1]; }
-    internal void Back() { var i = Array.IndexOf(Steps, Step); if (i > 0) Step = Steps[i - 1]; }
+    internal void Next() { var next = Steps.FirstOrDefault(s => (int)s > (int)Step, Step); Step = next; }
+    internal void Back() { var previous = Steps.LastOrDefault(s => (int)s < (int)Step, Step); Step = previous; }
     internal void Reopen() => Step = SetupStep.Welcome;
     internal bool Complete() => store.Save(true);
 }
@@ -58,17 +58,74 @@ internal sealed record SetupDiagnostic(string Detected, string Authentication, s
         var failure = state.Failure switch {
             FailureKind.None => "none", FailureKind.NotInstalled => "notInstalled", FailureKind.LoggedOut => "signedOut",
             FailureKind.Unsupported => "incompatible", FailureKind.Timeout => "timeout", FailureKind.Malformed => "malformed",
-            FailureKind.ProcessExited => "processExited", _ => "unavailable" };
-        if (state.Status == ProviderStatus.Ready && state.Snapshot is not null && !state.IsStale(DateTimeOffset.UtcNow))
-            return new("yes", "verified", "available", failure, "success");
-        if (state.Failure == FailureKind.NotInstalled) return new("no", "unknown", "unavailable", failure, "failure");
-        if (state.Failure == FailureKind.LoggedOut) return new("yes", "signed-out", "unavailable", failure, "failure");
-        if (state.Status == ProviderStatus.Loading) return new("unknown", "unknown", "checking", failure, "pending");
-        return new("unknown", "unknown", state.Snapshot is null ? "unavailable" : "stale", failure, "failure");
+            FailureKind.ProcessExited => "processExited", FailureKind.UnsupportedBilling => "unsupportedBilling",
+            FailureKind.RateLimited => "rateLimited", FailureKind.AccountChanged => "accountChanged", _ => "unavailable" };
+        if (!state.Enabled) return new("unknown", "unknown", "off", "none", "off");
+        var authentication = state.Authentication switch {
+            AuthenticationStatus.Verified => "verified", AuthenticationStatus.SignedOut => "signed-out",
+            AuthenticationStatus.UnsupportedBilling => "mode-detected", _ => "unknown" };
+        var detected = state.Authentication == AuthenticationStatus.Missing || state.Failure == FailureKind.NotInstalled ? "no" :
+            state.Authentication is AuthenticationStatus.Verified or AuthenticationStatus.SignedOut or AuthenticationStatus.UnsupportedBilling || state.Snapshot is not null ? "yes" : "unknown";
+        if (state.Status == ProviderStatus.Loading) return new(detected, authentication, "checking", failure, "pending");
+        if (state.IsStale(DateTimeOffset.UtcNow)) return new(detected, authentication, "stale", failure, "failure");
+        var usage = state.Failure == FailureKind.UnsupportedBilling ? "unsupported-billing" :
+            state.Failure is FailureKind.Malformed or FailureKind.Unsupported ? "unsupported-format" :
+            state.Snapshot is null ? "unavailable" : state.Availability switch {
+            AllowanceAvailability.Reported => "available", AllowanceAvailability.NotReported => "not-reported",
+            AllowanceAvailability.UnsupportedFormat => "unsupported-format", AllowanceAvailability.UnsupportedBilling => "unsupported-billing", _ => "unavailable" };
+        return new(detected, authentication, usage, failure, state.Snapshot is not null && state.Failure == FailureKind.None ? "success" : "failure");
     }
-    internal string Status => Usage == "available" ? "Ready" : Detected == "no" ? "Not installed" :
-        Authentication == "signed-out" ? "Installed — sign in required" : Usage == "checking" ? "Checking…" : "Unavailable";
-    internal string Summary => $"{Status}\nDetected: {Detected} · Authentication: {Authentication} · Usage: {Usage}";
+    private string SignIn => Authentication == "verified" ? "Signed in" : Detected == "no" ? "Not installed" :
+        Authentication == "signed-out" ? "Sign in required" : Authentication == "mode-detected" ? "Other billing mode detected" : "Sign-in not verified";
+    internal string Status => Usage == "off" ? "Monitoring off" : Usage == "checking" ? "Checking…" : SignIn;
+    internal string Monitoring => Usage switch {
+        "available" => "Available", "not-reported" => "Allowances not reported", "unsupported-format" => "Allowance format not supported",
+        "unsupported-billing" => "This billing mode can’t be monitored", "stale" => "Last known allowances · stale",
+        "checking" => "Checking allowances…", "off" => "Off", _ => "Allowances unavailable" };
+    internal string Description => Usage == "off" ? Status : $"{SignIn}\nMonitoring: {Monitoring}";
+    internal string Summary => Usage is "off" or "checking" ? Status : Description;
+}
+
+internal static class SetupRetryPresentation
+{
+    internal static bool CanRetry(ProviderState state, DateTimeOffset now) => state.Enabled && state.Status != ProviderStatus.Loading &&
+        (state.RetryAt is null || state.RetryAt <= now);
+    internal static string? Message(ProviderState state, DateTimeOffset now)
+    {
+        if (!state.Enabled || state.Status == ProviderStatus.Loading) return null;
+        var manual = state.RetryAt is { } retry && retry > now ? retry : (DateTimeOffset?)null;
+        if (manual is { } embargo && state.Failure == FailureKind.RateLimited)
+            return "Rate limited · Retry " + When(embargo, now);
+        if (state.AutomaticRetryAt is { } automatic && automatic > now)
+            return "Automatic retry " + When(automatic, now) +
+                (manual is { } ready ? " · Retry " + When(ready, now) : "");
+        return manual is { } next ? "Retry " + When(next, now) : null;
+    }
+    private static string When(DateTimeOffset retry, DateTimeOffset now)
+    {
+        var duration = retry - now;
+        var after = duration.TotalSeconds > 900 ? $"after {retry.ToLocalTime():MMM d HH:mm}" :
+            "in " + (duration.TotalSeconds < 60 ? $"{Math.Ceiling(duration.TotalSeconds):0}s" : $"{Math.Ceiling(duration.TotalMinutes):0}m");
+        return after;
+    }
+}
+
+internal static class UsageAccessibility
+{
+    internal static string Observation(ProviderState state, DateTimeOffset now)
+    {
+        if (!state.Enabled || state.Snapshot is not { } snapshot) return PopupText.Summary(state, now);
+        var text = $"Updated {PopupText.Age(snapshot.ObservedAt, now)} ({snapshot.ObservedAt.ToLocalTime():yyyy-MM-dd HH:mm:ss zzz})" +
+            (state.Detail is null ? "" : " · provider notice");
+        if (!state.IsStale(now)) return text;
+        var reasons = new List<string>();
+        if (snapshot.IsCached) reasons.Add("cached reading");
+        if (state.Failure != FailureKind.None) reasons.Add("last retrieval failed");
+        if (snapshot.ObservedAt > now.AddMinutes(1)) reasons.Add("observation time is in the future");
+        else if (now - snapshot.ObservedAt > TimeSpan.FromMinutes(2)) reasons.Add("observation older than two minutes");
+        if (UsagePresentation.Windows(state).Any(w => w.ResetPassed(now))) reasons.Add("reset passed, awaiting provider update");
+        return text + "; Stale: " + string.Join(", ", reasons);
+    }
 }
 internal static class SetupDiagnostics
 {

@@ -57,12 +57,61 @@ public sealed class ProcessTests
     [InlineData(-32601, FailureKind.Unsupported)]
     [InlineData(-32602, FailureKind.Unsupported)]
     [InlineData(-32000, FailureKind.Network)]
+    [InlineData(429, FailureKind.RateLimited)]
+    [InlineData(-32005, FailureKind.RateLimited)]
+    [InlineData(-32001, FailureKind.RateLimited)]
     public async Task RpcErrorsAreClassifiedWithoutExposingRawMessage(int code, FailureKind failure)
     {
         await using var process = Start($"[Console]::Out.WriteLine('{{\"id\":1,\"error\":{{\"code\":{code},\"message\":\"secret raw response\"}}}}')");
         using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
         var error = await Assert.ThrowsAsync<ProviderQueryException>(() => process.ReadRpcResultAsync(1, timeout.Token));
         Assert.Equal(failure, error.Failure);
+        Assert.Null(error.RetryAfter);
+        Assert.DoesNotContain("secret", error.ToString());
+    }
+
+    [Fact]
+    public async Task StructuredRpcRateLimitPreservesNumericRetryWithoutRawText()
+    {
+        await using var process = Start("[Console]::Out.WriteLine('{\"id\":1,\"error\":{\"code\":429,\"message\":\"secret raw response\",\"data\":{\"retryAfterSeconds\":180}}}')");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var error = await Assert.ThrowsAsync<ProviderQueryException>(() => process.ReadRpcResultAsync(1, timeout.Token));
+        Assert.Equal(FailureKind.RateLimited, error.Failure);
+        Assert.Equal(TimeSpan.FromMinutes(3), error.RetryAfter);
+        Assert.DoesNotContain("secret", error.ToString());
+    }
+
+    [Theory]
+    [InlineData("null")]
+    [InlineData("\"90\"")]
+    [InlineData("0")]
+    [InlineData("-1")]
+    [InlineData("86401")]
+    [InlineData("1e309")]
+    public async Task InvalidRateLimitDurationRemainsAbsentForEscalatingFallback(string duration)
+    {
+        var message = "{\"id\":1,\"error\":{\"code\":-32001,\"message\":\"secret\",\"data\":{\"retryAfterSeconds\":" + duration + "}}}";
+        await using var process = Start("[Console]::Out.WriteLine('" + message + "')");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var error = await Assert.ThrowsAsync<ProviderQueryException>(() => process.ReadRpcResultAsync(1, timeout.Token));
+        Assert.Equal(FailureKind.RateLimited, error.Failure);
+        Assert.Null(error.RetryAfter);
+        Assert.DoesNotContain("secret", error.ToString());
+    }
+
+    [Theory]
+    [InlineData("rate_limit_error", FailureKind.RateLimited)]
+    [InlineData("rate_limited", FailureKind.RateLimited)]
+    [InlineData("secret raw response 429", FailureKind.Unsupported)]
+    public async Task ControlErrorsUseOnlyFixedCategoriesAndPreserveRetryDelay(string category, FailureKind expected)
+    {
+        var message = JsonSerializer.Serialize(new { type = "control_response", response = new
+        { request_id = "usage", subtype = "error", error = new { type = category, retry_after_seconds = 90 } } });
+        await using var process = Start("[Console]::Out.WriteLine('" + message + "')");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+        var error = await Assert.ThrowsAsync<ProviderQueryException>(() => process.ReadControlResultAsync("usage", timeout.Token));
+        Assert.Equal(expected, error.Failure);
+        Assert.Equal(expected == FailureKind.RateLimited ? TimeSpan.FromSeconds(90) : (TimeSpan?)null, error.RetryAfter);
         Assert.DoesNotContain("secret", error.ToString());
     }
 

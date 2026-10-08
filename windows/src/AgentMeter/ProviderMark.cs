@@ -5,10 +5,20 @@ using System.Xml.Linq;
 
 namespace AgentMeter;
 
+internal sealed class ProviderArtwork(string provider) : Control
+{
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        base.OnPaint(e); e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
+        ProviderMark.Draw(e.Graphics, provider, ClientRectangle, ForeColor);
+    }
+}
+
 // Renders the two audited, embedded vendor vectors; not a general SVG loader.
 internal static class ProviderMark
 {
-    private static readonly Dictionary<string, (float Size, GraphicsPath[] Paths)> Marks = new();
+    private sealed record Shape(GraphicsPath Path, Color? Fill);
+    private static readonly Dictionary<string, (float Width, float Height, Shape[] Shapes)> Marks = new();
     internal static void Draw(Graphics graphics, string provider, RectangleF bounds, Color color)
     {
         var key = provider.StartsWith("Claude", StringComparison.Ordinal) ? "Claude" : "Codex";
@@ -16,18 +26,32 @@ internal static class ProviderMark
         {
             if (!Marks.TryGetValue(key, out var mark))
             {
-                using var stream = typeof(ProviderMark).Assembly.GetManifestResourceStream($"AgentMeter.Assets.{key}Logo.svg")!;
+                var asset = key == "Claude" ? "ClaudeCodeMascot" : "CodexLogo";
+                using var stream = typeof(ProviderMark).Assembly.GetManifestResourceStream($"AgentMeter.Assets.{asset}.svg")!;
                 var xml = XDocument.Load(stream);
-                mark = (key == "Claude" ? 248 : 721, xml.Descendants().Where(n => n.Name.LocalName == "path" && n.Attribute("d") is not null)
-                    .Select(n => Parse(n.Attribute("d")!.Value)).ToArray());
+                var dimensions = xml.Root!.Attribute("viewBox")!.Value.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(v => float.Parse(v, CultureInfo.InvariantCulture)).ToArray();
+                mark = (dimensions[2], dimensions[3], xml.Descendants().Where(n => n.Name.LocalName == "path" || key == "Claude" && n.Name.LocalName == "rect")
+                    .Select(n => new Shape(n.Name.LocalName == "path" ? Parse(n.Attribute("d")!.Value) : Rectangle(n),
+                        key == "Claude" && n.Attribute("fill")?.Value is { } fill && fill.StartsWith('#') ? ColorTranslator.FromHtml(fill) : null)).ToArray());
                 Marks[key] = mark;
             }
             var state = graphics.Save();
-            graphics.TranslateTransform(bounds.X, bounds.Y); graphics.ScaleTransform(bounds.Width / mark.Size, bounds.Height / mark.Size);
-            using var brush = new SolidBrush(color);
-            foreach (var path in mark.Paths) graphics.FillPath(brush, path);
+            var scale = Math.Min(bounds.Width / mark.Width, bounds.Height / mark.Height);
+            graphics.TranslateTransform(bounds.X + (bounds.Width - mark.Width * scale) / 2, bounds.Y + (bounds.Height - mark.Height * scale) / 2);
+            graphics.ScaleTransform(scale, scale);
+            foreach (var shape in mark.Shapes)
+            {
+                using var brush = new SolidBrush(SystemInformation.HighContrast ? color : shape.Fill ?? color);
+                graphics.FillPath(brush, shape.Path);
+            }
             graphics.Restore(state);
         }
+    }
+    private static GraphicsPath Rectangle(XElement element)
+    {
+        float Number(string name) => float.Parse(element.Attribute(name)?.Value ?? "0", CultureInfo.InvariantCulture);
+        var path = new GraphicsPath(); path.AddRectangle(new RectangleF(Number("x"), Number("y"), Number("width"), Number("height"))); return path;
     }
     private static GraphicsPath Parse(string source)
     {

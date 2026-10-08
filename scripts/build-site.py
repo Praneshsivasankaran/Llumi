@@ -85,8 +85,15 @@ def load_releases(include_review=False):
                 date.fromisoformat(item["published_at"])
             except (KeyError, TypeError, ValueError):
                 raise ValueError("Published release requires a verified publication date") from None
-        elif item.get("status") != "preview" or item.get("published_at") is not None:
-            raise ValueError("Preview releases must not claim a publication date")
+        elif item.get("status") == "submitted":
+            if item["platform"] != "windows" or item.get("published_at") is not None:
+                raise ValueError("Store submissions must be Windows entries without a publication date")
+            try:
+                date.fromisoformat(item["submitted_at"])
+            except (KeyError, TypeError, ValueError):
+                raise ValueError("Store submission requires a verified submission date") from None
+        elif item.get("status") != "preview" or item.get("published_at") is not None or item.get("submitted_at") is not None:
+            raise ValueError("Preview releases must not claim a publication or submission date")
         for key in ("title", "summary"):
             if not isinstance(item.get(key), str) or not item[key].strip():
                 raise ValueError("Release notes require readable title and summary")
@@ -101,7 +108,7 @@ def load_releases(include_review=False):
                 not isinstance(text, str) or not text.strip() for text in section["items"]
             ):
                 raise ValueError("Release sections require readable notes")
-        if item["status"] == "published" or include_review:
+        if item["status"] in ("published", "submitted") or include_review:
             selected.append(item)
     return selected
 
@@ -112,13 +119,16 @@ def release_route(item):
 
 def release_metadata(item):
     platform = "macOS" if item["platform"] == "macos" else "Windows"
-    label = "Local preview" if item["status"] == "preview" else "Released"
-    badge = "release-badge preview" if item["status"] == "preview" else "release-badge"
+    label = {"preview": "Local preview", "submitted": "Microsoft Store review", "published": "Released"}[item["status"]]
+    badge = "release-badge preview" if item["status"] != "published" else "release-badge"
     if item["status"] == "preview":
         when = '<span class="release-date">Not released yet</span>'
     else:
-        published = date.fromisoformat(item["published_at"])
+        submitted = item["status"] == "submitted"
+        published = date.fromisoformat(item["submitted_at"] if submitted else item["published_at"])
         readable = f"{published.day} {published.strftime('%B')} {published.year}"
+        if submitted:
+            readable = "Submitted " + readable
         when = f'<time class="release-date" datetime="{published.isoformat()}">{readable}</time>'
     return f'<div class="release-meta"><span class="release-platform">{platform}</span><span class="{badge}">{label}</span>{when}</div>'
 
@@ -180,10 +190,11 @@ def build(output, base_url="", include_review=False):
     ]
     archive = (ROOT / "site/releases.html").read_text(encoding="utf-8")
     preview = "".join(release_card(item) for item in releases if item["status"] == "preview")
-    history = "".join(release_card(item) for item in releases if item["status"] == "published")
+    history = "".join(release_card(item) for item in releases if item["status"] in ("published", "submitted"))
     published = [item for item in releases if item["status"] == "published"]
-    latest_public = max(published, key=lambda item: (item["published_at"], item["build"]))["version"] if published else "pending"
-    archive = archive.replace("{{RELEASE_PREVIEW}}", preview).replace("{{RELEASE_HISTORY}}", history).replace("{{LATEST_PUBLIC_VERSION}}", html.escape(latest_public))
+    latest = max(published, key=lambda item: (item["published_at"], item["build"])) if published else None
+    latest_public = (("macOS" if latest["platform"] == "macos" else "Windows") + " " + latest["version"]) if latest else "pending"
+    archive = archive.replace("{{RELEASE_PREVIEW}}", preview).replace("{{RELEASE_HISTORY}}", history).replace("{{LATEST_PUBLIC_RELEASE}}", html.escape(latest_public))
     pages.append(("releases/", "Llumi Release Notes", "Release notes and patch notes for Llumi.", archive))
     for item in releases:
         pages.append((release_route(item), f'Llumi {item["version"]} — Release Notes', item["summary"], release_detail(item)))
