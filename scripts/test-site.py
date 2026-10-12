@@ -85,10 +85,41 @@ class SiteTests(unittest.TestCase):
 
     def test_preview_notes_are_excluded_from_public_output(self):
         self.assertFalse(any(name.startswith("review/") for name in self.files))
+        archive_routes = {urlsplit(urljoin("https://example.invalid/releases/", link)).path
+                          for link in self.pages["releases/index.html"].links}
         for item in builder.load_releases(include_review=True):
             if item["status"] == "preview":
                 self.assertNotIn(builder.release_route(item) + "index.html", self.files)
-                self.assertNotIn(item["version"], "".join(self.pages["releases/index.html"].data))
+                self.assertNotIn("/" + builder.release_route(item), archive_routes)
+
+    def test_same_version_can_be_published_on_windows_and_preview_on_macos(self):
+        published = {
+            "platform": "windows", "version": "9.8.7", "build": 1,
+            "status": "published", "published_at": "2099-10-12",
+            "title": "Released Windows changes", "summary": "Available Windows update.",
+            "sections": [{"title": "Windows changes", "items": ["Public Windows feature."]}],
+        }
+        preview = {**published, "platform": "macos", "status": "preview", "published_at": None,
+                   "title": "Unreleased Mac changes", "summary": "Private Mac preview.",
+                   "sections": [{"title": "Mac changes", "items": ["Unreleased Mac feature."]}]}
+        metadata = {"schema_version": 1, "releases": [preview, published]}
+        with patch.object(builder.json, "loads", return_value=metadata):
+            selected = builder.load_releases()
+            self.assertEqual(selected, [published])
+            self.assertEqual(builder.load_releases(include_review=True), [preview, published])
+        with tempfile.TemporaryDirectory() as directory, patch.object(builder, "load_releases", return_value=selected):
+            output = Path(directory)
+            builder.build(output)
+            self.assertTrue((output / "releases/windows/9.8.7/index.html").is_file())
+            self.assertFalse((output / "releases/macos/9.8.7/index.html").exists())
+            archive = Page((output / "releases/index.html").read_text(encoding="utf-8"))
+            self.assertIn("windows/9.8.7/", archive.links)
+            self.assertNotIn("macos/9.8.7/", archive.links)
+            visible = "".join(archive.data)
+            self.assertIn("Llumi 9.8.7", visible)
+            self.assertIn(published["title"], visible)
+            self.assertNotIn(preview["title"], visible)
+            self.assertNotIn(preview["summary"], visible)
 
     def test_release_navigation_and_version_notes(self):
         self.assertIn("./releases/", self.pages["index.html"].links)

@@ -9,7 +9,7 @@ Llumi monitors Codex and Claude Code usage on **macOS and Windows**, with native
 ## Availability
 
 - **macOS 1.1.3:** [Download the signed and notarized DMG](https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-1.1.3/Llumi-1.1.3-macos.dmg) · [Release notes and checksum](https://github.com/Praneshsivasankaran/Llumi/releases/tag/llumi-macos-1.1.3). Requires macOS 14 or later; Apple Silicon and Intel.
-- **Windows 2.0.2.0:** [Download from Microsoft Store](https://apps.microsoft.com/detail/9NV153Q5K5MQ). Requires Windows 10 22H2 or later, or Windows 11; x64. No direct Windows installer is offered.
+- **Windows 2.2.0.0:** [Download from Microsoft Store](https://apps.microsoft.com/detail/9NV153Q5K5MQ) · [Windows 2.2.0 patch notes](https://tryllumi.com/releases/windows/2.2.0/). Requires Windows 10 22H2 or later, or Windows 11; x64. No direct Windows installer is offered.
 
 Historical AgentMeter releases remain available in [release history](https://github.com/Praneshsivasankaran/Llumi/releases); they are not Llumi downloads.
 
@@ -20,6 +20,7 @@ Historical AgentMeter releases remain available in [release history](https://git
 - Shows supported allowances, reset information and explicit unavailable states for each provider.
 - Offers a contextual notch monitor on macOS and movable desktop monitor on Windows, with details on hover.
 - Includes guided setup, setup diagnostics, optional startup and Light, Dark or System appearance.
+- Windows 2.2.0 adds optional usage alerts, alert snooze and Start in background.
 
 Live usage requires separately installed, authenticated Codex CLI and/or standalone Claude Code and a supported provider subscription. Provider interfaces can change; unavailable values are never estimated.
 

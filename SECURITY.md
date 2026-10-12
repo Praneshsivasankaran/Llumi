@@ -10,6 +10,6 @@ Locally installed provider executables are trusted programs. Llumi bounds their 
 
 The frozen Llumi macOS 1.1.1 DMG is Developer ID signed, Apple notarized and stapled. Historical unsigned AgentMeter betas retain their original status; they are not current Llumi downloads.
 
-Llumi Windows 2.0.2.0 is published in Microsoft Store. The website links to that same Microsoft Store product; corrected public metadata and installed 2.0.2.0 were verified, with physical app checks accepted by the owner. No GitHub Windows binary is offered. Store and direct distribution have separate trust and update requirements. See the [distribution policy](docs/DISTRIBUTION.md).
+Llumi Windows 2.2.0.0 is published in Microsoft Store, verified on 12 October 2026. The website links to the same Microsoft Store product. No GitHub Windows binary is offered. Store and direct distribution have separate trust and update requirements. See the [distribution policy](docs/DISTRIBUTION.md).
 
 The supported development line is the current public source. Include the platform, version and installation channel in security reports. Provider updates can change interface behavior; malformed or unverifiable readings must remain unavailable.
