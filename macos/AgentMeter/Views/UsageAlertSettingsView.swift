@@ -19,8 +19,11 @@ struct UsageAlertSettingsView: View {
         Spacer(minLength: 8)
         Button("Test notification") { controller.sendTestNotification() }
       }
-      if controller.permission == .denied {
+      if controller.permission == .denied || controller.permission == .allowed || controller.testMessage != nil {
         Button("Open notification settings") { controller.openNotificationSettings() }
+      }
+      if let testMessage = controller.testMessage {
+        Text(testMessage).font(.caption).foregroundStyle(.secondary)
       }
       if let message = controller.message {
         Text(message).font(.caption).foregroundStyle(.secondary)

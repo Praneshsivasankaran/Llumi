@@ -142,11 +142,11 @@ Executed on an Apple Silicon Mac running macOS 26.6 (25G72), Xcode 27.0
 | Category | Result and practical limit |
 | --- | --- |
 | Implemented | Background launch/Dock policy, compact menu-bar popup, independent login/notch controls, configurable optional Codex/Claude quota alerts, bounded persisted deduplication, permission/test UI and Claude missing/null usage correction. |
-| Automated regression | Final full macOS suite: 244 tests, four existing opt-in artifact/live-account tests skipped, zero failures. Final focused alert engine/controller tests: 36 passed, zero failures/skips. They cover independent equal-valued windows, held delivery, refresh deferral, account/window changes, disable/quit and Codex aliases. |
+| Automated regression | Background/alerts baseline: full macOS suite 244 tests, four existing opt-in artifact/live-account tests skipped, zero failures; focused alert engine/controller tests 36 passed. After the notification-feedback repair, all 17 controller tests passed with no failures/skips, including three new regressions. The full suite was not repeated for this scoped repair. |
 | Native build | Debug test build and universal arm64/x86_64 Release build succeeded. Only arm64 execution was performed. Release privacy audit and ad-hoc signature verification passed. |
 | Device validated | Native Debug background startup had no main/setup window or Dock entry and retained the menu icon even when its saved preference was off. Opening Settings from the popup restored the full window/Dock, closing hid them while monitoring continued, and Quit stopped the process and menu/notch work. A second launch exited and focused the existing instance. Release also passed second-launch, full-interface settings, close/still-running and explicit Quit smoke checks. |
 | Provider regression | Existing Codex adapter obtained a live reading. Claude was signed out and showed that state. Synthetic adapter tests cover null/missing readings, retained stale data, recovery, binding verification and existing transport isolation. No real Claude signed-in comparison is claimed. |
-| Login/notifications | Native login registration was enabled successfully and restored off. Denied notification permission was visible; after native permission was allowed, the user-triggered test was accepted by macOS. Alert opt-in and native permission were both restored off; Release reflected denial after returning from Settings. Banner appearance and a real logout/login startup were not observed. |
+| Login/notifications | Native login registration was enabled successfully and restored off. Denial and accepted test requests were validated initially. After the user enabled alerts and reported no banner, the rebuilt Release app displayed a native test banner with display-sharing notifications temporarily allowed by explicit permission. The global sharing setting was restored off; the user's Llumi alerts and permission remain enabled. A real logout/login startup was not observed. |
 | Screenshots | Native Debug views captured the popup and complete alert controls with synthetic Codex/Claude readings. No private account output appears in the images. These are local review artifacts outside Git. |
 | Unverified/deferred | Authenticated Kimi/Cursor/DeepSeek comparisons, live expired/account-switched/offline behavior for those providers, DeepSeek connection/low-balance alerts, Intel runtime, Windows tray/taskbar, OS logout/login and distribution/signing. |
 
@@ -157,7 +157,30 @@ Local evidence resides alongside it: `build-test-final-candidate.log`,
 are labelled synthetic and are not committed. The settings capture omits the
 sidebar's native material; the complete controls were also inspected on screen.
 The Release review bundle has its own preferences and automatic updating is
-disabled in the prepared output. It was quit after final native validation.
+disabled in the prepared output. The updated app is left open for local review.
+
+### Notification follow-up, 2026-10-12
+
+The device had Llumi notification permission enabled, but macOS was configured to
+pause notifications while mirroring or sharing the display. The active screen-control
+session showed the sharing indicator. With explicit user permission, changing that
+global setting to Allow Notifications caused the rebuilt app's test to appear as a
+native banner, verified through Notification Center accessibility and a screenshot.
+The setting was immediately restored to Notifications Off. This is expected
+[macOS notification behavior](https://support.apple.com/en-au/guide/mac-help/mh40583/26/mac/26).
+
+The former “Test notification sent” feedback overstated successful scheduling and
+could disappear on an ordinary provider publication. Test feedback now remains
+separate from evaluator status, says that macOS accepted the request, and points to
+Focus and display-sharing controls if a banner is absent. Notification settings remain
+accessible with permission allowed. Cancellation, denial and failed requests retain
+accurate feedback; no system privacy setting is queried or modified by Llumi.
+
+The scoped repair passed 17 native controller tests and a fresh universal Release
+build (`build-release-notification-feedback.log`), production privacy audit,
+ad-hoc signature verification, public-tree hygiene and diff checks. Device inspection
+confirmed the new feedback and settings button. The local candidate manifest records
+the source commit and executable hash separately from the earlier baseline test run.
 
 The final security review covers native notification callback isolation, cancellation
 on quit, invalid edits, stale/in-flight data suppression, canonical Codex window

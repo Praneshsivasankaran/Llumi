@@ -40,6 +40,10 @@ No taskbar changes are attempted or claimed on macOS.
 - Native permission is requested on opt-in or a user-triggered test notification.
   Denial is visible with a link to native notification settings. Alerts warn only;
   they do not pause tools or enforce spending limits.
+- Test feedback distinguishes an accepted native request from a visible banner,
+  persists through provider refreshes, and keeps notification settings accessible.
+  Focus and display-sharing settings can suppress presentation even when app
+  permission is allowed. Llumi must respect those system privacy controls.
 - DeepSeek, when authenticated feasibility passes in a future change, needs separate
   currency-specific low-balance controls and recovery/top-up re-arming; no percentage
   alerts, invented denominator, subscription quota or reset windows.

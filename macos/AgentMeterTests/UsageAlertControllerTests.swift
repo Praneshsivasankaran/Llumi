@@ -161,6 +161,71 @@ import XCTest
       delivery.waiting?.resume(returning: .allowed); delivery.waiting = nil
       await controller.waitForIdle()
       XCTAssertTrue(delivery.sent.isEmpty)
+      XCTAssertNil(controller.testMessage)
+    }
+  }
+  func testTestResultSurvivesProviderRefreshWithoutClaimingBanner() async throws {
+    for failing in [false, true] {
+      try await suite { defaults in
+        let delivery = TestNotificationDelivery(); delivery.current = .allowed
+        let controller = UsageAlertController(defaults: defaults, delivery: delivery)
+        let reset = Date().addingTimeInterval(3600)
+        controller.update(snapshots: try twoWindowReading(used: 0, reset: reset), enabledProviders: [.codex])
+        controller.settings.enabled = true
+        await controller.waitForIdle()
+        delivery.fail = failing
+        controller.sendTestNotification()
+        await controller.waitForIdle()
+        let result = try XCTUnwrap(controller.testMessage)
+        if failing {
+          XCTAssertTrue(result.contains("request failed"))
+          XCTAssertTrue(delivery.sent.isEmpty)
+        } else {
+          XCTAssertTrue(result.contains("accepted by macOS"))
+          XCTAssertTrue(result.contains("Focus"))
+          XCTAssertTrue(result.contains("sharing the display"))
+          XCTAssertFalse(result.contains("notification sent"))
+          XCTAssertEqual(delivery.sent.count, 1)
+        }
+        delivery.fail = false
+        controller.update(snapshots: try twoWindowReading(used: 1, reset: reset), enabledProviders: [.codex])
+        await controller.waitForIdle()
+        XCTAssertNil(controller.message)
+        XCTAssertEqual(controller.testMessage, result)
+        XCTAssertTrue(controller.settings.enabled)
+      }
+    }
+  }
+  func testDeniedTestReportsActionWithoutSendingOrEnablingAlerts() async throws {
+    try await suite { defaults in
+      let delivery = TestNotificationDelivery(); delivery.answer = .denied
+      let controller = UsageAlertController(defaults: defaults, delivery: delivery)
+      controller.sendTestNotification()
+      await controller.waitForIdle()
+      XCTAssertEqual(delivery.requestCount, 1)
+      XCTAssertEqual(controller.permission, .denied)
+      XCTAssertEqual(delivery.attemptedCount, 0)
+      XCTAssertTrue(try XCTUnwrap(controller.testMessage).contains("Enable notifications in System Settings"))
+      XCTAssertFalse(controller.settings.enabled)
+      let result = controller.testMessage
+      controller.update(snapshots: try reading(), enabledProviders: [.codex])
+      await controller.waitForIdle()
+      XCTAssertEqual(controller.testMessage, result)
+      XCTAssertTrue(delivery.sent.isEmpty)
+    }
+  }
+  func testQuitDuringTestSendCannotReportAcceptedOrFailure() async throws {
+    try await suite { defaults in
+      let delivery = TestNotificationDelivery(); delivery.current = .allowed; delivery.holdNextSend = true
+      let controller = UsageAlertController(defaults: defaults, delivery: delivery)
+      controller.sendTestNotification()
+      for _ in 0..<500 where delivery.sending == nil { await Task.yield() }
+      XCTAssertNotNil(delivery.sending)
+      controller.stop()
+      releaseSend(delivery)
+      await controller.waitForIdle()
+      XCTAssertNil(controller.testMessage)
+      XCTAssertTrue(delivery.sent.isEmpty)
     }
   }
   func testCommittedBatchSurvivesSameAccountPublicationDuringFirstSend() async throws {

@@ -88,6 +88,7 @@ enum UsageNotificationPermission: String, Sendable {
   private enum DeliveryReadiness: Equatable { case ready, checking, invalid }
   private(set) var permission: UsageNotificationPermission = .unknown
   private(set) var message: String?
+  private(set) var testMessage: String?
   var openAction: () -> Void = {} {
     didSet { (delivery as? NativeUsageNotificationDelivery)?.openAction = openAction }
   }
@@ -237,6 +238,7 @@ enum UsageNotificationPermission: String, Sendable {
   func sendTestNotification() {
     guard !stopped else { return }
     testing?.cancel()
+    testMessage = "Requesting a test notification…"
     testing = Task { [weak self] in
       guard let self else { return }
       var permission = await self.delivery.permission()
@@ -244,12 +246,21 @@ enum UsageNotificationPermission: String, Sendable {
       if permission == .unknown { permission = await self.delivery.requestPermission() }
       guard !Task.isCancelled, !self.stopped else { return }
       self.permission = permission
-      guard permission == .allowed else { return }
+      guard permission == .allowed else {
+        self.testMessage = permission == .denied
+          ? "Test notification was not sent. Enable notifications in System Settings."
+          : "Test notification could not be requested. Check notification settings and try again."
+        return
+      }
       do {
         try await self.delivery.send(id: "llumi-test-" + UUID().uuidString,
           title: "Llumi test notification", body: "Usage alerts are ready. Alerts warn; they do not pause your tools.")
-        self.message = "Test notification sent."
-      } catch { self.message = "The test notification could not be delivered." }
+        guard !Task.isCancelled, !self.stopped else { return }
+        self.testMessage = "Test request accepted by macOS. If no banner appears, check Focus and “When mirroring or sharing the display” in notification settings."
+      } catch {
+        guard !Task.isCancelled, !self.stopped else { return }
+        self.testMessage = "The test notification request failed. Check notification settings and try again."
+      }
     }
   }
   func openNotificationSettings() {
@@ -259,6 +270,7 @@ enum UsageNotificationPermission: String, Sendable {
   }
   func stop() {
     stopped = true; work?.cancel(); testing?.cancel(); permissionRefresh?.cancel(); revision += 1
+    testMessage = nil
     cancelDelivery()
   }
   func waitForIdle() async { await work?.value; await deliveryWork?.value; await testing?.value }
