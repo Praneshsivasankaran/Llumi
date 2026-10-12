@@ -24,6 +24,85 @@ public sealed class AlertSettingsViewTests
         Assert.DoesNotContain("not been saved", Find<Label>(view, "Alert threshold validation").Text);
     });
 
+    [Theory]
+    [InlineData("Usage alerts")]
+    [InlineData("Codex alerts")]
+    [InlineData("Claude Code alerts")]
+    [InlineData("Enable alert threshold 2")]
+    [InlineData("Snooze alerts for 1 hour")]
+    [InlineData("Snooze alerts until tomorrow at 09:00 local time")]
+    [InlineData("Resume alerts")]
+    public void InvalidThresholdDraftDoesNotBlockIndependentActionsOrLeakIntoSavedSettings(string action) => RunSta(() =>
+    {
+        using var form = new UsageForm(["Codex", "Claude Code"], SystemIcons.Application);
+        var original = new Preferences(false, false, Appearance.Dark, false, true, true,
+            new(true, SnoozedUntil: DateTimeOffset.UtcNow.AddHours(2)));
+        form.SetPreferences(original);
+        var saved = new List<Preferences>();
+        // The production owner sends accepted settings straight back to the view.
+        form.PreferencesChanged += value => { saved.Add(value); form.SetPreferences(value); };
+        var draft = Find<NumericUpDown>(form, "Alert threshold 2, percent used");
+        draft.Value = 75;
+        Assert.Empty(saved);
+        var before = DateTimeOffset.UtcNow;
+        var control = Find<Control>(form, action);
+        if (control is ToggleSwitch toggle) toggle.Checked = false;
+        else Click(Assert.IsAssignableFrom<Button>(control));
+
+        var accepted = Assert.Single(saved);
+        Assert.Equal(original with { Alerts = null }, accepted with { Alerts = null });
+        var settings = accepted.EffectiveAlerts;
+        Assert.True(settings.IsValid);
+        Assert.Equal(new[] { 75, 90, 95 }, settings.EffectiveThresholds.Select(threshold => threshold.Percent));
+        Assert.Equal(action != "Usage alerts", settings.Enabled);
+        Assert.Equal(action != "Codex alerts", settings.CodexEnabled);
+        Assert.Equal(action != "Claude Code alerts", settings.ClaudeEnabled);
+        Assert.Equal(action != "Enable alert threshold 2", settings.EffectiveThresholds[1].Enabled);
+        Assert.True(settings.EffectiveThresholds[0].Enabled); Assert.True(settings.EffectiveThresholds[2].Enabled);
+        if (action == "Resume alerts")
+        {
+            Assert.InRange(settings.SnoozedUntil!.Value, before, DateTimeOffset.UtcNow);
+            Assert.False(settings.IsSnoozed(DateTimeOffset.UtcNow));
+            Assert.Equal("Alerts are not snoozed.", Find<Label>(form, "Alert snooze status").Text);
+        }
+        else if (action == "Snooze alerts for 1 hour")
+            Assert.InRange(settings.SnoozedUntil!.Value, before.AddHours(1), DateTimeOffset.UtcNow.AddHours(1));
+        else if (action == "Snooze alerts until tomorrow at 09:00 local time")
+            Assert.Equal(AlertSettingsView.TomorrowMorning(before, TimeZoneInfo.Local), settings.SnoozedUntil);
+        else Assert.Equal(original.EffectiveAlerts.SnoozedUntil, settings.SnoozedUntil);
+        Assert.Equal(75m, draft.Value);
+        Assert.Contains("not been saved", Find<Label>(form, "Alert threshold validation").Text);
+
+        draft.Value = 85;
+        Assert.Equal(2, saved.Count);
+        var corrected = saved[1].EffectiveAlerts;
+        Assert.True(corrected.IsValid);
+        Assert.Equal(new[] { 75, 85, 95 }, corrected.EffectiveThresholds.Select(threshold => threshold.Percent));
+        Assert.Equal(settings with { Thresholds = null }, corrected with { Thresholds = null });
+        Assert.Equal(settings.EffectiveThresholds.Select(threshold => threshold.Enabled), corrected.EffectiveThresholds.Select(threshold => threshold.Enabled));
+        Assert.DoesNotContain("not been saved", Find<Label>(form, "Alert threshold validation").Text);
+    });
+
+    [Fact]
+    public void FailedIndependentSaveRestoresAcceptedSwitchWhileKeepingInvalidDraft() => RunSta(() =>
+    {
+        using var form = new UsageForm(["Codex", "Claude Code"], SystemIcons.Application);
+        var original = new Preferences(Alerts: new(true));
+        form.SetPreferences(original);
+        var attempted = new List<Preferences>();
+        form.PreferencesChanged += value => { attempted.Add(value); form.SetPreferences(original); form.PreferenceSaveFailed(); };
+        var draft = Find<NumericUpDown>(form, "Alert threshold 2, percent used");
+        draft.Value = 75;
+        var enabled = Find<ToggleSwitch>(form, "Usage alerts");
+        enabled.Checked = false;
+        var rejected = Assert.Single(attempted);
+        Assert.False(rejected.EffectiveAlerts.Enabled); Assert.True(rejected.EffectiveAlerts.IsValid);
+        Assert.Equal(new[] { 75, 90, 95 }, rejected.EffectiveAlerts.EffectiveThresholds.Select(threshold => threshold.Percent));
+        Assert.True(enabled.Checked); Assert.Equal(75m, draft.Value);
+        Assert.Contains("not been saved", Find<Label>(form, "Alert threshold validation").Text);
+        Assert.Contains(Descendants(form).OfType<Label>(), label => label.Text.Contains("previous preferences remain active", StringComparison.Ordinal));
+    });
+
     [Fact]
     public void SnoozeAndResumePersistDeadlineAndTestDoesNotChangeSettings() => RunSta(() =>
     {

@@ -50,7 +50,12 @@ internal sealed class AlertSettingsView : Panel
 
     internal void SetSettings(UsageAlertSettings value)
     {
-        settings = value.IsValid ? value : new();
+        var accepted = value.IsValid ? value : new();
+        // Accepted switches/snooze changes (and their persistence rollback) do not
+        // discard an unrelated invalid percentage draft. Changed saved percentages do.
+        var keepDraft = HasDuplicatePercentages() && settings.EffectiveThresholds.Select(t => t.Percent)
+            .SequenceEqual(accepted.EffectiveThresholds.Select(t => t.Percent));
+        settings = accepted;
         syncing = true;
         try
         {
@@ -67,14 +72,17 @@ internal sealed class AlertSettingsView : Panel
                         AccessibleName = $"Alert threshold {number}, percent used", TabIndex = 4 + i * 2,
                         TextAlign = HorizontalAlignment.Right, BorderStyle = BorderStyle.FixedSingle };
                     toggle.CheckedChanged += (_, _) => Save();
-                    percent.ValueChanged += (_, _) => Save();
+                    percent.ValueChanged += (_, _) => Save(thresholdEdit: true);
                     rows.Add((toggle, percent)); Controls.AddRange([toggle, percent]);
                 }
             }
             enabled.Checked = settings.Enabled; codex.Checked = settings.CodexEnabled; claude.Checked = settings.ClaudeEnabled;
             for (var i = 0; i < rows.Count; i++)
-            { rows[i].Toggle.Checked = thresholds[i].Enabled; rows[i].Percent.Value = thresholds[i].Percent; }
-            validation.Text = "Use a different whole percentage for each threshold (1–100).";
+            {
+                rows[i].Toggle.Checked = thresholds[i].Enabled;
+                if (!keepDraft) rows[i].Percent.Value = thresholds[i].Percent;
+            }
+            UpdateThresholdValidation();
             var next = 3 + rows.Count * 2;
             snoozeHour.TabIndex = next; snoozeTomorrow.TabIndex = next + 1; resume.TabIndex = next + 2; test.TabIndex = next + 3;
         }
@@ -83,21 +91,34 @@ internal sealed class AlertSettingsView : Panel
         ApplyTheme();
     }
 
-    private void Save(DateTimeOffset? deadline = null, bool changeSnooze = false)
+    private bool HasDuplicatePercentages() => rows.Select(row => row.Percent.Value).Distinct().Count() != rows.Count;
+
+    private void UpdateThresholdValidation()
+    {
+        var invalid = HasDuplicatePercentages();
+        validation.Text = invalid
+            ? "Threshold percentages must differ. This threshold edit has not been saved."
+            : "Use a different whole percentage for each threshold (1–100).";
+        validation.ForeColor = invalid ? Palette.Warning : Palette.Muted;
+    }
+
+    private void Save(DateTimeOffset? deadline = null, bool changeSnooze = false, bool thresholdEdit = false)
     {
         if (syncing) return;
         var thresholds = rows.Select(r => new AlertThreshold((int)r.Percent.Value, r.Toggle.Checked)).ToArray();
-        if (thresholds.Select(t => t.Percent).Distinct().Count() != thresholds.Length)
+        var invalid = HasDuplicatePercentages();
+        UpdateThresholdValidation();
+        if (invalid)
         {
-            validation.Text = "Each threshold needs a different percentage. This edit has not been saved.";
-            validation.ForeColor = Palette.Warning;
-            return;
+            if (thresholdEdit) return;
+            // Other controls remain independent of the unsaved percentages. Apply
+            // threshold enable switches to their last valid saved percentage too.
+            thresholds = settings.EffectiveThresholds.Select((threshold, index) =>
+                threshold with { Enabled = rows[index].Toggle.Checked }).ToArray();
         }
         var requested = settings with { Enabled = enabled.Checked, CodexEnabled = codex.Checked, ClaudeEnabled = claude.Checked,
             Thresholds = thresholds, SnoozedUntil = changeSnooze ? deadline : settings.SnoozedUntil };
         if (!requested.IsValid) return;
-        validation.Text = "Use a different whole percentage for each threshold (1–100).";
-        validation.ForeColor = Palette.Muted;
         settings = requested;
         SettingsChanged?.Invoke(requested);
         UpdateSnoozeStatus(DateTimeOffset.UtcNow);
