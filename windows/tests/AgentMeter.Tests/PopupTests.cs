@@ -367,7 +367,17 @@ public sealed class PopupTests
         Assert.Equal(2, links.Length);
         Assert.All(links, link => Assert.Equal("Set up →", link.Text));
         Assert.Contains(Descendants(form).OfType<Label>(), label => label.Text == "Install Claude Code");
-        Assert.Empty(Descendants(form).OfType<TextBox>());
+        var thresholds = Descendants(form).OfType<NumericUpDown>().ToArray();
+        Assert.Equal(new[] { "Alert threshold 1, percent used", "Alert threshold 2, percent used", "Alert threshold 3, percent used" },
+            thresholds.Select(control => control.AccessibleName).OrderBy(name => name));
+        Assert.All(thresholds, threshold =>
+        {
+            Assert.IsType<AlertSettingsView>(threshold.Parent);
+            Assert.Equal(1m, threshold.Minimum); Assert.Equal(100m, threshold.Maximum); Assert.Equal(0, threshold.DecimalPlaces);
+        });
+        var editors = Descendants(form).OfType<TextBoxBase>().ToArray();
+        Assert.Equal(thresholds.Length, editors.Length);
+        Assert.All(editors, editor => Assert.Contains(Assert.IsType<NumericUpDown>(editor.Parent), thresholds));
         AssertImportantTextFits(form);
         SaveFixtureRender(form, "fixture-no-providers-setup.png");
         Assert.False(form.Visible);

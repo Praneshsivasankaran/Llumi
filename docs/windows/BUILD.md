@@ -35,4 +35,14 @@ Local unpackaged preferences and sanitized rotating logs use `%LOCALAPPDATA%\Llu
 
 The production executable accepts normal launch, `--startup` and `--quit`. The former developer `--probe` export is removed; unsupported arguments exit before application or provider activity. Use the separate development ReviewHost for isolated local review. It does not add a production usage-export command.
 
+To review the Windows alert settings with synthetic data and submit one labelled native test notification:
+
+```powershell
+dotnet build windows/tests/AgentMeter.ReviewHost/AgentMeter.ReviewHost.csproj -c Release
+$reviewDirectory = Join-Path (Get-Location) ('windows/artifacts/alerts-review-' + [Guid]::NewGuid().ToString('N'))
+& ./windows/tests/AgentMeter.ReviewHost/bin/Release/net10.0-windows10.0.19041.0/AgentMeter.ReviewHost.exe --alerts-review $reviewDirectory
+```
+
+The directory must be new and absolute. This mode writes isolated synthetic preferences, Light/Dark settings renders at standard and narrow widths, and `alerts-review-receipt.json`. It uses no provider or production settings and removes its owned review notification and shortcut on exit. Inspect the receipt's notification result and status separately from the process exit code. `DrawToBitmap` renders and successful OS submission do not establish physical banner visibility, activation clicks, packaged notification delivery or actual sign-in startup. The new alert and background-launch contract is in the [product specification](../product-spec/windows-alerts-background.md).
+
 The repository deliberately excludes Store submission preparation and signing material. A direct GitHub release needs a separately reviewed final artifact; see [distribution requirements](../DISTRIBUTION.md).

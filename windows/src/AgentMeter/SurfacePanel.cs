@@ -29,6 +29,10 @@ internal sealed class SurfacePanel : Panel
     private Rectangle[] surfaces = [];
     internal SurfacePanel() => SetStyle(ControlStyles.UserPaint | ControlStyles.AllPaintingInWmPaint | ControlStyles.OptimizedDoubleBuffer, true);
     internal void SetSurfaces(params Rectangle[] bounds) { surfaces = bounds; Invalidate(); }
+    // ScrollWindowEx can retain pixels from a partially visible child window.
+    // Repaint the nested alert HWNDs as well as this panel after native scrolling.
+    protected override void OnScroll(ScrollEventArgs se) { base.OnScroll(se); Invalidate(true); }
+    protected override void OnMouseWheel(MouseEventArgs e) { base.OnMouseWheel(e); Invalidate(true); }
     protected override void OnPaintBackground(PaintEventArgs e)
     {
         base.OnPaintBackground(e);

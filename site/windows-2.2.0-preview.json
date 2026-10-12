@@ -1,0 +1,41 @@
+{
+  "platform": "windows",
+  "version": "2.2.0",
+  "build": 1,
+  "status": "preview",
+  "published_at": null,
+  "title": "Usage alerts and quieter launches.",
+  "summary": "Optional usage alerts, snooze controls and Start in background for Windows.",
+  "sections": [
+    {
+      "title": "Usage alerts",
+      "items": [
+        "Turn on optional Windows notifications for Codex and Claude Code. Usage alerts start off, with individually editable thresholds at 75, 90 and 95 percent used.",
+        "Choose distinct whole percentages from 1 to 100 and enable each provider or threshold separately. Alerts warn about usage; they do not stop agents or limit spending.",
+        "Warnings use eligible, verified usage readings and reported reset times. Handled thresholds stay remembered across restarts with intact local alert state.",
+        "Send a test notification from Settings and check notification availability. Windows notification controls and Do Not Disturb still apply."
+      ]
+    },
+    {
+      "title": "Alert snooze",
+      "items": [
+        "Snooze alerts for one hour or until tomorrow at 09:00 local time, or resume them early. Settings shows the saved snooze deadline.",
+        "Monitoring continues during snooze. Reached thresholds establish a silent baseline when snooze ends, including after sleep, offline time or restart, so alerts do not deliver a backlog.",
+        "Test notifications remain available during snooze and do not consume usage thresholds."
+      ]
+    },
+    {
+      "title": "Start in background",
+      "items": [
+        "Choose whether ordinary launches open the main window. Start in background is initially off and is separate from Launch at Startup; login launches remain quiet.",
+        "First-time setup remains visible, and opening Llumi again restores the existing window. Changing the preference applies to future launches.",
+        "With the tray icon disabled, background launches retain a minimized taskbar window. Closing keeps monitoring active; Quit exits Llumi."
+      ]
+    }
+  ],
+  "notice": "Draft Windows 2.2.0 release candidate with MSIX version 2.2.0.0. The owner confirmed the three features work locally. Package installation, sign-in acceptance, Store submission and publication are not claimed by this preview.",
+  "source_documents": [
+    "docs/releases/2026-10-windows-2.2.0.md",
+    "docs/product-spec/windows-alerts-background.md"
+  ]
+}

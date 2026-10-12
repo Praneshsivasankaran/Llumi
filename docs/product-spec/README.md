@@ -16,6 +16,7 @@ Before changing behavior:
 | [Contextual activity](activity.md) | CLI and desktop activity without content inspection |
 | [Compact monitor](compact-monitor.md) | Visibility, hover, click, motion and accessibility |
 | [Settings and lifecycle](settings.md) | Preferences, startup, background operation and quit |
+| [Windows usage alerts and background startup](windows-alerts-background.md) | Opt-in thresholds, snooze, protected repeat prevention and quiet launch; future Mac parity contract |
 | [Privacy](privacy.md) | Data boundaries, isolation, credentials and diagnostics |
 | [Background and alerts](background-alerts.md) | macOS update and shared lifecycle/alert contracts |
 | [macOS 2.2.0 updater-key migration](updater-key-migration-220.md) | One-time manual installation, separate new feed and preserved update verification |
