@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Security regression tests; never sign, read a private key, or contact a feed."""
-import copy, json, pathlib, plistlib, unittest
+import base64, copy, hashlib, json, os, pathlib, plistlib, shlex, shutil, subprocess, tempfile, unittest
 from release_policy import validate_metadata, validate_publisher, merge_release_state, LEGACY_PUBLIC_ED_KEY
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
@@ -155,5 +155,49 @@ class ReleaseStateTests(unittest.TestCase):
         for previous in [None, [], 'invalid']:
             with self.subTest(previous=previous), self.assertRaisesRegex(AssertionError, 'Invalid existing release state'):
                 merge_release_state(previous,self.verified)
+
+class FutureAppcastTests(unittest.TestCase):
+    def test_next_build_keeps_manual_migration_host_eligible(self):
+        # Exercise the real wrapper without running Sparkle, reading Keychain,
+        # or changing production metadata. Tool stubs fail if dry-run executes them.
+        with tempfile.TemporaryDirectory(prefix='Llumi future appcast ') as temporary:
+            root=pathlib.Path(temporary)
+            scripts=root/'scripts/macos'; scripts.mkdir(parents=True)
+            metadata=root/'macos'; metadata.mkdir()
+            tools=root/'Sparkle tools'; tools.mkdir()
+            archives=root/'future archives'; archives.mkdir()
+            for name in ['generate-appcast.sh','common.sh','release_policy.py']:
+                shutil.copyfile(ROOT/'scripts/macos'/name,scripts/name)
+            candidate={'version':'2.2.1','build':'6',
+                'feed_url':'https://tryllumi.com/appcast-v2.xml',
+                'keychain_account':'io.github.praneshsivasankaran.llumi.sparkle.v2',
+                'public_ed_key':base64.b64encode(bytes(range(32))).decode('ascii')}
+            (metadata/'release-candidate.json').write_text(json.dumps(candidate))
+            tool_hashes={}
+            for name in ['generate_keys','generate_appcast','sign_update']:
+                tool=tools/name
+                tool.write_text('#!/bin/sh\necho "Unexpected tool execution in dry-run" >&2\nexit 99\n')
+                tool.chmod(0o700)
+                tool_hashes[name]=hashlib.sha256(tool.read_bytes()).hexdigest()
+            (scripts/'sparkle-layout.json').write_text(json.dumps({'tools_sha256':tool_hashes}))
+            result=subprocess.run(['bash',str(scripts/'generate-appcast.sh'),str(tools),str(archives)],
+                cwd=root,env={'PATH':os.environ.get('PATH',os.defpath),'PYTHONDONTWRITEBYTECODE':'1'},
+                text=True,capture_output=True,timeout=15)
+            self.assertEqual(result.returncode,0,result.stderr+result.stdout)
+            plans=[line.removeprefix('PLAN:') for line in result.stdout.splitlines() if line.startswith('PLAN:')]
+            self.assertEqual(len(plans),1,result.stdout)
+            command=shlex.split(plans[0])
+            def option(name): return command[command.index(name)+1]
+            self.assertEqual(command[0],str(tools/'generate_appcast'))
+            self.assertEqual(option('--versions'),'6')
+            # This is a host eligibility floor, not the target build. Raising
+            # it with the target would strand the manually installed build 5.
+            self.assertEqual(option('--minimum-update-version'),'5')
+            self.assertEqual(option('--account'),'io.github.praneshsivasankaran.llumi.sparkle.v2')
+            self.assertEqual(option('--download-url-prefix'),
+                'https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-2.2.1/')
+            self.assertEqual(option('-o'),str(archives/'appcast-v2.xml'))
+            self.assertEqual(command[-1],str(archives))
+            self.assertEqual(list(archives.iterdir()),[])
 
 if __name__=='__main__':unittest.main()

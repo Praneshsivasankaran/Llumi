@@ -2,6 +2,57 @@
   "schema_version": 1,
   "releases": [
     {
+      "platform": "macos",
+      "version": "2.2.0",
+      "build": 5,
+      "status": "preview",
+      "published_at": null,
+      "title": "Background monitoring, with alerts when you need them.",
+      "summary": "A compact menu-bar popup, optional usage alerts and appearance that follows your settings.",
+      "sections": [
+        {
+          "title": "Installing this update",
+          "items": [
+            "If you use Llumi 1.1.3 or earlier, install 2.2.0 manually once: quit Llumi, open the downloaded disk image, replace Llumi in Applications and reopen it. Your settings and provider-owned sign-ins are retained.",
+            "This one-time installation moves Llumi to its new signed update feed. The previous updater signing key could not be recovered, so older versions cannot install 2.2.0 through Check for Updates.",
+            "After installing 2.2.0, future compatible releases are checked and downloaded automatically when Automatic Updates is on. That preference stays yours: with it off, use Check for Updates.",
+            "When an update is ready, choose Restart and update or Later. Later keeps Llumi running; the prepared update can install when you quit."
+          ]
+        },
+        {
+          "title": "Llumi in the background",
+          "items": [
+            "Start in background opens Llumi without its main window and keeps the Dock clear. Launch at login remains a separate setting.",
+            "Open the menu-bar popup for supported providers, real usage windows, available reset times and last-refresh or stale status. Refresh, Settings, Open Llumi and Quit remain within reach.",
+            "Closing the main window keeps monitoring active. Open Llumi brings back the full interface; Quit stops the app. Launching it again reuses the running instance.",
+            "The popup follows your System, Light or Dark appearance choice in Llumi. The notch monitor remains an independent option."
+          ]
+        },
+        {
+          "title": "Optional usage alerts",
+          "items": [
+            "Usage alerts are off by default. After opting in, the default thresholds are 75%, 90% and 95% used. Enable, disable or edit each threshold and choose providers individually.",
+            "Each quota window is tracked and named separately. Alerts are sent once per threshold per account and window, with that history kept across restarts. Crossing several thresholds at once sends only the highest newly crossed alert.",
+            "Enabling alerts above a threshold sends at most one current-status notification. Alerts re-arm only for a fresh provider-reported window; stale, invalid or uncertain readings never trigger them.",
+            "Settings explains notification permission and includes a test notification. macOS notification controls still apply. Alerts warn you; they do not pause agents or enforce spending limits."
+          ]
+        },
+        {
+          "title": "Reliable usage",
+          "items": [
+            "Fixes supported Claude quotas with missing or null usage being treated as valid readings. Missing values remain unknown, and previous verified readings are clearly marked stale when retained.",
+            "Claude Code and Codex remain the supported providers. No new provider integrations are included in 2.2.0."
+          ]
+        }
+      ],
+      "notice": "Requires macOS 14 or later. Upgrading from 1.1.3 or earlier requires one manual installation. Future compatible updates use the new signed feed and follow your Automatic Updates setting.",
+      "source_documents": [
+        "docs/releases/2026-10-macos-background-alerts-candidate.md",
+        "docs/product-spec/background-alerts.md",
+        "docs/macos/UPDATES.md"
+      ]
+    },
+    {
       "platform": "windows",
       "version": "2.1.3",
       "build": 1,

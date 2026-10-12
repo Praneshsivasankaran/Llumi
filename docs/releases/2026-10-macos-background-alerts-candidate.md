@@ -2,7 +2,9 @@
 
 Local release candidate prepared on 2026-10-12. Version/build: **2.2.0 / 5**. This document
 does not authorize publication. Existing releases, website downloads and public
-update feeds remain unchanged.
+update feeds remain unchanged. Finish preparation and verification locally, then
+obtain the owner's final publication decision. Remote pushes, release uploads and
+site/feed deployment are not currently authorized.
 
 The owner selected shared marketing version **2.2.0** to align macOS with Windows.
 The earlier 1.1.4/build 4 label and notarized 2.2.0/build 4 candidate are historical.
@@ -22,7 +24,11 @@ remains intact. See [the migration contract](../product-spec/updater-key-migrati
   notarized 2.2.0 app manually to enter the new update channel. Keep the same app
   identity and saved settings. The separate new feed supports future updates;
   1.1.3's in-app Check for Updates cannot perform this transition. The candidate
-  and new feed remain unpublished.
+  and new feed remain unpublished. After this installation and future publication,
+  compatible updates follow the existing **Automatically check and download
+  updates** setting. When enabled, Llumi checks/downloads automatically and offers
+  **Restart and update** or **Later**; Later keeps Llumi running and permits the
+  prepared update to install on normal quit. When disabled, checking stays manual.
 - **Start in background.** Keep Llumi monitoring from the menu bar without opening
   the main window or showing its Dock icon. Launch at login is a separate setting.
   Open Llumi and Settings remain available; closing the window keeps monitoring
@@ -59,16 +65,21 @@ for checks against the final distribution artifact.
 
 The 1.1.4 and 2.2.0/build 4 rows below retain historical evidence. Build 4's app and
 DMG were notarized successfully but are superseded by the new-key build 5 artifacts.
-The current results below are recorded in local `dist/macos-2.2.0-build5/release-state.json`.
+Artifact and migration results are recorded in local
+`dist/macos-2.2.0-build5/release-state.json`. The subsequent automatic-update
+rehearsal has separate private evidence, recorded below.
 
 | Status | Evidence and limit |
 | --- | --- |
 | Implemented | Background lifecycle, compact popup, quota alerts, receipt persistence, notification controls and feedback, shared popup appearance, Claude missing/null usage fix. |
 | Build 5 source and tests | Release source `c9d35b3a2640ea2d3c7fc5c204d884a00c81b937`, with runtime metadata change `f877457`; release state records a clean source worktree. Native suite: 247 executed, four intentional skips, zero failures. Distribution: 17 passed; updater policy: 23 passed. Website tooling at `afec470`: 25 passed. |
+| Latest local revalidation | Fresh native suite: 247 executed, four intentional skips, zero failures. A fresh universal unsigned Release passed all 17 distribution tests. Updater policy: 24 passed, including a future-feed generator regression that retains minimum update version 5. The existing final signed/notarized build 5 DMG passed release verification again; the fresh unsigned build does not replace that artifact. |
 | Build 5 final artifact trust | App and DMG are Developer ID signed; both Apple notarization submissions were Accepted with zero issues, then stapled and accepted by Gatekeeper. Local final feed and archive signatures verified. Exact final DMG size/hash and source provenance appear below. |
 | Build 5 future new-key updater | A disposable new-key 2.2.0/build 4 host downloaded and installed the exact final build 5 app, relaunched as one process, and displayed the completion notice, which was acknowledged. Old-key feed, tampered feed, signed malformed feed and bad archive signature were rejected; equal build was not offered; offline error was recoverable. This validates the new key chain, not an old-key 1.1.3 in-app migration. |
+| Build 5 automatic update and Later | An isolated host using the final 2.2.0/build 5 runtime executable automatically downloaded a private synthetic 2.2.1/build 6 fixture without a manual check. Update ready appeared; Later retained build 5 and one process. Normal Quit installed build 6 without relaunching. Reopening showed completion; Continue acknowledged it, and another reopening did not repeat it. The fixture used the same Developer ID/new Sparkle v2 key and minimum update version 5, with a distinct app identity/preferences and providers disabled. The target was signed but not notarized; this is private behavior evidence, not a released 2.2.1 or public endpoint validation. |
 | Build 5 manual installation | Installed `/Applications/Llumi.app` manually from the notarized DMG over 1.1.3; exact final bytes verified. Both providers were Live; all nine tracked setting values and their presence matched the pre-migration state, Launch at Login remained on, and no false update-completion notice appeared. Explicit second launch retained the same PID; Quit stopped the process. |
-| Build 5 native limits and cleanup | Temporary feed, automatic-update and background preferences restored; all nine tracked fields match their original values and presence. Cold background launch started the process, but UI inspection reopened the window, so final window absence/Dock behavior was not independently established. Initial installed notification denial was handled without enabling alerts. The owner enabled system permission; the installed app reported the test accepted, and the owner confirmed the final notification worked. |
+| Build 5 native limits and cleanup | Temporary feed, automatic-update and background preferences restored; all nine tracked fields match their original values and presence. The initial UI inspection could not establish hidden-window/Dock behavior; the later independent build 5 lifecycle check below resolves that gap. Initial installed notification denial was handled without enabling alerts. The owner enabled system permission; the installed app reported the test accepted, and the owner confirmed the final notification worked. |
+| Build 5 final installed background lifecycle | On the exact installed signed build 5, Finder cold launch with Start in background enabled produced one process, accessory activation policy and zero normal on-screen windows, observed before app accessibility inspection. Explicit Finder Open exposed the main window in the same process; closing it retained the process and restored accessory policy with zero normal windows. Quit stopped it. All eight tracked nonsensitive setting values and their presence were restored, and normal operation was reopened. Actual logout/login was not performed. |
 | Previous-label candidate regression | The complete 1.1.4/build 4 native suite ran on 2026-10-12: 247 tests executed, four intentional skips, zero failures. |
 | Superseded build 4 candidate checks | Full native suite: 247 tests, four intentional skips, zero failures. Universal Release build, built-app privacy, 17 distribution guards, 15 updater-policy tests and unsigned DMG checksum/mount/contained-app checks passed. The refreshed isolated review app visibly displayed Version 2.2.0, started without the main window, showed both providers Live, and kept monitoring after close. Five user-setting field hashes were unchanged; the receipt store continued updating with fresh observations. |
 | Superseded build 4 signed app | Source `71e75c3dd6e243b38c023f3b6b0cda4ffb10070c`. All six code targets passed strict signature, Hardened Runtime, secure timestamp, approved publisher/team and empty-entitlement checks. The app satisfies the installed 1.1.3 app's exact designated requirement. Apple's app notarization submission was Accepted with zero issues; the app was stapled and Gatekeeper accepted it. |
@@ -83,8 +94,8 @@ The current results below are recorded in local `dist/macos-2.2.0-build5/release
 | Previous-label production build/package | Universal arm64/x86_64 Release 1.1.4/build 4 succeeded. Canonical bundle validation, source/built-app privacy checks, 17 distribution guards and 15 updater-policy tests passed. Unsigned DMG checksum, mount and contained-app validation passed. Production metadata now rejects any local-review marker. |
 | Previous-label 1.1.4 review smoke | Replaced the isolated review bundle using the same Release executable. Background launch suppressed the main window; both providers returned Live, Claude with five-hour/weekly windows. Notch Open reached the full UI; closing retained monitoring; Finder launch reopened the same single process; Quit stopped it; next launch stayed in background. Six persisted setting fields retained identical hashes, and native login registration still reported on. |
 | Previous-label notification and screenshots | The 1.1.4 native test request was accepted by macOS; this does not prove a visible banner under current screen-sharing suppression. Earlier owner-confirmed banner evidence remains separate. An opt-in native fixture capture test passed, producing light/dark popup and stale/unavailable images with synthetic data. Actual 1.1.4 alert settings were captured through native UI in the review chat. |
-| Remaining/unverified | Actual logout/login session; live OS System-theme switch with popup open; independent final background-window/Dock observation; physical Intel and Windows execution; owner-created encrypted key backup. A backup helper is prepared but no key backup has been exported. |
-| Publication | Not authorized. No GitHub release, public feed/website deployment, release upload or automatic user update delivery occurred. Apple notarization and the local manual installation were separately authorized. The site builder supports an optional v2 feed, but the site contains no new feed and the old public feed is unchanged. |
+| Remaining/unverified | Actual logout/login session; live OS System-theme switch with popup open; physical Intel and Windows execution; full automated multi-browser/responsive website checks. Encrypted credential backup is explicitly deferred at the owner's request; no completed backup has been verified. |
+| Publication | Awaiting the owner's final decision after local preparation and verification. No remote push, GitHub release, public feed/website deployment or release upload is currently authorized. No public release or automatic user update delivery occurred. Apple notarization and the local manual installation were separately authorized. The site builder supports an optional v2 feed, but the site contains no new feed and the old public feed is unchanged. |
 
 Initial preparation found no usable **Developer ID Application** identity and no
 configured `NOTARY_PROFILE`. The owner subsequently explicitly approved a replacement
@@ -115,6 +126,19 @@ The feed/archive signatures bind these final bytes. The new feed is unpublished;
 its local verification is not proof of a live public feed. Build 4's hash and Apple
 acceptance below are historical and must not substitute for the build 5 receipt.
 
+A later isolated automatic-update rehearsal used the actual final runtime
+executable in a 2.2.0/build 5 host and a synthetic private 2.2.1/build 6 target.
+Private evidence is in
+`~/Library/Caches/LlumiReview/automatic-220-to-221/evidence.json`. Automatic
+download, Later, installation on normal Quit without relaunch, and one-time
+completion after reopening all passed as detailed above. Both fixtures used the
+same Developer ID publisher/new Sparkle v2 key; their separate identity and
+preferences kept providers disabled. The signed target was not notarized. The
+earlier build 4-to-exact-notarized-build 5 acceptance remains separate evidence.
+The production app/defaults were unchanged, the test server was stopped, fixture
+launch paths were retired and test preferences were deleted. The 2.2.1 label is
+test-only; no prospective version or public feed was released.
+
 The exact final app is now installed at `/Applications/Llumi.app`. Both providers
 returned Live without recording identities or private usage values. Native
 settings were preserved: all nine tracked fields matched their original values
@@ -123,12 +147,44 @@ restored. Launch at Login remained on; an actual logout/login startup has not be
 exercised. The initial notification denial was resolved by the owner locally.
 The installed app reported permission allowed and test accepted; the owner then
 confirmed the final notification worked. Alert enablement remains at its original
-off setting. A cold background process launch
-and same-PID second launch were observed, but UI inspection reopened the main
-window; independent final hidden-window/Dock confirmation remains unverified.
+off setting. A later independent lifecycle check observed the cold background
+launch before app accessibility inspection: one process, accessory activation
+policy and zero normal on-screen windows. Explicit Finder Open exposed the main
+window in the same process; closing it kept the process and returned to accessory
+policy with zero normal windows. Quit stopped the process. All eight tracked
+nonsensitive setting values and presence were restored; normal Llumi operation
+was reopened. Private evidence: `~/Library/Caches/LlumiReview/final-background-build5/evidence.json`.
 
-The encrypted Sparkle key backup helper is prepared for the owner. It has not
-exported a backup; owner-controlled encrypted backup remains outstanding.
+The owner explicitly deferred encrypted credential backup work. No completed
+encrypted backup has been verified; it is not an active task in this release
+preparation.
+
+## Final local publication preparation — 12 October 2026
+
+The tracked 2.2.0 release notes are a preview with no publication date. The ignored
+`.review/macos-2.2.0-publication/` package holds the proposed GitHub body, download
+metadata, homepage migration notices, exact signed new feed and rendered review.
+The proposed date is not a receipt; publication must record the real release ID
+and date. Production config, the legacy feed, historical notes and Windows
+metadata are unchanged. No branch or 2.2.0 tag has been pushed.
+
+Current-public and proposed-public website suites each passed 25 tests; the three
+Node routing tests passed. Desktop in-app browser inspection verified the
+homepage migration notice and navigation to the 2.2.0 installation notes;
+screenshots were saved locally. Review notes visibly say Local preview / Not
+released yet. The full headless multi-browser, responsive and accessibility
+harness was not run because its browser binaries were unavailable.
+
+Read-only remote checks returned HTTP 200 and the expected digest for the legacy
+feed; the new feed, 2.2.0 notes and GitHub release returned HTTP 404 as expected
+before publication. Once separately authorized, publish the exact final installer,
+verify its downloaded digest, finalize the release receipt, and deploy/verify the
+new feed and notes. Private update tests do not establish public reachability.
+
+The previously owner-accepted deferred website analytics discrepancy **LLUMI-001**
+remains open: production Cloudflare analytics/RUM differs from the website's
+no-analytics claim. This update does not remediate it; native source/bundle privacy
+checks are separate. See the [historical risk record](2026-10-macos-1.1.2.md).
 
 ## Superseded 2.2.0/build 4 artifact record
 
@@ -214,9 +270,10 @@ unimplemented adapter.
 The blocked build 4 attempt left installed production 1.1.3 untouched, with no feed
 preference change or private update server. The subsequent authorized build 5 route
 completed a manual replacement and a separate private new-key updater test as
-recorded in the current section. Remaining native checks and owner backup are
-listed above. Keep release uploads and public feed/site changes blocked until
-separate publication authorization.
+recorded in the current section. Remaining native checks and the owner-deferred
+backup are listed above. Complete authorized preparation and verification locally;
+remote pushes, release uploads and public feed/site changes require the owner's
+final publication decision.
 
 ## Provider feasibility
 

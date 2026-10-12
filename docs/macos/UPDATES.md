@@ -1,9 +1,11 @@
 # macOS updates
 
 The active local candidate is **2.2.0/build 5**. See [its preparation record](../releases/2026-10-macos-background-alerts-candidate.md)
-for completed local checks, remaining native/backup items and historical build 4 evidence. The latest public release is
+for completed local checks, remaining native items, owner-deferred backup and historical build 4 evidence. The latest public release is
 [1.1.3/build 3](../releases/2026-10-macos-1.1.3.md), published on 2026-10-05.
 Public feeds, notes and downloads remain unchanged during 2.2.0 preparation.
+Preparation and verification remain local until the owner's final publication
+decision; no remote push, release upload or site/feed deployment is authorized.
 
 ## Authorized 2.2.0 manual migration
 
@@ -16,6 +18,13 @@ Installed 1.1.3 cannot validate the new key and cannot perform this transition
 through Check for Updates. Same bundle ID/team, settings and provider sessions
 must survive the manual installation. The new feed supports future compatible
 updates after installation and publication; it is not currently published.
+
+Future compatible updates preserve the existing **Automatically check and download
+updates** setting. When enabled, Llumi checks and downloads automatically, then
+offers **Restart and update** or **Later**. Later keeps the current process running;
+the prepared update can install on normal quit. When disabled, checks remain
+manual. The one-time manual migration does not opt users into automatic updates
+or force a restart.
 
 Follow [the migration contract](../product-spec/updater-key-migration-220.md).
 Build 5 completed fresh tests, signing/notarization and local feed/archive signature
@@ -35,6 +44,13 @@ verified against the new key. The exact final DMG and provenance are in the
 [candidate record](../releases/2026-10-macos-background-alerts-candidate.md#current-220build-5-migration-record)
 and local `dist/macos-2.2.0-build5/release-state.json`.
 
+Fresh local revalidation again ran 247 native tests with four intentional skips
+and zero failures. A fresh universal unsigned Release passed 17 distribution
+tests; the updater-policy suite now passes 24, including a future-feed generator
+regression that keeps minimum update version 5 fixed. Release verification of the
+existing final signed/notarized build 5 DMG also passed. The unsigned rebuild does
+not replace the final signed artifact or its source provenance above.
+
 A disposable **new-key** 2.2.0/build 4 host downloaded and installed the exact final
 build 5, then relaunched as one process. Its completion notice was observed and
 acknowledged. Old-key feed, tampered feed, signed malformed feed and invalid archive
@@ -42,17 +58,36 @@ signature were rejected. An equal build was not offered, and an unavailable loca
 server produced a recoverable error. This is future new-key updater validation;
 it does not claim a 1.1.3 old-key in-app upgrade.
 
+A subsequent isolated host using the actual final 2.2.0/build 5 runtime executable
+automatically downloaded a synthetic private 2.2.1/build 6 update with no manual
+check. **Update ready** appeared; **Later** kept build 5 running as one process.
+Normal Quit installed build 6 without relaunching. Reopening displayed completion;
+Continue acknowledged it, and a second reopening did not repeat the notice. The
+fixtures used the same Developer ID publisher and new Sparkle v2 key, minimum
+update version 5, a distinct app identity/preferences and disabled providers.
+The target was signed but not notarized; this behavior rehearsal is separate from
+the earlier build 4-to-exact-notarized-build 5 acceptance and does not validate a
+public endpoint or release 2.2.1. Private evidence is in
+`~/Library/Caches/LlumiReview/automatic-220-to-221/evidence.json`. The production
+app/defaults remained unchanged; the server was stopped, fixture launch paths
+retired and test preferences deleted.
+
 The separate manual installation replaced `/Applications/Llumi.app` 1.1.3 with exact
 build 5 bytes from the notarized DMG. Both providers were Live, all nine tracked
 setting values and their presence were preserved, Launch at Login remained on, and no false completion notice
 appeared. Second launch retained the process; Quit stopped it. Temporary feed, automatic-update and background overrides were restored.
 After the owner enabled system permission locally, the installed app reported the
 test accepted and the owner confirmed the final notification worked. Alerts remain
-at their original off setting. Cold background launch started the process, but UI observation reopened
-the window, so final window absence/Dock state is not independently confirmed.
+at their original off setting. A later final build 5 check observed cold background
+launch before app accessibility inspection: one process, accessory activation
+policy and zero normal on-screen windows. Explicit Finder Open showed the main
+window in that process; closing it retained the process and restored accessory
+policy with zero normal windows. Quit stopped it. All eight tracked nonsensitive
+setting values and presence were restored, then normal operation was reopened.
+Evidence: `~/Library/Caches/LlumiReview/final-background-build5/evidence.json`.
 Actual logout/login, live OS System appearance with popup open, Intel/Windows
-execution and the owner's encrypted key backup remain unverified. The backup
-helper is prepared and has not exported the key.
+execution remain unverified. The owner explicitly deferred encrypted credential
+backup work; no completed backup has been verified.
 
 The optional v2 site-builder support is tested; no new feed is present in the site
 and nothing has been deployed. The old public feed remains unchanged.
@@ -102,7 +137,7 @@ Official references: [setup](https://sparkle-project.org/documentation/), [progr
 
 A dedicated Sparkle EdDSA key was generated for earlier releases with upstream `generate_keys --account io.github.praneshsivasankaran.llumi.sparkle` and stored in login Keychain. That historical record does not establish its current availability. During 2.2.0/build 4 preparation on 2026-10-12, the official appcast tool reported the original key missing (`-25300`); focused login/iCloud Keychain checks found no matching item. No replacement Sparkle key was created during that attempt. The separately approved replacement Developer ID identity signed build 4's app and DMG; both passed Apple notarization, stapling and Gatekeeper. Those receipts remain historical and nothing was published.
 
-The owner then authorized a new Sparkle key in account `io.github.praneshsivasankaran.llumi.sparkle.v2`, the separate `appcast-v2.xml` feed and a one-time manual installation. Original-key restoration is no longer the selected route. Build 5 embeds the new public key/feed and completed fresh app/DMG trust and local feed/archive signature checks. The private key remains in Keychain; it was not exported into reports, source or generation arguments. Owner-controlled encrypted backup is outstanding; the prepared helper has not exported it.
+The owner then authorized a new Sparkle key in account `io.github.praneshsivasankaran.llumi.sparkle.v2`, the separate `appcast-v2.xml` feed and a one-time manual installation. Original-key restoration is no longer the selected route. Build 5 embeds the new public key/feed and completed fresh app/DMG trust and local feed/archive signature checks. The private key remains in Keychain; it was not exported into reports, source or generation arguments. Encrypted credential backup is explicitly deferred at the owner's request; no completed backup has been verified.
 
 Use the final `Llumi-<version>-macos.dmg` for both manual distribution and compatible new-key update enclosures (`Llumi-2.2.0-macos.dmg` containing build 5 for this candidate only after completing its final gates). Sparkle officially supports DMG updates. A separate ZIP update artifact is unnecessary. Keep build 5 output separate from the superseded build 4 DMG with the same filename. Both app and DMG must be Developer ID signed, notarized and stapled before the final archive signatures are generated. Signing order is explicitly inside-out across the reviewed Sparkle helpers, framework, then Llumi. The reviewed helper entitlements are empty. The release verifier requires exact `Developer ID Application: Pranesh S (K38622WCYD)` and `TeamIdentifier=K38622WCYD`, secure timestamp and strict validity; it also checks nested publishers. Sparkle's own installer checks the host signing requirement/bundle identity. An EdDSA signature is an additional requirement, not a substitute for release verification.
 

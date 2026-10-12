@@ -19,20 +19,50 @@ metadata attempt failed; no replacement key or appcast was created at that stage
 The owner subsequently chose a new Sparkle key in account
 `io.github.praneshsivasankaran.llumi.sparkle.v2` and future feed
 `https://tryllumi.com/appcast-v2.xml`, with one manual Mac installation from 1.1.3.
+After that installation and future publication, compatible Mac updates follow the
+existing automatic check/download setting, with **Restart and update** / **Later**
+and installation on normal quit after Later. The migration preserves the user's
+setting. This Mac signing-key migration does not prescribe a Windows installer
+change or establish Windows updater validation.
 Build 5 from `c9d35b3a2640ea2d3c7fc5c204d884a00c81b937` now has a signed/notarized
 app and DMG, verified local feed/archive signatures, a successful manual installation
 over 1.1.3, and a separate successful private future new-key update test. Native
 tests ran 247 cases with four intentional skips and zero failures; distribution,
 updater-policy and site-tool tests passed 17, 23 and 25 cases respectively.
+Fresh revalidation again ran 247 native tests with four intentional skips and
+zero failures. A fresh universal unsigned Release passed 17 distribution tests;
+24 updater-policy tests now pass, including minimum update version 5 remaining
+fixed for future feed generation. The final signed/notarized build 5 DMG passed
+release verification again.
+
+A separate automatic-update rehearsal used the actual final 2.2.0/build 5 runtime
+executable in an isolated identity with separate preferences and providers off.
+Without a manual check, it downloaded a private synthetic 2.2.1/build 6 fixture
+under the same Developer ID/new Sparkle v2 key and minimum update version 5.
+Update ready appeared; Later kept build 5 and one process; normal Quit installed
+build 6 without relaunching. Reopening showed completion once, with Continue
+preventing repetition on the next reopening. The target was signed but not
+notarized; retain the earlier build 4-to-exact-notarized-build 5 test as separate
+trust evidence. Production app/defaults were unchanged; the test server was
+stopped, fixture launch paths retired and test preferences deleted. This validates
+Mac behavior only; it does not release 2.2.1 or validate a public update endpoint.
+
 Final installed notification permission was enabled locally by the owner; macOS
 accepted the test and the owner confirmed it worked. Temporary feed, update and
-background test preferences were restored, with all nine tracked fields preserved. Actual
-logout/login, independent final hidden-window/Dock observation, System appearance
-change with popup open, Intel runtime and owner encrypted key backup are not
-established. Exact evidence and remaining items are in the
+background test preferences were restored, with all nine tracked fields preserved.
+A later exact installed build 5 check confirmed cold background launch with one
+process, accessory activation policy and zero normal on-screen windows; explicit
+Finder Open reused that process, closing the main window kept it in background,
+and Quit stopped it. Eight tracked nonsensitive settings and their original
+presence were restored afterward. Actual logout/login, System appearance change
+with popup open and Intel runtime are not established. Encrypted credential
+backup is explicitly deferred at the owner's request; no completed backup has
+been verified. Exact evidence and remaining items are in the
 [Mac candidate record](../releases/2026-10-macos-background-alerts-candidate.md).
 Those are macOS-only distribution checks; they do not establish Windows signing,
 Store acceptance, installation or notification readiness. No publication occurred.
+Finish preparation and verification locally before the owner's final publication
+decision; remote pushes, release uploads and site/feed deployment are not authorized.
 
 ## Extend the existing Windows architecture
 
