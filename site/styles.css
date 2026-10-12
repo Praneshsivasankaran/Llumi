@@ -1704,3 +1704,18 @@ body {
   .download-section { background: radial-gradient(ellipse at 50% 50%, #ffffff9c, transparent 75%); }
   .footer { border-radius: 18px 18px 0 0; }
 }
+
+/* macOS 2.2.0 one-time update migration notice. */
+.macos-migration {
+  max-width: 42rem;
+  margin: 18px 0 0;
+  padding: 14px 16px;
+  border: 1px solid #b9cbea;
+  border-radius: 14px;
+  background: #f1f6ff;
+  color: #263b5e;
+  font-size: 14px;
+  line-height: 1.55;
+}
+.macos-migration a { color: #174d9c; text-decoration: underline; }
+.download-card > p.macos-migration { margin-top: 18px; color: #263b5e; }

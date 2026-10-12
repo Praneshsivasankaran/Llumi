@@ -5,8 +5,8 @@
       "platform": "macos",
       "version": "2.2.0",
       "build": 5,
-      "status": "preview",
-      "published_at": null,
+      "status": "published",
+      "published_at": "2026-10-12",
       "title": "Background monitoring, with alerts when you need them.",
       "summary": "A compact menu-bar popup, optional usage alerts and appearance that follows your settings.",
       "sections": [
