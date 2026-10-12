@@ -1,0 +1,32 @@
+<?xml version="1.0" standalone="yes"?>
+<!-- sparkle-sign-warning:
+IMPORTANT: This file was signed by Sparkle. Any modifications to this file requires re-signing this file with generate_appcast or sign_update! The signed signature will be embedded at the end of this file.
+-->
+<rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" version="2.0">
+    <channel>
+        <title>Llumi</title>
+        <item>
+            <title>2.2.0</title>
+            <pubDate>Mon, 12 Oct 2026 13:30:50 +0530</pubDate>
+            <sparkle:minimumUpdateVersion>5</sparkle:minimumUpdateVersion>
+            <sparkle:version>5</sparkle:version>
+            <sparkle:shortVersionString>2.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="plain-text"><![CDATA[Llumi 2.2.0 (build 5)
+
+Start in background, independently of Launch at login. The compact menu-bar popup keeps real usage, reset times and refresh status available while the main window is closed, and follows Llumi appearance settings.
+
+Optional usage alerts are off by default. After opting in, edit provider thresholds, track each quota window separately, and receive one highest newly crossed threshold per account/window. Stale or uncertain readings do not trigger alerts. Native permission feedback and a test notification are included.
+
+Claude Code and Codex remain supported. Missing quota fields stay unknown. No new provider integrations are enabled in this release.
+
+Existing Mac users must install this version manually once. Quit Llumi, replace Llumi.app in Applications with this signed and notarized version, and reopen it. Settings and provider-owned sign-ins are retained. Version 1.1.3 cannot obtain this update through its old signing key. Future compatible updates use a separate signed update feed.
+]]></description>
+            <enclosure url="https://github.com/Praneshsivasankaran/Llumi/releases/download/llumi-macos-2.2.0/Llumi-2.2.0-macos.dmg" length="4528761" type="application/octet-stream" sparkle:edSignature="HZKYL7V7dApp/cWe/0tVBCMkGNBH2nB5omAjcaepJHL617Tun1+GnAgJZgqyVxdGbO0PLa9NkkHV9vt+ewAlAA=="/>
+        </item>
+    </channel>
+</rss>
+<!-- sparkle-signatures:
+edSignature: 3gVhzLaL4V891osMmOBRWJKgCZvYkF+PHXsSgXkcAul5fH4W+xCFf+PMZySs+p4Jkq/agtJj7qze+9Q9UduzBw==
+length: 2226
+-->
