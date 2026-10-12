@@ -66,12 +66,15 @@ class UpdaterPolicyTests(unittest.TestCase):
                 with self.assertRaisesRegex(AssertionError, 'Unexpected updater Keychain account'):
                     self.check(candidate=candidate)
     def test_legacy_key_rejected_even_with_matching_candidate(self):
-        info=copy.deepcopy(self.info);candidate=copy.deepcopy(self.candidate)
-        info['SUPublicEDKey']=candidate['public_ed_key']=LEGACY_PUBLIC_ED_KEY
-        with self.assertRaisesRegex(AssertionError, 'Legacy updater public key'):
-            self.check(info,candidate)
+        # Alternate Base64 padding bits must not disguise the same old key bytes.
+        for key in [LEGACY_PUBLIC_ED_KEY, LEGACY_PUBLIC_ED_KEY[:-2]+'5=']:
+            with self.subTest(key=key):
+                info=copy.deepcopy(self.info);candidate=copy.deepcopy(self.candidate)
+                info['SUPublicEDKey']=candidate['public_ed_key']=key
+                with self.assertRaisesRegex(AssertionError, 'Legacy updater public key'):
+                    self.check(info,candidate)
     def test_invalid_public_key_rejected_even_with_matching_candidate(self):
-        for key in ['not-base64', '', 'YQ==', None]:
+        for key in ['not-base64', '', 'YQ==', 'A'*42+'B=', None]:
             with self.subTest(key=key):
                 info=copy.deepcopy(self.info);candidate=copy.deepcopy(self.candidate)
                 info['SUPublicEDKey']=candidate['public_ed_key']=key

@@ -13,12 +13,13 @@ def validate_update_configuration(candidate):
     build = candidate['build']
     assert re.fullmatch(r'[1-9][0-9]*', build) and int(build) >= int(MINIMUM_UPDATE_BUILD), 'Build predates new updater lineage'
     key = candidate['public_ed_key']
-    assert key != LEGACY_PUBLIC_ED_KEY, 'Legacy updater public key cannot be reused'
     try:
         decoded = base64.b64decode(key, validate=True)
     except (ValueError, TypeError):
         raise AssertionError('Invalid public key') from None
     assert len(decoded) == 32, 'Invalid public key'
+    assert decoded != base64.b64decode(LEGACY_PUBLIC_ED_KEY), 'Legacy updater public key cannot be reused'
+    assert base64.b64encode(decoded).decode('ascii') == key, 'Invalid public key encoding'
 
 def merge_release_state(previous, verified):
     """Retain local provenance, without attaching another release's receipts."""
