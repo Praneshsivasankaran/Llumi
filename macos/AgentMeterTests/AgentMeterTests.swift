@@ -34,9 +34,9 @@ final class ProviderClientMetadataTests: XCTestCase {
       ])["version"].string, "2.0.1")
       XCTAssertEqual(ProviderAdapter.codexClientInfo(info: [
         "LlumiReleaseVersion": value,
-      ])["version"].string, "1.1.4")
+      ])["version"].string, "2.2.0")
     }
-    XCTAssertEqual(ProviderAdapter.codexClientInfo(info: nil)["version"].string, "1.1.4")
+    XCTAssertEqual(ProviderAdapter.codexClientInfo(info: nil)["version"].string, "2.2.0")
   }
 }
 @MainActor final class ParserTests: XCTestCase {

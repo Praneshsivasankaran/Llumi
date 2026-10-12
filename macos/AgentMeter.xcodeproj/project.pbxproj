@@ -869,7 +869,7 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.4</string>
+				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
 				<string>4</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
@@ -905,7 +905,7 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.4</string>
+				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
 				<string>4</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
@@ -961,7 +961,7 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.4</string>
+				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
 				<string>4</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
@@ -997,7 +997,7 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.4</string>
+				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
 				<string>4</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>

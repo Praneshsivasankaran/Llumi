@@ -1,6 +1,6 @@
 # Build Llumi for macOS
 
-The active local candidate is **1.1.4/build 4**; see
+The active local candidate is **2.2.0/build 4**; see
 [candidate notes and validation](../releases/2026-10-macos-background-alerts-candidate.md).
 The latest published macOS release remains the immutable
 [1.1.3/build 3 release](../releases/2026-10-macos-1.1.3.md). Local preparation does not
@@ -25,12 +25,12 @@ Published releases, including 1.1.3/build 3 and the historical 1.1.1 launch, are
 
 ```sh
 mkdir -p "$HOME/Library/Caches/LlumiCandidate"
-ditto -c -k --norsrc --noextattr --keepParent "$HOME/Library/Developer/Xcode/DerivedData/AgentMeter/Build/Products/Release/Llumi.app" "$HOME/Library/Caches/LlumiCandidate/Llumi-1.1.4-unsigned-source-build.zip"
-shasum -a 256 "$HOME/Library/Caches/LlumiCandidate/Llumi-1.1.4-unsigned-source-build.zip"
+ditto -c -k --norsrc --noextattr --keepParent "$HOME/Library/Developer/Xcode/DerivedData/AgentMeter/Build/Products/Release/Llumi.app" "$HOME/Library/Caches/LlumiCandidate/Llumi-2.2.0-unsigned-source-build.zip"
+shasum -a 256 "$HOME/Library/Caches/LlumiCandidate/Llumi-2.2.0-unsigned-source-build.zip"
 ```
 
 This creates a local ad-hoc build, not Developer ID signing or notarization. Builds are source-reproducible; byte-identical archives are not promised. The macOS workflow uses GitHub's `xcode-27` preview runner with synthetic tests and no provider authentication or signing secrets. Preview runner availability may vary; no passing badge is advertised until a real run completes.
 
 For an unsigned DMG rehearsal and the future signing/notarization steps, see [Distribution](DISTRIBUTION.md).
 
-The candidate retains pinned Sparkle 2.10.0. Xcode resolves the official binary dependency and embeds its framework; unsigned source builds do not establish Developer ID signing. See [updater behavior and historical validation](UPDATES.md). The 1.1.4 candidate record distinguishes current checks from earlier release evidence and records unresolved distribution gates.
+The candidate retains pinned Sparkle 2.10.0. Xcode resolves the official binary dependency and embeds its framework; unsigned source builds do not establish Developer ID signing. See [updater behavior and historical validation](UPDATES.md). The 2.2.0 candidate record distinguishes current checks from earlier release evidence and records unresolved distribution gates.

@@ -1,11 +1,14 @@
 # Windows handoff: background mode and usage alerts
 
-Prepared 2026-10-12 from the macOS local candidate; macOS version/build **1.1.4 / 4**.
+Prepared 2026-10-12 from the macOS local candidate; macOS version/build **2.2.0 / 4**.
+The owner selected **2.2.0** as the shared marketing version for macOS and Windows.
+Native internal/package build numbers remain independent; the unreleased Mac build
+stays 4. Earlier Mac checks recorded as 1.1.4/build 4 retain that historical label.
 This is an implementation contract, not a claim that this update exists or has been
 tested on Windows. Start with [the shared product specification](../product-spec/background-alerts.md)
 and preserve the current Windows allowance/setup behavior in
 [windows-213.md](../product-spec/windows-213.md). Do not copy the Mac preference
-domain, bundle identity, notification framework or release number.
+domain, bundle identity, notification framework or internal build number.
 
 ## Extend the existing Windows architecture
 

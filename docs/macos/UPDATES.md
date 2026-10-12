@@ -1,9 +1,9 @@
 # macOS updates
 
-The active local candidate is **1.1.4/build 4**. See [its preparation record](../releases/2026-10-macos-background-alerts-candidate.md)
+The active local candidate is **2.2.0/build 4**. See [its preparation record](../releases/2026-10-macos-background-alerts-candidate.md)
 for fresh tests and remaining distribution gates. The latest public release is
 [1.1.3/build 3](../releases/2026-10-macos-1.1.3.md), published on 2026-10-05.
-Public feeds, notes and downloads remain unchanged during 1.1.4 preparation.
+Public feeds, notes and downloads remain unchanged during 2.2.0 preparation.
 
 ## Update behavior introduced in 1.1.3
 
@@ -13,14 +13,14 @@ The manual button checks and downloads an available ordinary application update 
 
 Installation receipts are recorded only at verified preparation for on-quit installation or Sparkle's actual installation callback. A receipt binds origin/target numeric version/build to a hash of the canonical host path. Only that same host running the exact newer target can show **The app has been updated**, version, **View release notes** and **Continue**. The trusted HTTPS notes URL is derived from the validated running marketing version. No remote HTML is rendered by Llumi. Acknowledgment suppresses the notice on subsequent launches; quitting before acknowledgment retains it. Canceled/failed installs, mismatched targets, downgrades, fresh installs and checks/downloads alone never show success. Preview and installed hosts sharing a bundle ID cannot consume one another's records. First 1.1.2 upgrades stay quiet without verified evidence, as approved by the owner; inherited preferences do not establish installation.
 
-Each new candidate remains local until the owner reviews it and approves publication. The installed published app must stay recoverable. A private Mac-only test can temporarily override the host's `SUFeedURL` through its user defaults to a loopback server with a signed feed/archive. This is Sparkle's supported testing override; preserve and restore the previous default, retain all verification flags, and never deploy that feed publicly or modify the installed host's signed bundle. Repeat signed install/relaunch acceptance for the intended predecessor and exact new candidate. The historical 1.1.2 → 1.1.3 acceptance is recorded in the 1.1.3 publication receipt; it does not validate 1.1.4. Notarization and publication receipts are separate from a local Developer ID signed build.
+Each new candidate remains local until the owner reviews it and approves publication. The installed published app must stay recoverable. A private Mac-only test can temporarily override the host's `SUFeedURL` through its user defaults to a loopback server with a signed feed/archive. This is Sparkle's supported testing override; preserve and restore the previous default, retain all verification flags, and never deploy that feed publicly or modify the installed host's signed bundle. Repeat signed install/relaunch acceptance for the intended predecessor and exact new candidate. The historical 1.1.2 → 1.1.3 acceptance is recorded in the 1.1.3 publication receipt; it does not validate 2.2.0. Notarization and publication receipts are separate from a local Developer ID signed build.
 
 
 ## Historical native 1.1.3 local validation — 5 October 2026
 
 The next two sections retain staged evidence and gates as recorded before the
 1.1.3 release. Later completion is recorded in its publication receipt; these
-paragraphs do not describe the current public release or the 1.1.4 candidate.
+paragraphs do not describe the current public release or the 2.2.0 candidate.
 
 The scoped snapshot passed 182 macOS tests: 180 passed, two existing opt-in provider/capture tests skipped. This includes 25 receipt/identity/isolation regressions, five presentation state tests and native Light/Dark restart/completion renders. Release policy has 14 passing tests; website tests have 18 passing cases and routing has three. Website browser validation passed in Chromium, WebKit and Firefox. The removed `/review/update-flow/` route returns 404; release history and local 1.1.3 notes return 200.
 
@@ -34,7 +34,7 @@ The local signed 1.1.3/build 3 replaced the prior review app at `/Applications/L
 
 ## Historical published 1.1.2 baseline
 
-macOS 1.1.2/build 2 was published on 3 October 2026. Its signed production feed and website download went live, and the final public app was installed and physically verified on the owner's Mac. See the [publication receipt](../releases/2026-10-macos-1.1.2.md). It was superseded by 1.1.3 on 5 October; all published tags and bytes remain frozen. `macos/release-candidate.json` records the current local candidate, now 1.1.4/build 4; each candidate must advance version and build and match bundle metadata. This file is separate from the immutable launch baseline.
+macOS 1.1.2/build 2 was published on 3 October 2026. Its signed production feed and website download went live, and the final public app was installed and physically verified on the owner's Mac. See the [publication receipt](../releases/2026-10-macos-1.1.2.md). It was superseded by 1.1.3 on 5 October; all published tags and bytes remain frozen. `macos/release-candidate.json` records the current local candidate, now 2.2.0/build 4; each candidate must advance version and build and match bundle metadata. This file is separate from the immutable launch baseline.
 
 Existing 1.1.1 users must install 1.1.2 manually once; compatible later macOS updates can then be delivered in-app. Windows Store 2.0.2 is unchanged. The Claude presentation fix remains its own cross-platform commit, `c9a77c5`; Windows native UI regression execution is required before another Windows package.
 
@@ -50,7 +50,7 @@ Official references: [setup](https://sparkle-project.org/documentation/), [progr
 
 A dedicated Sparkle EdDSA key was generated with upstream `generate_keys --account io.github.praneshsivasankaran.llumi.sparkle`. The private key stays in login Keychain, under Sparkle's service and that account; it was never exported, printed, committed or uploaded. Only the public key is embedded and recorded in the candidate manifest.
 
-Use the final `Llumi-<version>-macos.dmg` for both manual distribution and the update enclosure (`Llumi-1.1.4-macos.dmg` for this candidate only after completing its final gates). Sparkle officially supports DMG updates. A separate ZIP update artifact is unnecessary. Both app and DMG must be Developer ID signed, notarized and stapled before the final archive signatures are generated. Signing order is explicitly inside-out across the reviewed Sparkle helpers, framework, then Llumi. The reviewed helper entitlements are empty. The release verifier requires exact `Developer ID Application: Pranesh S (K38622WCYD)` and `TeamIdentifier=K38622WCYD`, secure timestamp and strict validity; it also checks nested publishers. Sparkle's own installer checks the host signing requirement/bundle identity. An EdDSA signature is an additional requirement, not a substitute for release verification.
+Use the final `Llumi-<version>-macos.dmg` for both manual distribution and the update enclosure (`Llumi-2.2.0-macos.dmg` for this candidate only after completing its final gates). Sparkle officially supports DMG updates. A separate ZIP update artifact is unnecessary. Both app and DMG must be Developer ID signed, notarized and stapled before the final archive signatures are generated. Signing order is explicitly inside-out across the reviewed Sparkle helpers, framework, then Llumi. The reviewed helper entitlements are empty. The release verifier requires exact `Developer ID Application: Pranesh S (K38622WCYD)` and `TeamIdentifier=K38622WCYD`, secure timestamp and strict validity; it also checks nested publishers. Sparkle's own installer checks the host signing requirement/bundle identity. An EdDSA signature is an additional requirement, not a substitute for release verification.
 
 ## Local appcast tooling
 
