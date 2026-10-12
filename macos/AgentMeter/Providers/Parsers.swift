@@ -225,7 +225,9 @@ enum Parsers {
       j["session"]["total_api_duration_ms"].number == 0,
       j["session"]["model_usage"].object?.isEmpty == true
     else { throw Failure.incompatible }
-    guard available, j["rate_limits"] != .null else { return .init(windows: []) }
+    guard available else { return .init(windows: []) }
+    guard j.object?.keys.contains("rate_limits") == true else { throw Failure.malformed }
+    guard j["rate_limits"] != .null else { throw Failure.unavailable }
     guard let limits = j["rate_limits"].object else { throw Failure.incompatible }
     guard limits.count <= 64 else { throw Failure.outputLimit }
     var result: [UsageWindow] = []

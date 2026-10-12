@@ -50,8 +50,11 @@ struct SettingsView: View {
       ScrollViewReader { proxy in
         Form {
           Section("General") {
+            Toggle(isOn: $preferences.startInBackground) {
+              Label("Start in background", systemImage: "menubar.rectangle")
+            }
             Toggle(isOn: Binding(get: { login.enabled }, set: { login.setEnabled($0) })) {
-              Label("Launch at Login", systemImage: "power")
+              Label("Launch at login", systemImage: "power")
             }
             if let message = login.message {
               Text(message).font(.caption).foregroundStyle(.secondary)
@@ -67,6 +70,10 @@ struct SettingsView: View {
             }
             Toggle(isOn: $preferences.menuEnabled) {
               Label("Menu Bar Icon", systemImage: "menubar.rectangle")
+            }.disabled(preferences.startInBackground)
+            if preferences.startInBackground {
+              Text("The menu bar keeps Llumi accessible. Closing this window keeps monitoring active.")
+                .font(.caption).foregroundStyle(.secondary)
             }
           }
           Section("Appearance") {
@@ -77,6 +84,9 @@ struct SettingsView: View {
             }
           }
           if let checks {
+            Section("Usage alerts") {
+              UsageAlertSettingsView(controller: checks.alerts)
+            }.id("usage-alerts")
             Section("Updates") {
               HStack {
                 Label("Llumi \(releaseVersion)", systemImage: "arrow.down.circle")
@@ -108,7 +118,7 @@ struct SettingsView: View {
   }
   private var releaseVersion: String {
     Bundle.main.object(forInfoDictionaryKey: "LlumiReleaseVersion") as? String
-      ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1.3"
+      ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "2.2.0"
   }
 }
 private struct AboutView: View {
@@ -117,7 +127,7 @@ private struct AboutView: View {
       MeterMark().scaleEffect(2).frame(height: 50)
       Text("Llumi").font(.title.bold())
       Text(
-        "Version \(Bundle.main.object(forInfoDictionaryKey:"LlumiReleaseVersion") as? String ?? "1.1.3")"
+        "Version \(Bundle.main.object(forInfoDictionaryKey:"LlumiReleaseVersion") as? String ?? "2.2.0")"
       ).font(.callout).foregroundStyle(.secondary)
       Text("Track your AI coding usage.").font(.callout).foregroundStyle(.secondary)
     }.frame(maxWidth: .infinity, maxHeight: .infinity)

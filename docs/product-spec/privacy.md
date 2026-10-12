@@ -10,6 +10,11 @@ Keep full usage snapshots and raw account bindings in memory. Persist applicatio
 
 Windows owns notification display and notification history. Alert content contains a provider name, allowance label, reached threshold and reset time; it contains no account identity or provider credentials. Llumi disables cross-device notification mirroring and requests expiry on reboot. Clean Quit requests removal of each owned notification by its tag and group, without clearing unrelated notification history. Unpackaged notification setup may create a separate owned Start Menu shortcut containing application identity and executable location, without provider data. No provider executable or ambiguous provider SDK is redistributed. Vendor artwork retains its owner's rights and must not imply affiliation or endorsement.
 
+The approved background/alerts update additionally persists bounded opaque hashes
+and consumed threshold receipts for restart deduplication. Raw account bindings,
+window names, credentials and usage history are never persisted. Local review
+bundles use a separate preference domain and have updater activity disabled.
+
 macOS 1.1.2 direct-distribution candidates use Sparkle to request an HTTPS appcast and approved update archives. Update hosts see ordinary HTTP request metadata, including IP address; requests carry no provider credentials, identity, usage readings or bucket identifiers. System-profile submission and silent installation are disabled. This updater traffic is distinct from provider subprocess traffic. Existing website analytics audit findings are not resolved by this integration.
 
 macOS 1.1.3 adds explicit opt-in automatic downloads using the same Sparkle path. It prompts before restarting; Later leaves the process running and the prepared update installs on quit. Local completion metadata contains numeric origin/target versions/builds and host-path hashes only. It is never exported in diagnostics or sent to the website. Release notes open on request at the exact trusted HTTPS version route. No updater HTML, credentials or provider readings enter those windows.

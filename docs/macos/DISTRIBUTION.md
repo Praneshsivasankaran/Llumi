@@ -1,6 +1,8 @@
 # macOS distribution
 
-Llumi 1.1.1 (build 1), bundle ID `io.github.praneshsivasankaran.llumi`, is published as a Developer ID signed, notarized and stapled DMG. Its exact source, asset and checksum are frozen in the [launch baseline](../releases/2026-09-launch.md). Never rebuild or replace that release, retarget its tag, or apply these instructions to its accepted bytes.
+The latest published release is [Llumi 1.1.3/build 3](../releases/2026-10-macos-1.1.3.md), bundle ID `io.github.praneshsivasankaran.llumi`, distributed as a Developer ID signed, notarized and stapled DMG. Its exact source, asset and checksum are frozen in that receipt. The historical 1.1.1 launch remains recorded in the [launch baseline](../releases/2026-09-launch.md). Never rebuild or replace a published release, retarget its tag, or apply these instructions to its accepted bytes.
+
+The active local candidate is **2.2.0/build 5**. Its [candidate record](../releases/2026-10-macos-background-alerts-candidate.md) contains fresh validation and current migration and signing/notarization evidence. No publication is authorized by candidate preparation.
 
 The procedures below apply to a **new version** under separate release authorization. Existing AgentMeter tags, beta artifacts and receipts remain historical. A source build cannot inherit signing acceptance from another artifact.
 
@@ -30,7 +32,7 @@ Expected app entitlements: **none**. App Sandbox remains intentionally disabled.
 - Native process metadata, exit sources, NSWorkspace observation, and CoreGraphics window metadata do not require debugger/task-port, Accessibility, or screen-content capture access.
 - SwiftUI, AppKit panels, status items, and system frameworks require no runtime exception.
 - Launch at Login uses `SMAppService.mainApp`; no embedded helper is currently shipped. Registration must be rechecked in the final signed installed app.
-- The current bundle contains no nested executable/framework. The validator deliberately rejects newly introduced nested code. If a later release adds it, review and sign each nested item inside-out with its own minimal entitlements before signing the outer app. Never use `codesign --deep` as a substitute for a signing plan (`--deep` verification is fine).
+- The bundle includes the reviewed Sparkle 2.10.0 framework and helpers introduced in 1.1.2. The validator checks their explicit inventory and rejects unexpected nested code. Sign each reviewed nested item inside-out with its own minimal entitlements before signing the outer app. Never use `codesign --deep` as a substitute for a signing plan (`--deep` verification is fine).
 
 The signing command for a new release enables Hardened Runtime with `--options runtime` and a secure timestamp. Compatibility above is a source/bundle audit, **not a claim that a Developer ID-signed build has been tested**. Validate the final signed app with real Codex and Claude Code before release. Do not add exception entitlements to make a failed check disappear.
 
@@ -38,7 +40,7 @@ See Apple's [notarization overview](https://developer.apple.com/documentation/se
 
 ## Future signed release — after independent re-audit and authorization
 
-Select a new version and build number greater than the frozen **1.1.1 (build 1)** baseline, with matching `LlumiReleaseVersion`. Run the complete tests and privacy/secret/artifact audits, then build a fresh app. Do not reuse the published beta tag for changed bytes. Established release identity: `Developer ID Application: Pranesh S (K38622WCYD)`; never use it in unsigned validation.
+Select a new version and build number greater than the latest frozen **1.1.3 (build 3)** release, with matching `LlumiReleaseVersion`; the current candidate is 2.2.0/build 5. Run the complete tests and privacy/secret/artifact audits, then build a fresh app. Do not reuse a published tag for changed bytes. Established release identity: `Developer ID Application: Pranesh S (K38622WCYD)`; never use it in unsigned validation.
 
 Set `DEVELOPER_ID_APPLICATION` to the exact real **Developer ID Application** identity installed in your Keychain. No certificate hash, private key, password, or identity is stored in these scripts. Do not use Apple Development, ad-hoc, or self-signed identities as substitutes.
 
@@ -72,9 +74,9 @@ Verification checks the Developer ID authority, secure timestamp, Hardened Runti
 
 Do not describe a release as signed, notarized, or tested on Intel until the corresponding checks have really completed.
 
-## 1.1.2 updater candidate
+## Updater distribution support, introduced in 1.1.2
 
-Current candidate validation targets 1.1.2/build 2; it rejects reuse of the frozen 1.1.1 version and non-advancing builds. Sparkle 2.10.0 is the only reviewed nested framework. Its exact file/symlink inventory and universal executables are validated; escaping links or additional helper code are rejected. Explicit inside-out signing is prepared for the reviewed helpers, framework and app. Signed verification binds the approved publisher/team on the app, framework/helpers and DMG. The final notarized DMG can also be the Sparkle enclosure. [Updater configuration, official appcast tooling and remaining tests](UPDATES.md) are local candidate work, not release authorization.
+Candidate validation now targets 2.2.0/build 5, and requires version/build advancement from the recorded published predecessor. Sparkle 2.10.0 remains the only reviewed nested framework. Its exact file/symlink inventory and universal executables are validated; escaping links or additional helper code are rejected. Explicit inside-out signing covers the reviewed helpers, framework and app. Signed verification binds the approved publisher/team on the app, framework/helpers and DMG. The final notarized DMG can also be the Sparkle enclosure. [Updater configuration, official appcast tooling and historical validation](UPDATES.md) do not authorize publication of this candidate.
 
 For an explicitly authorized stop before notarization, `create-dmg.sh APP --signed-candidate` creates a Developer ID signed, pre-notarization DMG. `LLUMI_RELEASE_OUTPUT` selects a separate output directory. This mode checks the signed app; it does not satisfy the notarized release gate. Normal `--signed` packaging still requires the app's notarization, stapled ticket and Gatekeeper acceptance. DMG verification now mounts the container read-only and checks its contained Llumi app with the same verification mode, preventing a valid outer signature from masking an incorrect product.
 

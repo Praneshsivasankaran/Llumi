@@ -48,7 +48,7 @@ struct ProviderAdapter: UsageSource {
           !part.isEmpty && (part.count == 1 || part.first != "0")
             && part.utf8.allSatisfy { (48...57).contains($0) }
         }
-      } ?? "1.1.3"
+      } ?? "2.2.0"
     return .object(["name": .string("llumi"), "version": .string(version)])
   }
   private func response(_ p: Subprocess) async throws -> J {

@@ -748,6 +748,14 @@
 				<string>E15CA295EED010389CDEF204</string>
 				<string>607C381752E06C8A0293C1DF</string>
 				<string>145CF528E3E712BAB476EB6D</string>
+				<string>0319E8FDF383BC354DEFD5FE</string>
+				<string>C7141FA988160898B02F454D</string>
+				<string>5BF16116FEABFD5DC2BCE47A</string>
+				<string>F220356A39B55A55B0463200</string>
+				<string>9D12F562A2532D9D1CCB401B</string>
+				<string>98C211C8AA411FA0EA5E96E1</string>
+				<string>E0F5767D9D5C2FCA14B812DE</string>
+				<string>D8045FCDD3F3FA1FA599D843</string>
 			</array>
 			<key>sourceTree</key>
 			<string>&lt;group&gt;</string>
@@ -861,9 +869,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.3</string>
+				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>3</string>
+				<string>5</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi</string>
 				<key>INFOPLIST_FILE</key>
@@ -897,9 +905,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.3</string>
+				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>3</string>
+				<string>5</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi</string>
 				<key>INFOPLIST_FILE</key>
@@ -953,9 +961,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.3</string>
+				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>3</string>
+				<string>5</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi.tests</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
@@ -989,9 +997,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.3</string>
+				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>3</string>
+				<string>5</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi.tests</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
@@ -1058,6 +1066,11 @@
 				<string>00BA9CF1314C99EFFE42FCDF</string>
 				<string>02D2E12B2914E549F46FDE33</string>
 				<string>987698A66248A1B2DC91A8F8</string>
+				<string>89F6B1854CE6533756374B29</string>
+				<string>EA7877039DF52479E7B5ED41</string>
+				<string>60499D433D39F3B48CA5568D</string>
+				<string>C1417C4507EB1F7FD5F7BCDB</string>
+				<string>748F749A6BB842D1F944DFC6</string>
 			</array>
 			<key>runOnlyForDeploymentPostprocessing</key>
 			<integer>0</integer>
@@ -1165,6 +1178,14 @@
 				<string>FB45C4253723AB0959991C49</string>
 				<string>95D2C13AD25DFFECF06E1C4B</string>
 				<string>95501FF8ECC2B16CCE84AAE7</string>
+				<string>DFE6F2F608D5095E8F97DCB0</string>
+				<string>B458AF6BADD5555E236AAC40</string>
+				<string>E81663ED5EB42165828A6850</string>
+				<string>66E6AA23D832B89404053DE8</string>
+				<string>D1BE36831909FCCEB1A54146</string>
+				<string>CCBD62F46D493BDEB5262AE6</string>
+				<string>672E3700873158CA0D5D6364</string>
+				<string>39E7FB339A62187CDAE3CF3B</string>
 			</array>
 			<key>runOnlyForDeploymentPostprocessing</key>
 			<integer>0</integer>
@@ -1684,6 +1705,185 @@
 			<string>PBXBuildFile</string>
 			<key>fileRef</key>
 			<string>145CF528E3E712BAB476EB6D</string>
+		</dict>
+		<key>0319E8FDF383BC354DEFD5FE</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeter/Core/UsageAlerts.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>89F6B1854CE6533756374B29</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>0319E8FDF383BC354DEFD5FE</string>
+		</dict>
+		<key>DFE6F2F608D5095E8F97DCB0</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>0319E8FDF383BC354DEFD5FE</string>
+		</dict>
+		<key>C7141FA988160898B02F454D</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeter/Presentation/UsageAlertController.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>EA7877039DF52479E7B5ED41</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>C7141FA988160898B02F454D</string>
+		</dict>
+		<key>B458AF6BADD5555E236AAC40</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>C7141FA988160898B02F454D</string>
+		</dict>
+		<key>5BF16116FEABFD5DC2BCE47A</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeter/Presentation/BackgroundPolicy.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>60499D433D39F3B48CA5568D</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>5BF16116FEABFD5DC2BCE47A</string>
+		</dict>
+		<key>E81663ED5EB42165828A6850</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>5BF16116FEABFD5DC2BCE47A</string>
+		</dict>
+		<key>F220356A39B55A55B0463200</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeter/Views/UsageAlertSettingsView.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>C1417C4507EB1F7FD5F7BCDB</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>F220356A39B55A55B0463200</string>
+		</dict>
+		<key>66E6AA23D832B89404053DE8</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>F220356A39B55A55B0463200</string>
+		</dict>
+		<key>9D12F562A2532D9D1CCB401B</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeter/Views/UsagePopoverView.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>748F749A6BB842D1F944DFC6</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>9D12F562A2532D9D1CCB401B</string>
+		</dict>
+		<key>D1BE36831909FCCEB1A54146</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>9D12F562A2532D9D1CCB401B</string>
+		</dict>
+		<key>98C211C8AA411FA0EA5E96E1</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeterTests/UsageAlertTests.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>CCBD62F46D493BDEB5262AE6</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>98C211C8AA411FA0EA5E96E1</string>
+		</dict>
+		<key>E0F5767D9D5C2FCA14B812DE</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeterTests/UsageAlertControllerTests.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>672E3700873158CA0D5D6364</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>E0F5767D9D5C2FCA14B812DE</string>
+		</dict>
+		<key>D8045FCDD3F3FA1FA599D843</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXFileReference</string>
+			<key>lastKnownFileType</key>
+			<string>sourcecode.swift</string>
+			<key>path</key>
+			<string>AgentMeterTests/BackgroundPolicyTests.swift</string>
+			<key>sourceTree</key>
+			<string>&lt;group&gt;</string>
+		</dict>
+		<key>39E7FB339A62187CDAE3CF3B</key>
+		<dict>
+			<key>isa</key>
+			<string>PBXBuildFile</string>
+			<key>fileRef</key>
+			<string>D8045FCDD3F3FA1FA599D843</string>
 		</dict>
 	</dict>
 	<key>rootObject</key>

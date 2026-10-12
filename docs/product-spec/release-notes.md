@@ -1,5 +1,11 @@
 # Release notes and update completion
 
+The macOS 2.2.0 candidate follows [the owner-approved manual updater-key migration](updater-key-migration-220.md).
+Release notes must state that existing 1.1.3 users install the new signed/notarized
+app manually once; the new feed serves future updates afterward. This supersedes
+earlier first-hop assumptions without authorizing any publication or weakening
+the verified completion rules below.
+
 The website adds a Release Notes navigation tab, a `/releases/` history and permanent platform/version pages such as `/releases/macos/1.1.3/`. Notes use reviewed release metadata and short descriptions of shipped behavior. Public releases and unreleased local previews remain visibly distinct. No preview download, invented publication date or publication claim is allowed. The 1.1.3 page is an unreleased preview until owner approval; public download configuration and the existing signed feed remain intact.
 
 Windows 2.1.3 release notes may enter the public timeline after an actual Microsoft Store submission is verified. Use a distinct `submitted` state, a verified submission date and a “Microsoft Store review” badge; keep the publication date empty and state that availability awaits Store review. Approval to release is not submission or publication. Pending entries must not become the latest available release or change the website's Windows download version. Keep an approved but unsubmitted candidate as a local preview. After Store publication is independently verified, promote the entry with its actual publication date. The timeline names each platform accurately and preserves macOS history and its signed updater feed.

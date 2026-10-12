@@ -27,7 +27,7 @@
 	<key>LlumiReleaseVersion</key>
 	<string>$(MARKETING_VERSION)</string>
 	<key>SUFeedURL</key>
-	<string>https://tryllumi.com/appcast.xml</string>
+	<string>https://tryllumi.com/appcast-v2.xml</string>
 	<key>SUAutomaticallyUpdate</key>
 	<false/>
 	<key>SUAllowsAutomaticUpdates</key>
@@ -41,7 +41,7 @@
 	<key>SUSignedFeedFailureExpirationInterval</key>
 	<integer>0</integer>
 	<key>SUPublicEDKey</key>
-	<string>xLp/Wg9dAo3HWfBMc4LWEmz1LDbQJOUq9IuX4+h93C4=</string>
+	<string>hZdAiHzrBC5AGeHOsxSYJ0H/saIsVBQffLCBIQL2MmY=</string>
 	<key>SUEnableSystemProfiling</key>
 	<false/>
 	<key>SUEnableAutomaticChecks</key>

@@ -1,6 +1,14 @@
 # Settings and lifecycle
 
-The Windows local update described in [usage alerts and background startup](windows-alerts-background.md) adds opt-in alerts, snooze and Start in background. Its narrowly scoped alert settings and local deduplication supersede the historical exclusions below; macOS implementation remains unchanged.
+The macOS local update follows [Background and alerts](background-alerts.md), which
+supersedes the earlier exclusions of notifications and a usage popup below.
+
+The macOS 2.2.0 transition follows [the one-time manual updater-key migration](updater-key-migration-220.md).
+Existing 1.1.3 cannot use its in-app updater to enter the new key/feed trust chain;
+valid preferences and native update controls retain their existing semantics after
+manual installation. The old public feed remains intact.
+
+The Windows local update described in [usage alerts and background startup](windows-alerts-background.md) adds opt-in alerts, snooze and Start in background. Its narrowly scoped alert settings and local deduplication supersede the historical exclusions below. Each platform retains its native implementation and independent release gates.
 
 Windows 2.1.3 adopts the macOS 1.1.3 product contract in [Windows catch-up requirements](windows-213.md), which supersedes conflicting earlier Windows allowance, setup and provider-selection rules below. Intentional native differences remain.
 

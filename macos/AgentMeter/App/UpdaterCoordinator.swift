@@ -51,6 +51,9 @@ import Sparkle
   }
 
   func startIfReady(setupComplete: Bool) {
+    // A locally prepared review bundle must never check, download or install updates.
+    // The production bundle and persisted Sparkle preferences are unchanged.
+    guard Bundle.main.object(forInfoDictionaryKey: "LlumiLocalReview") as? Bool != true else { return }
     guard setupComplete, !startAttempted else { return }
     startAttempted = true
     let updater = self.updater
