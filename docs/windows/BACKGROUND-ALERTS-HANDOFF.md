@@ -10,6 +10,16 @@ and preserve the current Windows allowance/setup behavior in
 [windows-213.md](../product-spec/windows-213.md). Do not copy the Mac preference
 domain, bundle identity, notification framework or internal build number.
 
+Mac signing reference: the 2.2.0/build 4 app from source
+`71e75c3dd6e243b38c023f3b6b0cda4ffb10070c` passed Developer ID signing, Apple app
+notarization, stapling and Gatekeeper. The final DMG also passed Apple notarization,
+stapling, Gatekeeper and mounted contained-app verification. Sparkle feed/archive
+signing and the private upgrade remain blocked on restoring the original updater
+key; no replacement key or appcast was created. Final native gates remain listed
+in the [Mac candidate record](../releases/2026-10-macos-background-alerts-candidate.md).
+Those are macOS-only distribution checks; they do not establish Windows signing,
+Store acceptance, installation or notification readiness. No publication occurred.
+
 ## Extend the existing Windows architecture
 
 | Concern | Existing Windows location | macOS reference |
