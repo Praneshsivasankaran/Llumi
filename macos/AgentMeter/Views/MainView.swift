@@ -118,7 +118,7 @@ struct SettingsView: View {
   }
   private var releaseVersion: String {
     Bundle.main.object(forInfoDictionaryKey: "LlumiReleaseVersion") as? String
-      ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1.3"
+      ?? Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.1.4"
   }
 }
 private struct AboutView: View {
@@ -127,7 +127,7 @@ private struct AboutView: View {
       MeterMark().scaleEffect(2).frame(height: 50)
       Text("Llumi").font(.title.bold())
       Text(
-        "Version \(Bundle.main.object(forInfoDictionaryKey:"LlumiReleaseVersion") as? String ?? "1.1.3")"
+        "Version \(Bundle.main.object(forInfoDictionaryKey:"LlumiReleaseVersion") as? String ?? "1.1.4")"
       ).font(.callout).foregroundStyle(.secondary)
       Text("Track your AI coding usage.").font(.callout).foregroundStyle(.secondary)
     }.frame(maxWidth: .infinity, maxHeight: .infinity)

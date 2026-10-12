@@ -3,6 +3,7 @@ import base64, re
 
 def validate_metadata(info, candidate, frozen):
     assert info['CFBundleIdentifier'] == candidate['bundle_id'] == frozen['bundle_id'], 'Unexpected bundle identifier'
+    assert 'LlumiLocalReview' not in info, 'Local review metadata must not enter a production release'
     assert info['CFBundleExecutable'] == 'Llumi', 'Unexpected executable'
     version = info['CFBundleShortVersionString']
     assert re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+', version), 'Invalid version'

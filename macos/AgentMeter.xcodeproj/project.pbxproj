@@ -869,9 +869,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.3</string>
+				<string>1.1.4</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>3</string>
+				<string>4</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi</string>
 				<key>INFOPLIST_FILE</key>
@@ -905,9 +905,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.3</string>
+				<string>1.1.4</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>3</string>
+				<string>4</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi</string>
 				<key>INFOPLIST_FILE</key>
@@ -961,9 +961,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.3</string>
+				<string>1.1.4</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>3</string>
+				<string>4</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi.tests</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
@@ -997,9 +997,9 @@
 					<string>@loader_path/../Frameworks</string>
 				</array>
 				<key>MARKETING_VERSION</key>
-				<string>1.1.3</string>
+				<string>1.1.4</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>3</string>
+				<string>4</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi.tests</string>
 				<key>GENERATE_INFOPLIST_FILE</key>

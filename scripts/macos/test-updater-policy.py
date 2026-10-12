@@ -36,6 +36,14 @@ class UpdaterPolicyTests(unittest.TestCase):
             with self.subTest(key=key):
                 info=copy.deepcopy(self.info);info[key]=value
                 with self.assertRaises(AssertionError):self.check(info)
+    def test_review_marker_rejected_even_with_production_identity_and_feed(self):
+        # Review output disables the native updater. Reject the marker's
+        # presence, including malformed/false values, before distribution.
+        for value in [True, False, None, 0, 1, 'false', 'true']:
+            with self.subTest(value=value):
+                info=copy.deepcopy(self.info);info['LlumiLocalReview']=value
+                with self.assertRaisesRegex(AssertionError, 'Local review metadata'):
+                    self.check(info)
     def test_non_https_or_different_feed_rejected(self):
         for url in ['http://tryllumi.com/appcast.xml','https://example.invalid/appcast.xml','file:///tmp/appcast.xml']:
             info=copy.deepcopy(self.info);info['SUFeedURL']=url

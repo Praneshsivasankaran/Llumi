@@ -1,6 +1,13 @@
-Current macOS release: [Llumi 1.1.2 publication receipt](../releases/2026-10-macos-1.1.2.md).
+# macOS release status
 
-# Llumi 1.1.1 for macOS
+The latest published macOS release is
+[Llumi 1.1.3/build 3](../releases/2026-10-macos-1.1.3.md), published on 2026-10-05.
+The next local candidate is **1.1.4/build 4**, with background mode, optional usage
+alerts and shared popup appearance. See [candidate notes, validation and remaining
+gates](../releases/2026-10-macos-background-alerts-candidate.md). It has not been
+published; preparation does not authorize release uploads or public updater changes.
+
+## Historical Llumi 1.1.1 launch
 
 Published 27 September 2026. This launch release is frozen; see [source, tag and checksum](../releases/2026-09-launch.md).
 
