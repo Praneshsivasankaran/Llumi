@@ -1,5 +1,10 @@
 # Windows handoff: background mode and usage alerts
 
+Mac 2.2.0/build 5 was published and its public installer, website notes and new
+feed verified on 2026-10-12. See the [publication receipt](../releases/2026-10-macos-2.2.0.md).
+Windows implementation and publication proceed independently; this document records
+the Mac behavior and evidence for comparison, not Windows device validation.
+
 Prepared 2026-10-12 from the macOS local candidate; macOS version/build **2.2.0 / 5**.
 The owner selected **2.2.0** as the shared marketing version for macOS and Windows.
 Native internal/package build numbers remain independent. The Mac internal build

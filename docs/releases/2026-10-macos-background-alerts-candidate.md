@@ -1,10 +1,9 @@
 # Llumi for macOS: background mode and usage alerts
 
-Local release candidate prepared on 2026-10-12. Version/build: **2.2.0 / 5**. This document
-does not authorize publication. Existing releases, website downloads and public
-update feeds remain unchanged. Finish preparation and verification locally, then
-obtain the owner's final publication decision. Remote pushes, release uploads and
-site/feed deployment are not currently authorized.
+Historical local candidate record prepared on 2026-10-12. Version/build: **2.2.0 / 5**.
+The owner subsequently authorized publication, completed on 2026-10-12; see the
+[public release receipt](2026-10-macos-2.2.0.md) for exact artifacts and live checks.
+The preparation checkpoints below retain their original scope and chronology.
 
 The owner selected shared marketing version **2.2.0** to align macOS with Windows.
 The earlier 1.1.4/build 4 label and notarized 2.2.0/build 4 candidate are historical.

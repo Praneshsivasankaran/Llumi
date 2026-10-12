@@ -2,7 +2,11 @@
 
 GitHub is the common source of truth between macOS and Windows release sessions. Machine-local paths are not release identifiers. Record the repository, exact source commit, tag, release ID, asset IDs, filenames, sizes and SHA-256 values.
 
-## Verified current GitHub handoff
+## Current macOS release
+
+[Llumi 2.2.0 for macOS](https://github.com/Praneshsivasankaran/Llumi/releases/tag/llumi-macos-2.2.0) was published on 2026-10-12. The [publication receipt](releases/2026-10-macos-2.2.0.md) records its exact source, assets, signatures, new feed and live checks. Earlier Mac installations require one manual installation; future compatible updates use the new signing key/feed and the user's Automatic Updates preference.
+
+## Historical 1.1.1 GitHub handoff
 
 - Canonical repository: `Praneshsivasankaran/Llumi`
 - Public release: [Llumi 1.1.1 for macOS](https://github.com/Praneshsivasankaran/Llumi/releases/tag/llumi-macos-1.1.1), ID `397602229`, published 2026-09-27
