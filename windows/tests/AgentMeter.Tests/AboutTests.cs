@@ -12,7 +12,7 @@ public sealed class AboutTests
         var notes = Assert.IsType<ReleaseNotes>(ReleaseNotes.Load());
         Assert.Equal(typeof(UsageForm).Assembly.GetName().Version!.ToString(3), notes.Version);
         Assert.True(notes.Preview);
-        Assert.Equal(4, notes.Sections.Length);
+        Assert.Equal(new[] { "Usage alerts", "Alert snooze", "Start in background" }, notes.Sections.Select(section => section.Title));
         Assert.All(notes.Sections, section => Assert.All(section.Items, item => Assert.False(string.IsNullOrWhiteSpace(item))));
     }
 
