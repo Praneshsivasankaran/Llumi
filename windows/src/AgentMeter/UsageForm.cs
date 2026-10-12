@@ -236,74 +236,98 @@ internal sealed class UsageForm : Form
             aboutTab.AccessibleDescription = aboutShown ? "Current page" : "Open About";
             menu.SetBounds(width - S(46), S(12), S(28), S(28)); refresh.SetBounds(width - S(176), S(12), S(120), S(30));
             content.SetBounds(S(12), S(105), width - S(24), Math.Max(S(60), height - S(logFailed ? 150 : 117)));
-            settings.Bounds = about.Bounds = content.Bounds; settings.Visible = settingsShown; about.Visible = aboutShown; content.Visible = !settingsShown && !aboutShown;
+            about.Bounds = content.Bounds; about.Visible = aboutShown; content.Visible = !settingsShown && !aboutShown;
             var settingsScroll = settings.AutoScrollPosition;
-            settings.AutoScrollPosition = Point.Empty;
-            var settingsWidth = Math.Max(S(240), settings.ClientSize.Width - S(40) - SystemInformation.VerticalScrollBarWidth);
-            providerHeading.Location = new(S(20), S(12));
-            var twoColumns = settingsWidth >= S(548);
-            var setupWidth = twoColumns ? (settingsWidth - S(12)) / 2 : settingsWidth;
-            void SetSetupStatus(Label label, string name)
+            var oldMaximum = Math.Max(0, settings.DisplayRectangle.Height - settings.ClientSize.Height);
+            var keepBottom = oldMaximum > 0 && -settingsScroll.Y >= oldMaximum - 1;
+            var visibleAnchor = settings.Controls.Cast<Control>()
+                .Where(control => control.Visible && control.Bottom > 0 && control.Top < settings.ClientSize.Height)
+                .OrderBy(control => control.Top).FirstOrDefault();
+            var anchorTop = visibleAnchor?.Top ?? 0;
+            settings.SuspendLayout();
+            try
             {
-                var state = states.FirstOrDefault(s => s.Name == name || (name == "Claude" && s.Name == "Claude Code"))
-                    ?? new ProviderState(name, ProviderStatus.Loading);
-                var enabled = name == "Codex" ? preferences.CodexEnabled : preferences.ClaudeEnabled;
-                state = state with { Enabled = enabled };
-                var value = SetupDiagnostic.From(state);
-                label.Text = $"{value.Status}\n{value.Monitoring}";
-                label.AccessibleDescription = value.Description + (state.Enabled && state.Snapshot is not null
-                    ? "\n" + UsageAccessibility.Observation(state, DateTimeOffset.UtcNow) : "");
+                settings.Bounds = content.Bounds; settings.Visible = settingsShown;
+                // Native scrolling already offsets child HWNDs. Lay out at that origin
+                // instead of scrolling the oversized alert child to zero and back.
+                var origin = settings.AutoScrollPosition;
+                void Place(Control control, int x, int y, int w, int h) => control.SetBounds(x + origin.X, y + origin.Y, w, h);
+                void Position(Control control, int x, int y) => control.Location = new Point(x + origin.X, y + origin.Y);
+                var settingsWidth = Math.Max(S(240), settings.ClientSize.Width - S(40) - SystemInformation.VerticalScrollBarWidth);
+                Position(providerHeading, S(20), S(12));
+                var twoColumns = settingsWidth >= S(548);
+                var setupWidth = twoColumns ? (settingsWidth - S(12)) / 2 : settingsWidth;
+                void SetSetupStatus(Label label, string name)
+                {
+                    var state = states.FirstOrDefault(s => s.Name == name || (name == "Claude" && s.Name == "Claude Code"))
+                        ?? new ProviderState(name, ProviderStatus.Loading);
+                    var enabled = name == "Codex" ? preferences.CodexEnabled : preferences.ClaudeEnabled;
+                    state = state with { Enabled = enabled };
+                    var value = SetupDiagnostic.From(state);
+                    label.Text = $"{value.Status}\n{value.Monitoring}";
+                    label.AccessibleDescription = value.Description + (state.Enabled && state.Snapshot is not null
+                        ? "\n" + UsageAccessibility.Observation(state, DateTimeOffset.UtcNow) : "");
+                }
+                SetSetupStatus(codexSetup, "Codex"); SetSetupStatus(claudeSetup, "Claude");
+                var narrowProvider = setupWidth < S(268);
+                var statusY = narrowProvider ? 88 : 58;
+                var statusWidth = setupWidth - S(28);
+                using var settingsGraphics = settings.CreateGraphics();
+                int MeasureStatus(Label label) => TextRenderer.MeasureText(settingsGraphics, label.Text, label.Font,
+                    new Size(statusWidth, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl).Height;
+                var statusHeight = Math.Max(MeasureStatus(codexSetup), MeasureStatus(claudeSetup));
+                // Measure actual wrapped text instead of keeping blank padding beneath every status.
+                var providerHeight = statusY + (int)Math.Ceiling(statusHeight * 96d / DeviceDpi) + 16;
+                var cardY = 54; var claudeY = twoColumns ? cardY : cardY + providerHeight + 12;
+                var claudeX = twoColumns ? S(32) + setupWidth : S(20);
+                Place(codexArtwork, S(32), S(cardY + 18), S(24), S(24));
+                Place(codex, S(66), S(cardY + 13), setupWidth - S(60), S(34));
+                Place(claudeArtwork, claudeX + S(12), S(claudeY + 18), S(24), S(24));
+                Place(claude, claudeX + S(46), S(claudeY + 13), setupWidth - S(60), S(34));
+                // A narrow single column puts the mascot above the switch, preserving the full label.
+                if (narrowProvider)
+                {
+                    Place(codex, S(32), S(cardY + 48), setupWidth - S(24), S(34));
+                    Place(claude, claudeX + S(12), S(claudeY + 48), setupWidth - S(24), S(34));
+                }
+                Place(codexSetup, S(34), S(cardY + statusY), statusWidth, statusHeight);
+                Place(claudeSetup, claudeX + S(14), S(claudeY + statusY), statusWidth, statusHeight);
+                var actionsY = claudeY + providerHeight + 16;
+                Place(checkAgain, S(20), S(actionsY), S(112), S(36));
+                UpdateRetry(); var hasRetry = !string.IsNullOrEmpty(retryMessage.Text); retryMessage.Visible = hasRetry;
+                Place(retryMessage, S(20), S(actionsY + 45), settingsWidth, S(hasRetry ? 42 : 0));
+                var preferencesY = actionsY + (hasRetry ? 106 : 64);
+                Position(preferencesHeading, S(20), S(preferencesY));
+                var preferenceWidth = settingsWidth - S(28);
+                Place(launch, S(34), S(preferencesY + 52), preferenceWidth, S(34));
+                Place(background, S(34), S(preferencesY + 96), preferenceWidth, S(34));
+                Place(compact, S(34), S(preferencesY + 140), preferenceWidth, S(34));
+                Place(tray, S(34), S(preferencesY + 184), preferenceWidth, S(34));
+                var stackedAppearance = settingsWidth < S(380);
+                Position(appearanceLabel, S(36), S(preferencesY + 234));
+                Place(appearance, stackedAppearance ? S(36) : S(20) + settingsWidth - S(214), S(preferencesY + (stackedAppearance ? 264 : 230)), Math.Min(S(198), preferenceWidth), S(30));
+                var preferencesHeight = stackedAppearance ? 274 : 244;
+                Place(resetPosition, S(20), S(preferencesY + preferencesHeight + 56), S(145), S(36));
+                settings.SetSurfaces(new Rectangle(S(20), S(cardY), setupWidth, S(providerHeight)), new Rectangle(claudeX, S(claudeY), setupWidth, S(providerHeight)),
+                    new Rectangle(S(20), S(preferencesY + 36), settingsWidth, S(preferencesHeight)));
+                settingsMessage.Visible = !string.IsNullOrEmpty(settingsMessage.Text);
+                Place(settingsMessage, S(20), S(preferencesY + preferencesHeight + 104), settingsWidth, S(settingsMessage.Visible ? 100 : 0));
+                var alertsY = preferencesY + preferencesHeight + (settingsMessage.Visible ? 222 : 112);
+                Position(alertsHeading, S(20), S(alertsY));
+                Position(alerts, S(20), S(alertsY + 36));
+                int alertsHeight;
+                alerts.SuspendLayout();
+                try { alertsHeight = alerts.Arrange(settingsWidth, DeviceDpi / 96f); }
+                finally { alerts.ResumeLayout(true); }
+                settings.AutoScrollMinSize = new(0, S(alertsY + 52) + alertsHeight);
             }
-            SetSetupStatus(codexSetup, "Codex"); SetSetupStatus(claudeSetup, "Claude");
-            var narrowProvider = setupWidth < S(268);
-            var statusY = narrowProvider ? 88 : 58;
-            var statusWidth = setupWidth - S(28);
-            using var settingsGraphics = settings.CreateGraphics();
-            int MeasureStatus(Label label) => TextRenderer.MeasureText(settingsGraphics, label.Text, label.Font,
-                new Size(statusWidth, int.MaxValue), TextFormatFlags.WordBreak | TextFormatFlags.TextBoxControl).Height;
-            var statusHeight = Math.Max(MeasureStatus(codexSetup), MeasureStatus(claudeSetup));
-            // Measure actual wrapped text instead of keeping blank padding beneath every status.
-            var providerHeight = statusY + (int)Math.Ceiling(statusHeight * 96d / DeviceDpi) + 16;
-            var cardY = 54; var claudeY = twoColumns ? cardY : cardY + providerHeight + 12;
-            var claudeX = twoColumns ? S(32) + setupWidth : S(20);
-            codexArtwork.SetBounds(S(32), S(cardY + 18), S(24), S(24));
-            codex.SetBounds(S(66), S(cardY + 13), setupWidth - S(60), S(34));
-            claudeArtwork.SetBounds(claudeX + S(12), S(claudeY + 18), S(24), S(24));
-            claude.SetBounds(claudeX + S(46), S(claudeY + 13), setupWidth - S(60), S(34));
-            // A narrow single column puts the mascot above the switch, preserving the full label.
-            if (narrowProvider)
-            {
-                codex.SetBounds(S(32), S(cardY + 48), setupWidth - S(24), S(34));
-                claude.SetBounds(claudeX + S(12), S(claudeY + 48), setupWidth - S(24), S(34));
-            }
-            codexSetup.SetBounds(S(34), S(cardY + statusY), statusWidth, statusHeight);
-            claudeSetup.SetBounds(claudeX + S(14), S(claudeY + statusY), statusWidth, statusHeight);
-            var actionsY = claudeY + providerHeight + 16;
-            checkAgain.SetBounds(S(20), S(actionsY), S(112), S(36));
-            UpdateRetry(); var hasRetry = !string.IsNullOrEmpty(retryMessage.Text); retryMessage.Visible = hasRetry;
-            retryMessage.SetBounds(S(20), S(actionsY + 45), settingsWidth, S(hasRetry ? 42 : 0));
-            var preferencesY = actionsY + (hasRetry ? 106 : 64);
-            preferencesHeading.Location = new(S(20), S(preferencesY));
-            var preferenceWidth = settingsWidth - S(28);
-            launch.SetBounds(S(34), S(preferencesY + 52), preferenceWidth, S(34));
-            background.SetBounds(S(34), S(preferencesY + 96), preferenceWidth, S(34));
-            compact.SetBounds(S(34), S(preferencesY + 140), preferenceWidth, S(34));
-            tray.SetBounds(S(34), S(preferencesY + 184), preferenceWidth, S(34));
-            var stackedAppearance = settingsWidth < S(380);
-            appearanceLabel.Location = new(S(36), S(preferencesY + 234));
-            appearance.SetBounds(stackedAppearance ? S(36) : S(20) + settingsWidth - S(214), S(preferencesY + (stackedAppearance ? 264 : 230)), Math.Min(S(198), preferenceWidth), S(30));
-            var preferencesHeight = stackedAppearance ? 274 : 244;
-            resetPosition.SetBounds(S(20), S(preferencesY + preferencesHeight + 56), S(145), S(36));
-            settings.SetSurfaces(new Rectangle(S(20), S(cardY), setupWidth, S(providerHeight)), new Rectangle(claudeX, S(claudeY), setupWidth, S(providerHeight)),
-                new Rectangle(S(20), S(preferencesY + 36), settingsWidth, S(preferencesHeight)));
-            settingsMessage.Visible = !string.IsNullOrEmpty(settingsMessage.Text);
-            settingsMessage.SetBounds(S(20), S(preferencesY + preferencesHeight + 104), settingsWidth, S(settingsMessage.Visible ? 100 : 0));
-            var alertsY = preferencesY + preferencesHeight + (settingsMessage.Visible ? 222 : 112);
-            alertsHeading.Location = new(S(20), S(alertsY));
-            alerts.Location = new(S(20), S(alertsY + 36));
-            var alertsHeight = alerts.Arrange(settingsWidth, DeviceDpi / 96f);
-            settings.AutoScrollMinSize = new(0, S(alertsY + 52) + alertsHeight);
-            settings.AutoScrollPosition = new(0, -settingsScroll.Y);
+            finally { settings.ResumeLayout(true); }
+            // Status/retry rows above the viewport may grow or shrink. Preserve a
+            // visible control, or the bottom, rather than the previous pixel offset.
+            var targetScroll = keepBottom ? Math.Max(0, settings.DisplayRectangle.Height - settings.ClientSize.Height)
+                : visibleAnchor is { Visible: true } ? visibleAnchor.Top - settings.AutoScrollPosition.Y - anchorTop : -settingsScroll.Y;
+            settings.AutoScrollPosition = new(0, Math.Max(0, targetScroll));
+            settings.Invalidate(true);
             UpdateRetry();
             refresh.Visible = !settingsShown && !aboutShown; refresh.Text = loading ? "Refreshing…" : "Refresh";
             footer.SetBounds(S(24), height - S(39), width - S(48), S(30));
