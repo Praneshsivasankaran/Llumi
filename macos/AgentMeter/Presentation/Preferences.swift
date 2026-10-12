@@ -58,8 +58,16 @@ enum AppAppearance: String, CaseIterable, Identifiable {
 @MainActor @Observable final class Preferences {
   static let lightMigrationKey = "llumi113LightAppearanceMigrated"
   static let enabledProvidersKey = "enabledProviders"
+  static let startInBackgroundKey = "startInBackground"
   private let defaults: UserDefaults
   var changed: () -> Void = {}
+  var startInBackground: Bool {
+    didSet {
+      guard startInBackground != oldValue else { return }
+      defaults.set(startInBackground, forKey: Self.startInBackgroundKey)
+      changed()
+    }
+  }
   var notchEnabled: Bool {
     didSet {
       defaults.set(notchEnabled, forKey: "notchEnabled")
@@ -94,6 +102,7 @@ enum AppAppearance: String, CaseIterable, Identifiable {
     self.defaults = defaults
     // Recognize the previous installation before adding new preferences to a fresh one.
     SetupCompletion.recognizeExisting(defaults: defaults, old: [:])
+    startInBackground = BetaPreferences.boolean(defaults.object(forKey: Self.startInBackgroundKey)) ?? false
     if BetaPreferences.boolean(defaults.object(forKey: Self.lightMigrationKey)) != true {
       defaults.set(AppAppearance.light.rawValue, forKey: "appearance")
       defaults.set(true, forKey: Self.lightMigrationKey)

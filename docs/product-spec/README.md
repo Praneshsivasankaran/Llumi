@@ -17,6 +17,7 @@ Before changing behavior:
 | [Compact monitor](compact-monitor.md) | Visibility, hover, click, motion and accessibility |
 | [Settings and lifecycle](settings.md) | Preferences, startup, background operation and quit |
 | [Privacy](privacy.md) | Data boundaries, isolation, credentials and diagnostics |
+| [Background and alerts](background-alerts.md) | macOS update and shared lifecycle/alert contracts |
 
 ## Native platform adaptations
 

@@ -11,6 +11,8 @@ import SwiftUI
   private var updateWindow: NSWindow?
   private lazy var setup = SetupFlow(preferences: model.preferences)
   private var status: NSStatusItem!
+  private var statusMenu: NSMenu?
+  private var usagePopover: NSPopover?
   private var schedule: Task<Void, Never>?
   private var wake: Task<Void, Never>?
   private var observers: [NSObjectProtocol] = []
@@ -23,7 +25,11 @@ import SwiftUI
     Diagnostics.shared.record("launch")
     createApplicationMenu()
     model.updates.showPromptAction = { [weak self] in self?.showUpdatePrompt() }
-    model.updates.hidePromptAction = { [weak self] in self?.updateWindow?.orderOut(nil) }
+    model.updates.hidePromptAction = { [weak self] in
+      self?.updateWindow?.orderOut(nil)
+      self?.reconcileActivationPolicy()
+    }
+    model.alerts.openAction = { [weak self] in self?.openMain() }
     startUpdaterIfReady()
     let discovery = ProviderDiscovery()
     activity = ActivityMonitor { [weak self] snapshot in
@@ -69,8 +75,13 @@ import SwiftUI
       && (event?.paramDescriptor(forKeyword: keyAELaunchedAsLogInItem) != nil
         || event?.paramDescriptor(forKeyword: keyAEPropData)?.enumCodeValue
           == keyAELaunchedAsLogInItem)
-    if setup.needsAutomaticSetup { openSetup() }
-    else if !loginLaunch { openMain() }
+    switch BackgroundPolicy.initialSurface(startInBackground: model.preferences.startInBackground,
+      loginLaunch: loginLaunch, needsSetup: setup.needsAutomaticSetup) {
+    case .setup: openSetup()
+    case .usage: openMain()
+    case .none: break
+    }
+    reconcileActivationPolicy()
     activity.start()
     refresh()
     schedule = Task { [weak self] in
@@ -91,6 +102,7 @@ import SwiftUI
   }
   func applicationDidBecomeActive(_ notification: Notification) {
     model.loginItem.synchronize()
+    model.alerts.refreshPermission()
     if model.updates.promptVisible { showUpdatePrompt() }
   }
   private func startUpdaterIfReady() {
@@ -98,6 +110,8 @@ import SwiftUI
   }
   private func showUpdatePrompt() {
     guard !quitting, model.updates.promptVisible else { return }
+    usagePopover?.close()
+    NSApp.setActivationPolicy(.regular)
     if updateWindow == nil {
       let view = NSHostingView(rootView: UpdatePromptView(updates: model.updates))
       let dialog = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 536, height: 230),
@@ -169,26 +183,20 @@ import SwiftUI
     guard status == nil else { return }
     status = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
     let image = NSImage(size: NSSize(width: 18, height: 18), flipped: false) { _ in
-      NSColor.black.setStroke()
       NSColor.black.setFill()
-      let arc = NSBezierPath()
-      arc.move(to: NSPoint(x: 2, y: 5))
-      arc.curve(to: NSPoint(x: 16, y: 5), controlPoint1: NSPoint(x: 2, y: 16), controlPoint2: NSPoint(x: 16, y: 16))
-      arc.lineWidth = 2.2
-      arc.lineCapStyle = .round
-      arc.stroke()
-      let needle = NSBezierPath()
-      needle.move(to: NSPoint(x: 8, y: 6))
-      needle.line(to: NSPoint(x: 13.5, y: 12))
-      needle.line(to: NSPoint(x: 10, y: 4.5))
-      needle.close()
-      needle.fill()
-      NSBezierPath(ovalIn: NSRect(x: 7.5, y: 4, width: 3.5, height: 3.5)).fill()
+      let bars: [(CGFloat, CGFloat)] = [(2, 8), (7, 13), (12, 17)]
+      for (x, height) in bars {
+        NSBezierPath(roundedRect: NSRect(x: x, y: 1, width: 3.4, height: height),
+          xRadius: 1.2, yRadius: 1.2).fill()
+      }
       return true
     }
     image.isTemplate = true
     status.button?.image = image
     status.button?.toolTip = "Llumi"
+    status.button?.target = self
+    status.button?.action = #selector(statusClicked)
+    status.button?.sendAction(on: [.leftMouseUp, .rightMouseUp])
     let menu = NSMenu()
     for (title, selector, key) in [
       ("Open Llumi", #selector(openMain), ""), ("Refresh", #selector(manualRefresh), "r"),
@@ -200,10 +208,40 @@ import SwiftUI
       item.target = self
       menu.addItem(item)
     }
-    status.menu = menu
+    statusMenu = menu
+  }
+  @objc private func statusClicked() {
+    guard !quitting, let button = status?.button else { return }
+    if NSApp.currentEvent?.type == .rightMouseUp
+      || NSApp.currentEvent?.modifierFlags.contains(.control) == true {
+      usagePopover?.close()
+      statusMenu?.popUp(positioning: nil, at: NSPoint(x: 0, y: button.bounds.minY), in: button)
+    } else {
+      toggleUsagePopover()
+    }
+  }
+  private func toggleUsagePopover() {
+    guard !quitting, let button = status?.button else { return }
+    if usagePopover?.isShown == true { usagePopover?.close(); return }
+    if usagePopover == nil {
+      let popover = NSPopover()
+      popover.behavior = .transient
+      popover.contentSize = NSSize(width: 360, height: 520)
+      popover.appearance = NSAppearance(named: .darkAqua)
+      popover.contentViewController = NSHostingController(rootView: UsagePopoverView(model: model,
+        refresh: { [weak self] in self?.manualRefresh() },
+        settings: { [weak self] in self?.openSettings() },
+        open: { [weak self] in self?.openMain() },
+        quit: { [weak self] in self?.quit() }))
+      usagePopover = popover
+    }
+    usagePopover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+    NSApp.activate(ignoringOtherApps: true)
   }
   @objc func openMain() {
     guard !quitting else { return }
+    usagePopover?.close()
+    NSApp.setActivationPolicy(.regular)
     let newlyVisible = window?.isVisible != true
     if window == nil {
       window = NSWindow(
@@ -227,14 +265,19 @@ import SwiftUI
   }
   private func applyPreferences() {
     NSApp.appearance = model.preferences.appearance.native
-    if model.preferences.menuEnabled {
+    if BackgroundPolicy.showsMenu(startInBackground: model.preferences.startInBackground,
+      menuEnabled: model.preferences.menuEnabled) {
       createMenu()
     } else if let status {
+      usagePopover?.close()
       NSStatusBar.system.removeStatusItem(status)
       self.status = nil
+      statusMenu = nil
     }
+    reconcileActivationPolicy()
     notch?.update(model)
     let enabled = model.preferences.enabledProviders
+    model.alerts.update(snapshots: model.usage, enabledProviders: enabled)
     if appliedProviders != enabled {
       appliedProviders = enabled
       activity?.setEnabledProviders(enabled)
@@ -243,6 +286,8 @@ import SwiftUI
   }
   @objc func openSetup() {
     guard !quitting else { return }
+    usagePopover?.close()
+    NSApp.setActivationPolicy(.regular)
     if setupWindow == nil {
       let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 580, height: 610),
         styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: false)
@@ -290,7 +335,20 @@ import SwiftUI
     Task { await store.refresh() }
   }
   @objc func quit() { NSApp.terminate(nil) }
-  func windowWillClose(_ notification: Notification) { Diagnostics.shared.record("window-close") }
+  private func reconcileActivationPolicy(excluding closing: NSWindow? = nil) {
+    guard !quitting else { return }
+    let fullVisible = [window, setupWindow, updateWindow].compactMap { $0 }.contains {
+      $0 !== closing && ($0.isVisible || $0.isMiniaturized)
+    }
+    let showsDock = BackgroundPolicy.showsDock(startInBackground: model.preferences.startInBackground,
+      fullInterfaceVisible: fullVisible)
+    NSApp.setActivationPolicy(showsDock ? .regular : .accessory)
+  }
+  func windowWillClose(_ notification: Notification) {
+    Diagnostics.shared.record("window-close")
+    reconcileActivationPolicy(excluding: notification.object as? NSWindow)
+    validationEvent("window-close")
+  }
   func windowShouldClose(_ sender: NSWindow) -> Bool {
     if sender === updateWindow { model.updates.dismissPrompt() }
     return true
@@ -312,12 +370,15 @@ import SwiftUI
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard !quitting else { return .terminateLater }
     quitting = true
+    model.alerts.stop()
     schedule?.cancel()
     wake?.cancel()
     activity.stop()
     notch.close()
+    usagePopover?.close()
     if let status { NSStatusBar.system.removeStatusItem(status) }
     status = nil
+    statusMenu = nil
     window?.orderOut(nil)
     setupWindow?.orderOut(nil)
     updateWindow?.orderOut(nil)
@@ -362,13 +423,7 @@ import SwiftUI
             p.rawValue,
             [
               "status": s.state.rawValue, "version": model.installations[p]?.version ?? "",
-              "windows": s.reading?.windows.map { w -> [String: Any] in
-                [
-                  "id": w.id, "remaining": w.remaining as Any? ?? NSNull(),
-                  "reset": w.reset?.timeIntervalSince1970 as Any? ?? NSNull(),
-                  "minutes": w.durationMinutes as Any? ?? NSNull(),
-                ]
-              } ?? [],
+              "windowCount": s.consumerWindows.count,
             ] as [String: Any]
           )
         })
@@ -377,12 +432,16 @@ import SwiftUI
         "activity": model.activity.name, "cliCodex": model.activity.codex.cli,
         "cliClaude": model.activity.claude.cli, "desktopCodex": model.activity.codex.desktop,
         "desktopClaude": model.activity.claude.desktop, "notch": notch?.isVisible ?? false,
-        "notchText": notch?.text ?? "", "notchPhase": notch?.phase ?? "hidden",
+        "notchPhase": notch?.phase ?? "hidden",
         "notchFrame": notch.map { NSStringFromRect($0.frame) } ?? "",
         "destination": model.destination?.rawValue ?? "",
         "appearance": model.preferences.appearance.rawValue,
         "loginEnabled": model.loginItem.enabled, "loginMessage": model.loginItem.message ?? "",
         "notchEnabled": model.preferences.notchEnabled,
+        "startInBackground": model.preferences.startInBackground,
+        "dockVisible": NSApp.activationPolicy() == .regular,
+        "popup": usagePopover?.isShown ?? false,
+        "setupWindow": setupWindow?.isVisible ?? false,
         "focusPreserved": notch?.focusPreserved ?? true,
         "window": window?.isVisible ?? false, "windowNumber": window?.windowNumber ?? 0,
         "menuItem": status?.button != nil,
@@ -419,9 +478,14 @@ import SwiftUI
         DispatchQueue.main.asyncAfter(deadline: .now() + seconds) { [weak self] in
           guard let self, !self.quitting else { return }
           switch command {
-          case "menu-open": self.status?.menu?.performActionForItem(at: 0)
-          case "menu-refresh": self.status?.menu?.performActionForItem(at: 1)
-          case "menu-quit": self.status?.menu?.performActionForItem(at: 4)
+          case "menu-open": self.statusMenu?.performActionForItem(at: 0)
+          case "menu-refresh": self.statusMenu?.performActionForItem(at: 1)
+          case "menu-quit": self.statusMenu?.performActionForItem(at: 4)
+          case "popup": self.toggleUsagePopover()
+          case "popup-close": self.usagePopover?.close()
+          case "background-on": self.model.preferences.startInBackground = true
+          case "background-off": self.model.preferences.startInBackground = false
+          case "notification-test": self.model.alerts.sendTestNotification()
           case "open": self.openMain()
           case "setup": self.openSetup()
           case "setup-next": self.setup.next()
@@ -450,14 +514,15 @@ import SwiftUI
               if item["surface"].string == "notch" {
                 self.notch.capture(to: file)
               } else if let view = (item["surface"].string == "setup"
-                ? self.setupWindow?.contentView : self.window?.contentView),
+                ? self.setupWindow?.contentView : item["surface"].string == "popup"
+                  ? self.usagePopover?.contentViewController?.view : self.window?.contentView),
                 let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds)
               {
                 view.cacheDisplay(in: view.bounds, to: bitmap)
                 try? bitmap.representation(using: .png, properties: [:])?.write(to: file)
               }
             }
-          case "close": self.window.performClose(nil)
+          case "close": self.window?.performClose(nil)
           case "refresh": self.refresh()
           case "quit": self.quit()
           case "activate":

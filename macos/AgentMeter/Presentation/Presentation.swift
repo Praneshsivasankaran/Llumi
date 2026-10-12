@@ -23,10 +23,13 @@ enum Destination: String, CaseIterable, Identifiable {
   }
   var manuallyRefreshing = false
   let preferences: Preferences
+  let alerts: UsageAlertController
   let updates = UpdatePresentation()
   let loginItem = LoginItem()
   var usage = Dictionary(
-    uniqueKeysWithValues: ProviderID.allCases.map { ($0, UsageSnapshot(provider: $0)) })
+    uniqueKeysWithValues: ProviderID.allCases.map { ($0, UsageSnapshot(provider: $0)) }) {
+    didSet { alerts.update(snapshots: usage, enabledProviders: preferences.enabledProviders) }
+  }
   var activity = ActivitySnapshot()
   var installations: [ProviderID: Installation] = [:]
   var refreshAction: () -> Void = {}
@@ -34,6 +37,7 @@ enum Destination: String, CaseIterable, Identifiable {
   var resetNotchPositionAction: () -> Void = {}
   init(defaults: UserDefaults = .standard) {
     preferences = Preferences(defaults: defaults)
+    alerts = UsageAlertController(defaults: defaults)
   }
   var compact: String {
     activity.providers.map { usage[$0]?.compact ?? $0.title }.joined(separator: "  |  ")

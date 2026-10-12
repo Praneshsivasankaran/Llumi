@@ -19,7 +19,9 @@ import Darwin
     }
     BetaPreferences.migrateIfNeeded()
     let app = NSApplication.shared
-    app.setActivationPolicy(.regular)
+    app.setActivationPolicy(
+      BetaPreferences.boolean(UserDefaults.standard.object(forKey: Preferences.startInBackgroundKey)) == true
+        ? .accessory : .regular)
     let delegate = AppDelegate()
     app.delegate = delegate
     withExtendedLifetime((delegate, instance)) { app.run() }

@@ -1,6 +1,18 @@
 import AppKit
 import SwiftUI
 
+struct ThreeBarsMark: View {
+  var dimension: CGFloat = 22
+  var body: some View {
+    HStack(alignment: .bottom, spacing: dimension * 0.13) {
+      ForEach([0.42, 0.68, 1.0], id: \.self) { fraction in
+        RoundedRectangle(cornerRadius: dimension * 0.055)
+          .frame(width: dimension * 0.2, height: dimension * fraction)
+      }
+    }.frame(width: dimension, height: dimension).accessibilityHidden(true)
+  }
+}
+
 struct MeterMark: View {
   var dimension: CGFloat = 22
   private static let appIcon = Bundle.main.url(forResource: "Llumi", withExtension: "icns")

@@ -517,13 +517,14 @@ private actor FakeSource: UsageSource {
     snapshot.apply(result)
     XCTAssertNil(snapshot.reading)
   }
-  func syntheticClaude(accountMismatch: Bool = false, nonzeroSession: Bool = false) async throws -> QueryResult {
+  func syntheticClaude(accountMismatch: Bool = false, nonzeroSession: Bool = false,
+    usageOverride: String? = nil) async throws -> QueryResult {
     let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
     try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
     defer { try? FileManager.default.removeItem(at: directory) }
     let path = directory.appendingPathComponent("claude")
     let authLiteral = String(data: try J.string(ParserTests.auth).encoded(), encoding: .utf8)!
-    let usage = nonzeroSession ? ParserTests.usage.replacingOccurrences(of: "\"total_cost_usd\":0", with: "\"total_cost_usd\":1") : ParserTests.usage
+    let usage = usageOverride ?? (nonzeroSession ? ParserTests.usage.replacingOccurrences(of: "\"total_cost_usd\":0", with: "\"total_cost_usd\":1") : ParserTests.usage)
     let usageLiteral = String(data: try J.string(usage).encoded(), encoding: .utf8)!
     let script = """
       #!/usr/bin/python3
@@ -567,6 +568,32 @@ private actor FakeSource: UsageSource {
     XCTAssertEqual(inference.failure, .incompatible)
     XCTAssertNil(inference.reading)
     XCTAssertNotNil(inference.verifiedBinding)
+  }
+  func testClaudeFailedUsageReverifiesIdentityAndRetainsOriginalStaleObservation() async throws {
+    let initial = try await syntheticClaude()
+    var snapshot = UsageSnapshot(provider: .claude)
+    snapshot.apply(initial)
+    let observed = snapshot.reading?.date
+    var envelope = try XCTUnwrap(json(ParserTests.usage).object)
+    envelope["rate_limits"] = .null
+    let nullResult = try await syntheticClaude(usageOverride:
+      String(decoding: try J.object(envelope).encoded(), as: UTF8.self))
+    XCTAssertEqual(nullResult.failure, .unavailable)
+    XCTAssertNotNil(nullResult.verifiedBinding)
+    snapshot.apply(nullResult)
+    XCTAssertEqual(snapshot.state, .stale)
+    XCTAssertEqual(snapshot.reading?.date, observed)
+    XCTAssertEqual(snapshot.consumerWindows.count, 2)
+    envelope.removeValue(forKey: "rate_limits")
+    let missingResult = try await syntheticClaude(usageOverride:
+      String(decoding: try J.object(envelope).encoded(), as: UTF8.self))
+    XCTAssertEqual(missingResult.failure, .malformed)
+    snapshot.apply(missingResult)
+    XCTAssertEqual(snapshot.state, .stale)
+    XCTAssertEqual(snapshot.reading?.date, observed)
+    let recovered = try await syntheticClaude()
+    snapshot.apply(recovered)
+    XCTAssertEqual(snapshot.state, .live)
   }
 }
 
@@ -981,7 +1008,13 @@ private actor FakeSource: UsageSource {
     envelope["rate_limits"] = .object([:])
     XCTAssertEqual(try Parsers.claudeAllowance(.object(envelope), plan: "max").availability, .notReported)
     envelope["rate_limits"] = .null
-    XCTAssertEqual(try Parsers.claudeAllowance(.object(envelope), plan: "max").availability, .notReported)
+    XCTAssertThrowsError(try Parsers.claudeAllowance(.object(envelope), plan: "max")) {
+      XCTAssertEqual($0 as? Failure, .unavailable)
+    }
+    envelope.removeValue(forKey: "rate_limits")
+    XCTAssertThrowsError(try Parsers.claudeAllowance(.object(envelope), plan: "max")) {
+      XCTAssertEqual($0 as? Failure, .malformed)
+    }
   }
   func testStaleRequiresReverifiedBindingAndClearFailuresNeverRetainOldData() throws {
     for failure in [Failure.accountChanged, .signedOut, .notInstalled, .incompatible, .unsupportedBilling, .unsupportedAllowance] {

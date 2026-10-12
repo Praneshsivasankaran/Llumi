@@ -12,6 +12,12 @@ Windows distinguishes Claude control-protocol support from retrieval success. Wi
 
 Unknown fields remain unknown. Malformed envelopes, duplicate identity fields and ambiguous account scopes fail closed. Retaining stale usage requires reverified compatible identity. No automatic provider installation, API-key field, credential extraction or provider authentication inside Llumi.
 
+The macOS background/alerts update adopts the same Claude retrieval distinction as
+Windows: `rate_limits_available: true` with null usage is unavailable, and a missing
+usage field is malformed. A valid empty object or explicit unavailable capability
+is Not reported. Failed reads retain old usage only after account continuity is
+reverified; those readings are Stale and cannot trigger alerts.
+
 Windows discovery preserves its existing installation order and tries at most eight distinct native executable candidates within the existing query deadline. A missing file/path or invalid executable image reported by Windows before the first authentication/protocol response permits trying the next candidate. An explicit executable override remains authoritative, including when invalid. Once an installation responds, it remains authoritative for that query: sign-out, billing restrictions, rate limits, unsupported or malformed responses, failed continuity verification and successful empty allowance results never trigger another installation. Claude candidates remain standalone installations; Desktop and extension copies stay excluded. Cancellation is checked before discovery and between candidate attempts; synchronous filesystem metadata calls are not individually interruptible. macOS keeps the tagged native executable/version validation behavior; this Windows launch-recovery change does not modify macOS.
 
 Windows interactive CLI activity may match any executable in that same bounded discovery list, so an earlier unlaunchable installation cannot hide a running supported candidate. Activity discovery does not launch or probe candidates. Existing process-name, console/mode, owned-helper and per-provider enablement gates remain required before publishing activity.

@@ -50,8 +50,11 @@ struct SettingsView: View {
       ScrollViewReader { proxy in
         Form {
           Section("General") {
+            Toggle(isOn: $preferences.startInBackground) {
+              Label("Start in background", systemImage: "menubar.rectangle")
+            }
             Toggle(isOn: Binding(get: { login.enabled }, set: { login.setEnabled($0) })) {
-              Label("Launch at Login", systemImage: "power")
+              Label("Launch at login", systemImage: "power")
             }
             if let message = login.message {
               Text(message).font(.caption).foregroundStyle(.secondary)
@@ -67,6 +70,10 @@ struct SettingsView: View {
             }
             Toggle(isOn: $preferences.menuEnabled) {
               Label("Menu Bar Icon", systemImage: "menubar.rectangle")
+            }.disabled(preferences.startInBackground)
+            if preferences.startInBackground {
+              Text("The menu bar keeps Llumi accessible. Closing this window keeps monitoring active.")
+                .font(.caption).foregroundStyle(.secondary)
             }
           }
           Section("Appearance") {
@@ -77,6 +84,9 @@ struct SettingsView: View {
             }
           }
           if let checks {
+            Section("Usage alerts") {
+              UsageAlertSettingsView(controller: checks.alerts)
+            }.id("usage-alerts")
             Section("Updates") {
               HStack {
                 Label("Llumi \(releaseVersion)", systemImage: "arrow.down.circle")
