@@ -40,6 +40,55 @@ DeepSeek is API balance only: preserve each returned currency and the decimal st
 subscription quota, usage percentage or reset is inferred.
 [Official balance schema](https://api-docs.deepseek.com/api/get-user-balance/).
 
+## Follow-up: Cursor and Gemini through Antigravity
+
+The user explicitly requested this additional feasibility check on 2026-10-12.
+Gemini/Antigravity implementation remains outside the current build; this expands
+the investigation only. The existing adapter asks provider-owned programs for
+account identity and quota: Codex uses `account/read` and `account/rateLimits/read`,
+while Claude uses authentication checks and the `get_usage` control request. Both
+verify account continuity without extracting the provider's stored secrets.
+
+**Cursor remains conditional and live-blocked.** Desktop 3.24.9 is installed, but
+its private `GetUsageLimitStatusAndActiveGrants` RPC uses the internal authenticated
+dashboard client. Static presence does not establish an exposed local quota API.
+No equivalent documented quota command was found in the [CLI reference](https://cursor.com/docs/cli/reference/parameters)
+or [ACP interface](https://cursor.com/docs/cli/acp); its Agent CLI is absent here.
+
+The official [SDK](https://cursor.com/docs/sdk/typescript#agentgetusage) now provides
+`Agent.getUsage()` for per-agent token counts and billed costs. Those results lack
+account allowance denominators and reset windows, and local access is enabled per
+account. The SDK's [authentication contract](https://cursor.com/docs/sdk/typescript#cursorauth)
+explicitly excludes reading the installed desktop app's credentials: it uses an
+explicit key, an environment key or a separately minted SDK login key. The
+[local bridge](https://cursor.com/docs/sdk/bridge) therefore does not establish the
+same existing-desktop-sign-in path. The Teams Admin API remains a separate keyed
+team integration. No private RPC, dashboard session or credential store was queried.
+
+**Antigravity has a documented technical candidate, with live and permitted-access
+blockers.** No Antigravity app or `agy` executable was found in standard installation
+locations or indexed apps. Google's [CLI changelog](https://antigravity.google/docs/changelog)
+records read-only JSON reporting from version 1.1.11 (2026-08-07):
+`agy -p "/usage" --output-format json`. It reports quota without an agent turn,
+quota consumption or a saved conversation. [Authentication](https://antigravity.google/docs/cli/install/)
+can remain owned by Google's CLI and OS keyring.
+
+The [statusline schema](https://antigravity.google/docs/cli/statusline/) documents
+account email, optional plan tier and quota buckets with `remaining_fraction`,
+`reset_time` and optional `reset_in_seconds`. This is not proof that the same fields
+exist in `/usage` JSON; its exact schema, identity continuity and bucket stability
+still require authenticated validation. These are Antigravity quotas, including its
+Gemini models, not Gemini chat-app limits or Gemini API billing. Actual pools/resets
+must come from the response, rather than inferred [plan limits](https://antigravity.google/docs/plans).
+
+Google's [FAQ](https://antigravity.google/docs/faq) explicitly says consumer-plan
+wrapping of `agy` in third-party applications is unsupported; its
+[terms](https://antigravity.google/terms) restrict third-party access. No read-only
+monitoring exception was found. Llumi needs a permitted monitoring interface or
+provider clarification before automatic integration, as well as an installed,
+signed-in CLI and live quota/account/error comparisons. Nothing was installed,
+authenticated or sent to a model during this check.
+
 ## Architecture and implementation
 
 - AppDelegate owns lifecycle, status/popover and notch, while the existing secure
