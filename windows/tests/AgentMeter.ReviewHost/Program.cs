@@ -13,11 +13,12 @@ internal static class Program
         Application.SetHighDpiMode(HighDpiMode.PerMonitorV2);
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        if (args.Length == 2 && args[0] == "--alerts-review") return AlertFeatureReview.Run(args[1]);
         if (args.Length == 2 && args[0] == "--first-run-live") return LiveFirstRunReview.Run(args[1]);
         if (args.Length == 2 && args[0] == "--resume-live") return LiveFirstRunReview.Run(args[1], resume: true);
         if (args.Length != 0 && (args.Length != 2 || args[0] != "--capture"))
         {
-            MessageBox.Show("Choose the synthetic preview, --capture <directory>, --first-run-live <new absolute review directory>, or --resume-live <existing marked review directory>.",
+            MessageBox.Show("Choose the synthetic preview, --capture <directory>, --alerts-review <new absolute review directory>, --first-run-live <new absolute review directory>, or --resume-live <existing marked review directory>.",
                 "Llumi local review", MessageBoxButtons.OK, MessageBoxIcon.Information);
             return 1;
         }

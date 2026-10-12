@@ -17,6 +17,7 @@ internal sealed class UsageForm : Form
     private readonly Panel content = new() { AccessibleName = "Usage", AutoScroll = true };
     private readonly SurfacePanel settings = new() { Name = "settings", AccessibleName = "Settings", AutoScroll = true };
     private readonly ToggleSwitch launch = new() { Text = "Launch at Startup", AccessibleName = "Launch at Startup" };
+    private readonly ToggleSwitch background = new() { Text = "Start in background", AccessibleName = "Start in background" };
     private readonly ToggleSwitch compact = new() { Text = "Show monitor", AccessibleName = "Show monitor" };
     private readonly ToggleSwitch tray = new() { Text = "Tray Icon", AccessibleName = "Tray Icon" };
     private readonly ToggleSwitch codex = new() { Text = "Monitor Codex", AccessibleName = "Monitor Codex" };
@@ -31,6 +32,8 @@ internal sealed class UsageForm : Form
     private readonly Label appearanceLabel = new() { Text = "Appearance", AutoSize = true };
     private readonly Label preferencesHeading = new() { Text = "Preferences", AutoSize = true };
     private readonly Label providerHeading = new() { Text = "Providers", AutoSize = true };
+    private readonly Label alertsHeading = new() { Text = "Usage alerts", AutoSize = true };
+    private readonly AlertSettingsView alerts = new();
     private readonly Label codexSetup = new() { AutoSize = false, UseCompatibleTextRendering = false, AccessibleName = "Codex setup status" };
     private readonly Label claudeSetup = new() { AutoSize = false, UseCompatibleTextRendering = false, AccessibleName = "Claude Code setup status" };
     private readonly Button checkAgain = Palette.Button("Retry", "Retry provider checks");
@@ -44,7 +47,7 @@ internal sealed class UsageForm : Form
     private readonly Font navigationFont = new("Segoe UI Semibold", 10, FontStyle.Regular);
     private Icon headerIdentity = AppIcon.Load();
     private IReadOnlyList<ProviderState> lastStates = [];
-    private bool loading, logFailed, rendering, syncing, settingsShown, aboutShown;
+    private bool loading, logFailed, rendering, syncing, settingsShown, aboutShown, backgroundEntry;
     private enum SettingsError { Preferences, Position, Startup }
     private SettingsError? settingsError;
     private Preferences preferences = new();
@@ -55,6 +58,7 @@ internal sealed class UsageForm : Form
     internal event Action? StartupToggleRequested;
     internal event Action? ResetPositionRequested;
     internal event Action? MenuOpening;
+    internal event Action? TestNotificationRequested;
     internal event Action<Preferences>? PreferencesChanged;
 
     public UsageForm(IEnumerable<string> names, Icon icon)
@@ -75,13 +79,23 @@ internal sealed class UsageForm : Form
         foreach (var name in names) { var card = new ProviderCard(hints); cards[name] = card; content.Controls.Add(card); }
         content.Controls.AddRange([offMessage, offSettings]);
         appearance.Items.AddRange(["System", "Light", "Dark"]);
-        settings.Controls.AddRange([preferencesHeading, launch, compact, tray, appearanceLabel, appearance, settingsMessage, resetPosition,
+        settings.Controls.AddRange([preferencesHeading, launch, background, compact, tray, appearanceLabel, appearance, settingsMessage, resetPosition,
+            alertsHeading, alerts,
             providerHeading, codex, claude, codexArtwork, claudeArtwork, codexSetup, claudeSetup, checkAgain, retryMessage]);
         foreach (var tab in new[] { usageTab, settingsTab, aboutTab }.OfType<RoundedButton>()) { tab.Navigation = true; tab.Font = navigationFont; }
         codex.TabIndex = 0; claude.TabIndex = 1; checkAgain.TabIndex = 2;
-        launch.TabIndex = 3; compact.TabIndex = 4; tray.TabIndex = 5; appearance.TabIndex = 6; resetPosition.TabIndex = 7;
+        launch.TabIndex = 3; background.TabIndex = 4; compact.TabIndex = 5; tray.TabIndex = 6; appearance.TabIndex = 7; resetPosition.TabIndex = 8; alerts.TabIndex = 9;
         codexArtwork.TabStop = claudeArtwork.TabStop = false;
-        preferencesHeading.Font = providerHeading.Font = headingFont;
+        preferencesHeading.Font = providerHeading.Font = alertsHeading.Font = headingFont;
+        hints.SetToolTip(background, "Applies to future launches. Launch at Startup is controlled separately.");
+        background.AccessibleDescription = "Applies to future launches. Launch at Startup is controlled separately.";
+        alerts.SettingsChanged += value =>
+        {
+            if (syncing) return;
+            preferences = preferences with { Alerts = value };
+            PreferencesChanged?.Invoke(preferences);
+        };
+        alerts.TestNotificationRequested += () => TestNotificationRequested?.Invoke();
         checkAgain.Click += (_, _) => RefreshRequested?.Invoke();
         resetPosition.Click += (_, _) => ResetPositionRequested?.Invoke();
         offSettings.Click += (_, _) => ShowSettings();
@@ -95,12 +109,13 @@ internal sealed class UsageForm : Form
         menu.Click += (_, _) => { MenuOpening?.Invoke(); actions.Show(menu, new Point(0, menu.Height)); };
         launch.CheckedChanged += (_, _) => { if (!syncing && launch.Enabled) StartupToggleRequested?.Invoke(); };
         compact.CheckedChanged += (_, _) => SavePreferences(); tray.CheckedChanged += (_, _) => SavePreferences();
+        background.CheckedChanged += (_, _) => SavePreferences();
         codex.CheckedChanged += (_, _) => SavePreferences(); claude.CheckedChanged += (_, _) => SavePreferences();
         appearance.SelectedIndexChanged += (_, _) => SavePreferences();
         FormClosing += (_, e) => { if (!AllowExit && e.CloseReason == CloseReason.UserClosing) { e.Cancel = true; HidePanel(); } };
         Resize += (_, _) => { if (!rendering) Render(lastStates, loading, logFailed); };
         DpiChanged += (_, _) => { LoadHeaderIdentity(); FitInitialWindow(Screen.FromControl(this).WorkingArea); Render(lastStates, loading, logFailed); KeepOnScreen(); };
-        countdown.Tick += (_, _) => UpdateRetry();
+        countdown.Tick += (_, _) => { UpdateRetry(); alerts.UpdateSnoozeStatus(DateTimeOffset.UtcNow); };
         VisibleChanged += (_, _) => { if (Visible) countdown.Start(); else countdown.Stop(); };
         _ = Handle;
         LoadHeaderIdentity();
@@ -125,7 +140,7 @@ internal sealed class UsageForm : Form
     {
         if (syncing || appearance.SelectedIndex < 0) return;
         preferences = preferences with { CompactMonitor = compact.Checked, TrayIcon = tray.Checked, Appearance = (Appearance)appearance.SelectedIndex,
-            CodexEnabled = codex.Checked, ClaudeEnabled = claude.Checked };
+            CodexEnabled = codex.Checked, ClaudeEnabled = claude.Checked, StartInBackground = background.Checked };
         PreferencesChanged?.Invoke(preferences);
     }
     internal void SetPreferences(Preferences value)
@@ -133,8 +148,10 @@ internal sealed class UsageForm : Form
         preferences = value; syncing = true;
         compact.Checked = value.CompactMonitor; tray.Checked = value.TrayIcon; appearance.SelectedIndex = (int)value.Appearance;
         codex.Checked = value.CodexEnabled; claude.Checked = value.ClaudeEnabled;
+        background.Checked = value.StartInBackground; alerts.SetSettings(value.EffectiveAlerts);
         syncing = false; ApplyTheme();
     }
+    internal void SetAlertStatus(string status) => alerts.SetStatus(status);
     internal void PreferenceSaveFailed() => ShowSettingsMessage(SettingsError.Preferences, "Settings could not be saved. The previous preferences remain active.");
     internal void PositionResetFailed() => ShowSettingsMessage(SettingsError.Position, "Monitor position could not be saved. Try again.");
     internal void PreferenceSaveSucceeded() => ClearSettingsMessage(SettingsError.Preferences);
@@ -164,20 +181,20 @@ internal sealed class UsageForm : Form
     {
         void Theme(Control root)
         {
-            if (root is ProviderCard or AboutView) return; // Cards own their pale surface and transparent label backgrounds.
+            if (root is ProviderCard or AboutView or AlertSettingsView) return; // These views own their surfaces.
             root.BackColor = Palette.Background; root.ForeColor = Palette.Foreground;
             foreach (Control child in root.Controls) Theme(child);
         }
         Theme(this); footer.ForeColor = Palette.Muted; settingsMessage.ForeColor = Palette.Muted;
         retryMessage.ForeColor = offMessage.ForeColor = Palette.Muted;
         foreach (var status in new[] { codexSetup, claudeSetup }) { status.BackColor = Palette.Card; status.Padding = new Padding(0); status.ForeColor = Palette.Muted; }
-        foreach (var control in new Control[] { codex, claude, codexArtwork, claudeArtwork, launch, compact, tray, appearanceLabel, appearance }) control.BackColor = Palette.Card;
+        foreach (var control in new Control[] { codex, claude, codexArtwork, claudeArtwork, launch, background, compact, tray, appearanceLabel, appearance }) control.BackColor = Palette.Card;
         foreach (var button in new[] { usageTab, settingsTab, aboutTab, checkAgain, resetPosition, offSettings })
         { if (button != usageTab && button != settingsTab && button != aboutTab) button.BackColor = Palette.Card; Palette.StyleButton(button); }
         foreach (var tab in new[] { usageTab, settingsTab, aboutTab }) tab.BackColor = Palette.Secondary;
         refresh.BackColor = Palette.Card; menu.BackColor = Palette.Background;
         appearance.FlatStyle = FlatStyle.Flat;
-        about.ApplyTheme(); Render(lastStates, loading, logFailed); Invalidate(true);
+        about.ApplyTheme(); alerts.ApplyTheme(); Render(lastStates, loading, logFailed); Invalidate(true);
     }
     internal void SetStartupState(bool enabled, bool available) { syncing = true; launch.Checked = enabled; launch.Enabled = available; syncing = false; }
     internal void ShowUsage() { settingsShown = aboutShown = false; Render(lastStates, loading, logFailed); }
@@ -190,6 +207,14 @@ internal sealed class UsageForm : Form
         Show(); Activate(); KeepOnScreen();
     }
     internal void HidePanel() { actions.Close(); if (preferences.TrayIcon) Hide(); else WindowState = FormWindowState.Minimized; }
+    protected override bool ShowWithoutActivation => backgroundEntry;
+    internal void ShowBackgroundEntry()
+    {
+        if (preferences.TrayIcon) return;
+        backgroundEntry = true;
+        try { WindowState = FormWindowState.Minimized; Show(); }
+        finally { backgroundEntry = false; }
+    }
     internal void KeepOnScreen() => Location = PopupPlacement.Clamp(Location, Size, Screen.FromControl(this).WorkingArea);
     internal void Render(IReadOnlyList<ProviderState> states, bool loading, bool logFailed, Rectangle? availableWorkArea = null)
     {
@@ -261,18 +286,23 @@ internal sealed class UsageForm : Form
             preferencesHeading.Location = new(S(20), S(preferencesY));
             var preferenceWidth = settingsWidth - S(28);
             launch.SetBounds(S(34), S(preferencesY + 52), preferenceWidth, S(34));
-            compact.SetBounds(S(34), S(preferencesY + 96), preferenceWidth, S(34));
-            tray.SetBounds(S(34), S(preferencesY + 140), preferenceWidth, S(34));
+            background.SetBounds(S(34), S(preferencesY + 96), preferenceWidth, S(34));
+            compact.SetBounds(S(34), S(preferencesY + 140), preferenceWidth, S(34));
+            tray.SetBounds(S(34), S(preferencesY + 184), preferenceWidth, S(34));
             var stackedAppearance = settingsWidth < S(380);
-            appearanceLabel.Location = new(S(36), S(preferencesY + 190));
-            appearance.SetBounds(stackedAppearance ? S(36) : S(20) + settingsWidth - S(214), S(preferencesY + (stackedAppearance ? 220 : 186)), Math.Min(S(198), preferenceWidth), S(30));
-            var preferencesHeight = stackedAppearance ? 230 : 200;
+            appearanceLabel.Location = new(S(36), S(preferencesY + 234));
+            appearance.SetBounds(stackedAppearance ? S(36) : S(20) + settingsWidth - S(214), S(preferencesY + (stackedAppearance ? 264 : 230)), Math.Min(S(198), preferenceWidth), S(30));
+            var preferencesHeight = stackedAppearance ? 274 : 244;
             resetPosition.SetBounds(S(20), S(preferencesY + preferencesHeight + 56), S(145), S(36));
             settings.SetSurfaces(new Rectangle(S(20), S(cardY), setupWidth, S(providerHeight)), new Rectangle(claudeX, S(claudeY), setupWidth, S(providerHeight)),
                 new Rectangle(S(20), S(preferencesY + 36), settingsWidth, S(preferencesHeight)));
             settingsMessage.Visible = !string.IsNullOrEmpty(settingsMessage.Text);
             settingsMessage.SetBounds(S(20), S(preferencesY + preferencesHeight + 104), settingsWidth, S(settingsMessage.Visible ? 100 : 0));
-            settings.AutoScrollMinSize = new(0, S(preferencesY + preferencesHeight + (settingsMessage.Visible ? 216 : 106)));
+            var alertsY = preferencesY + preferencesHeight + (settingsMessage.Visible ? 222 : 112);
+            alertsHeading.Location = new(S(20), S(alertsY));
+            alerts.Location = new(S(20), S(alertsY + 36));
+            var alertsHeight = alerts.Arrange(settingsWidth, DeviceDpi / 96f);
+            settings.AutoScrollMinSize = new(0, S(alertsY + 52) + alertsHeight);
             settings.AutoScrollPosition = new(0, -settingsScroll.Y);
             UpdateRetry();
             refresh.Visible = !settingsShown && !aboutShown; refresh.Text = loading ? "Refreshing…" : "Refresh";

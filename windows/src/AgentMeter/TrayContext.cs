@@ -26,6 +26,7 @@ internal sealed class TrayContext : ApplicationContext
     private readonly Func<ActivitySnapshot> captureActivity;
     private readonly WindowsActivitySource? activitySource;
     private readonly PreferenceStore preferenceStore;
+    private readonly UsageAlertService alerts;
     private Preferences preferences;
     private readonly SetupCompletionStore setupStore;
     private readonly string? reviewTitle;
@@ -46,7 +47,7 @@ internal sealed class TrayContext : ApplicationContext
     public TrayContext(RefreshCoordinator coordinator, DiagnosticLog log, EventWaitHandle showEvent,
         MonitorPositionStore? positions = null, IStartupRegistration? startup = null, EventWaitHandle? quitEvent = null,
         Func<ActivitySnapshot>? captureActivity = null, PreferenceStore? preferenceStore = null, SetupCompletionStore? setupStore = null,
-        string? reviewTitle = null)
+        string? reviewTitle = null, UsageAlertService? alertService = null, bool? startupLaunch = null)
     {
         this.coordinator = coordinator;
         this.log = log;
@@ -58,6 +59,8 @@ internal sealed class TrayContext : ApplicationContext
         if (captureActivity is null) { activitySource = new WindowsActivitySource(); this.captureActivity = activitySource.Capture; }
         else this.captureActivity = captureActivity;
         this.preferenceStore = preferenceStore ?? PreferenceStore.Default();
+        // Injected preference profiles must never share production alert history.
+        alerts = alertService ?? new UsageAlertService(new AlertLedgerStore(this.preferenceStore.DirectoryPath), new AlertNotifications(), log.Write);
         this.setupStore = setupStore ?? SetupCompletionStore.Default();
         needsSetup = !this.setupStore.RecognizeExisting(this.preferenceStore.HasValidExistingPreferences());
         preferences = this.preferenceStore.Load();
@@ -85,6 +88,8 @@ internal sealed class TrayContext : ApplicationContext
         popup.MenuOpening += UpdateStartupState;
         popup.PreferencesChanged += ChangePreferences;
         popup.ResetPositionRequested += ResetMonitorPosition;
+        popup.TestNotificationRequested += TestNotification;
+        alerts.OpenRequested += OnAlertOpened;
         popup.SetPreferences(preferences);
         tray.Visible = preferences.TrayIcon;
         monitor.OpenRequested += ShowPopup;
@@ -130,11 +135,31 @@ internal sealed class TrayContext : ApplicationContext
         StartRefresh();
         activityTimer.Start(); SampleActivity();
         if (needsSetup) OpenSetup();
+        else if (startupLaunch is { } loginLaunch) ApplyInitialLaunch(loginLaunch);
         else if (!preferences.TrayIcon) ShowPopup();
         log.Write("tray.ready");
     }
 
     internal void OpenPanel() { if (needsSetup) OpenSetup(); else ShowPopup(); }
+    internal void ApplyInitialLaunch(bool loginLaunch)
+    {
+        if (needsSetup) { OpenSetup(); return; }
+        if (!loginLaunch && !preferences.StartInBackground) { ShowPopup(); return; }
+        if (!preferences.TrayIcon) popup.ShowBackgroundEntry();
+    }
+
+    private void OnAlertOpened(object? sender, EventArgs args) => OnUi(() => { popup.ShowUsage(); OpenPanel(); });
+    private void TestNotification()
+    {
+        alerts.SendTest();
+        popup.SetAlertStatus(alerts.StatusMessage(preferences.EffectiveAlerts));
+    }
+    private void EvaluateAlerts()
+    {
+        if (exiting || suspended) return;
+        alerts.Observe(coordinator.States, preferences.EffectiveAlerts, DateTimeOffset.UtcNow);
+        popup.SetAlertStatus(alerts.StatusMessage(preferences.EffectiveAlerts));
+    }
     private void OpenSetup()
     {
         if (setupWindow is null || setupWindow.IsDisposed)
@@ -170,6 +195,7 @@ internal sealed class TrayContext : ApplicationContext
         popup.PreferenceSaveSucceeded();
         if (setupWindow is { IsDisposed: false }) setupWindow.ApplyTheme();
         monitor.UpdateSurface(); ApplyActivity(activity);
+        EvaluateAlerts();
         Render();
         if (codexReenabled) StartRefresh(RefreshReason.Enable, "Codex");
         if (claudeReenabled) StartRefresh(RefreshReason.Enable, coordinator.States.FirstOrDefault(s => UsagePresentation.IsClaude(s.Name))?.Name ?? "Claude Code");
@@ -346,7 +372,7 @@ internal sealed class TrayContext : ApplicationContext
         if (!exiting && !suspended && (popup.Visible || monitor.Visible)) display.Start(); else display.Stop();
     }
 
-    private void OnChanged() => OnUi(Render);
+    private void OnChanged() => OnUi(() => { EvaluateAlerts(); Render(); });
     private void OnUi(Action action)
     {
         if (exiting || popup.IsDisposed) return;
@@ -358,6 +384,7 @@ internal sealed class TrayContext : ApplicationContext
     {
         if (exiting) return;
         var states = coordinator.States;
+        popup.SetAlertStatus(alerts.StatusMessage(preferences.EffectiveAlerts));
         if (setupWindow is { IsDisposed: false }) setupWindow.RefreshStatuses();
         if (popup.Visible) popup.Render(states, coordinator.IsRefreshing, log.WriteFailed);
         if (monitor.Visible)
@@ -428,6 +455,8 @@ internal sealed class TrayContext : ApplicationContext
             coordinator.Suspend();
             lifetime.Cancel();
             coordinator.Changed -= OnChanged;
+            alerts.OpenRequested -= OnAlertOpened;
+            alerts.Dispose();
             SystemEvents.DisplaySettingsChanged -= OnDisplaySettingsChanged;
             SystemEvents.PowerModeChanged -= OnPowerModeChanged;
             SystemEvents.TimeChanged -= OnTimeChanged;

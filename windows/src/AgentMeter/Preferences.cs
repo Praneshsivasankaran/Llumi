@@ -1,12 +1,18 @@
 using System.Text.Json;
+using System.Text.Json.Serialization;
+using AgentMeter.Core;
 
 namespace AgentMeter;
 
 internal enum Appearance { System, Light, Dark }
 internal sealed record Preferences(bool CompactMonitor = true, bool TrayIcon = true, Appearance Appearance = Appearance.Light,
-    bool CodexEnabled = true, bool ClaudeEnabled = true);
+    bool CodexEnabled = true, bool ClaudeEnabled = true, bool StartInBackground = false, UsageAlertSettings? Alerts = null)
+{
+    [JsonIgnore] internal UsageAlertSettings EffectiveAlerts => Alerts ?? new();
+}
 internal sealed class PreferenceStore(string path)
 {
+    internal string DirectoryPath => Path.GetDirectoryName(Path.GetFullPath(path))!;
     internal const string LightMigrationKey = "LightAppearanceMigrated";
     internal static PreferenceStore Default() => new(Path.Combine(PackagedEnvironment.DataDirectory, "v2-preferences.json"));
     internal bool HasValidExistingPreferences()
@@ -19,7 +25,8 @@ internal sealed class PreferenceStore(string path)
             var root = document.RootElement;
             if (!ValidRoot(root)) return false;
             return root.EnumerateObject().Any(p =>
-                (p.Name is "CompactMonitor" or "TrayIcon" or "CodexEnabled" or "ClaudeEnabled" && p.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                (p.Name is "CompactMonitor" or "TrayIcon" or "CodexEnabled" or "ClaudeEnabled" or "StartInBackground" && p.Value.ValueKind is JsonValueKind.True or JsonValueKind.False)
+                || (p.Name == "Alerts" && p.Value.ValueKind == JsonValueKind.Object)
                 || (p.Name == "Appearance" && p.Value.ValueKind == JsonValueKind.Number && p.Value.TryGetInt32(out var n) && Enum.IsDefined((Appearance)n)));
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException or JsonException or InvalidOperationException) { return false; }
@@ -56,15 +63,56 @@ internal sealed class PreferenceStore(string path)
         if (root.ValueKind != JsonValueKind.Object) return false;
         var names = new HashSet<string>();
         if (root.EnumerateObject().Any(p => !names.Add(p.Name))) return false;
-        foreach (var key in new[] { "CompactMonitor", "TrayIcon", "CodexEnabled", "ClaudeEnabled", LightMigrationKey })
+        foreach (var key in new[] { "CompactMonitor", "TrayIcon", "CodexEnabled", "ClaudeEnabled", "StartInBackground", LightMigrationKey })
             if (root.TryGetProperty(key, out var flag) && flag.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false;
+        if (root.TryGetProperty("Alerts", out var alerts) && alerts.ValueKind != JsonValueKind.Null && !ValidAlerts(alerts)) return false;
         return !root.TryGetProperty("Appearance", out var appearance) ||
             appearance.ValueKind == JsonValueKind.Number && appearance.TryGetInt32(out var number) && Enum.IsDefined((Appearance)number);
     }
+    internal static bool ValidAlerts(JsonElement alerts)
+    {
+        if (alerts.ValueKind != JsonValueKind.Object) return false;
+        var names = new HashSet<string>();
+        foreach (var property in alerts.EnumerateObject())
+        {
+            if (!names.Add(property.Name)) return false;
+            switch (property.Name)
+            {
+                case "Enabled": case "CodexEnabled": case "ClaudeEnabled":
+                    if (property.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false;
+                    break;
+                case "SnoozedUntil":
+                    if (property.Value.ValueKind != JsonValueKind.Null &&
+                        (property.Value.ValueKind != JsonValueKind.String || !property.Value.TryGetDateTimeOffset(out _))) return false;
+                    break;
+                case "Thresholds":
+                    if (property.Value.ValueKind == JsonValueKind.Null) break;
+                    if (property.Value.ValueKind != JsonValueKind.Array || property.Value.GetArrayLength() is < 1 or > 16) return false;
+                    var percentages = new HashSet<int>();
+                    foreach (var threshold in property.Value.EnumerateArray())
+                    {
+                        if (threshold.ValueKind != JsonValueKind.Object) return false;
+                        var fields = new HashSet<string>();
+                        foreach (var field in threshold.EnumerateObject())
+                        {
+                            if (!fields.Add(field.Name) || field.Name is not ("Percent" or "Enabled")) return false;
+                            if (field.Name == "Enabled" && field.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return false;
+                        }
+                        if (!threshold.TryGetProperty("Percent", out var percent) || percent.ValueKind != JsonValueKind.Number ||
+                            !percent.TryGetInt32(out var value) || value is < 1 or > 100 || !percentages.Add(value)) return false;
+                    }
+                    break;
+                default: return false;
+            }
+        }
+        return true;
+    }
     private static bool HasPreference(JsonElement root) => root.EnumerateObject().Any(p =>
-        p.Name is "CompactMonitor" or "TrayIcon" or "CodexEnabled" or "ClaudeEnabled" or "Appearance");
+        p.Name is "CompactMonitor" or "TrayIcon" or "CodexEnabled" or "ClaudeEnabled" or "Appearance" or "StartInBackground" ||
+        p.Name == "Alerts" && p.Value.ValueKind == JsonValueKind.Object);
     internal bool Save(Preferences value)
     {
+        if (!Enum.IsDefined(value.Appearance) || !value.EffectiveAlerts.IsValid) return false;
         var temporary = path + ".tmp";
         try
         {
@@ -101,7 +149,7 @@ internal static class LegacyPreferences
             var old = ReadObject(Path.Combine(legacyDirectory, "v2-preferences.json"));
             var current = ReadObject(Path.Combine(currentDirectory, "v2-preferences.json"));
             var values = new Dictionary<string, object>();
-            foreach (var key in new[] { "CompactMonitor", "TrayIcon", "Appearance", "CodexEnabled", "ClaudeEnabled" })
+            foreach (var key in new[] { "CompactMonitor", "TrayIcon", "Appearance", "CodexEnabled", "ClaudeEnabled", "StartInBackground", "Alerts" })
             {
                 var value = Value(current, key) ?? Value(old, key);
                 if (value is not null) values[key] = value;
@@ -138,6 +186,7 @@ internal static class LegacyPreferences
     private static object? Value(JsonElement? root, string key)
     {
         if (root is not { } obj || !obj.TryGetProperty(key, out var value)) return null;
+        if (key == "Alerts") return PreferenceStore.ValidAlerts(value) ? value.Clone() : null;
         if (key == "Appearance") return value.ValueKind == JsonValueKind.Number && value.TryGetInt32(out var n)
             && Enum.IsDefined((Appearance)n) ? n : null;
         return value.ValueKind is JsonValueKind.True or JsonValueKind.False ? value.GetBoolean() : null;

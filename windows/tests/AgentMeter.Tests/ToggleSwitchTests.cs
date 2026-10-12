@@ -41,8 +41,12 @@ public sealed class ToggleSwitchTests
     {
         using var form = new UsageForm(["Codex", "Claude"], SystemIcons.Application);
         form.Show(); form.ShowSettings();
-        var toggles = Controls(form).OfType<ToggleSwitch>().ToArray(); Assert.Equal(5, toggles.Length);
-        Assert.Equal(5, Controls(form).OfType<CheckBox>().Count());
+        var toggles = Controls(form).OfType<ToggleSwitch>().ToArray();
+        var expectedToggles = new[] { "Monitor Codex", "Monitor Claude Code", "Launch at Startup", "Start in background",
+            "Show monitor", "Tray Icon", "Usage alerts", "Codex alerts", "Claude Code alerts",
+            "Enable alert threshold 1", "Enable alert threshold 2", "Enable alert threshold 3" };
+        Assert.Equal(expectedToggles.OrderBy(name => name), toggles.Select(toggle => toggle.AccessibleName).OrderBy(name => name));
+        Assert.Equal(expectedToggles.Length, Controls(form).OfType<CheckBox>().Count());
         var current = new Preferences(); form.SetPreferences(current);
         var saves = new List<Preferences>(); form.PreferencesChanged += value => { saves.Add(value); form.SetPreferences(value); };
         var monitor = toggles.Single(c => c.Text == "Show monitor"); Click(monitor);
@@ -52,12 +56,30 @@ public sealed class ToggleSwitchTests
         Assert.Contains(Controls(form).OfType<Label>(), c => c.Text.Contains("previous preferences remain active"));
         var codex = toggles.Single(c => c.AccessibleName == "Monitor Codex"); Click(codex);
         Assert.False(saves[^1].CodexEnabled); Assert.True(saves[^1].ClaudeEnabled);
+        var background = toggles.Single(c => c.AccessibleName == "Start in background"); Click(background);
+        Assert.True(saves[^1].StartInBackground); Assert.False(saves[^1].CodexEnabled); Assert.True(saves[^1].CompactMonitor);
+        var alerts = toggles.Single(c => c.AccessibleName == "Usage alerts"); Click(alerts);
+        Assert.True(saves[^1].EffectiveAlerts.Enabled); Assert.True(saves[^1].StartInBackground);
+        Click(toggles.Single(c => c.AccessibleName == "Codex alerts"));
+        Assert.False(saves[^1].EffectiveAlerts.CodexEnabled); Assert.True(saves[^1].EffectiveAlerts.ClaudeEnabled);
+        Click(toggles.Single(c => c.AccessibleName == "Claude Code alerts"));
+        Assert.False(saves[^1].EffectiveAlerts.ClaudeEnabled); Assert.False(saves[^1].EffectiveAlerts.CodexEnabled);
+        Click(toggles.Single(c => c.AccessibleName == "Enable alert threshold 2"));
+        Assert.Equal(new[] { true, false, true }, saves[^1].EffectiveAlerts.EffectiveThresholds.Select(threshold => threshold.Enabled));
+        Assert.Equal(new[] { 75, 90, 95 }, saves[^1].EffectiveAlerts.EffectiveThresholds.Select(threshold => threshold.Percent));
+        Assert.Equal(7, saves.Count);
+        form.SetPreferences(current); form.PreferenceSaveFailed();
+        Assert.False(background.Checked); Assert.False(alerts.Checked); Assert.True(codex.Checked); Assert.True(monitor.Checked);
+        Assert.All(toggles.Where(toggle => toggle.AccessibleName is "Codex alerts" or "Claude Code alerts" or
+            "Enable alert threshold 1" or "Enable alert threshold 2" or "Enable alert threshold 3"), toggle => Assert.True(toggle.Checked));
+        Assert.Equal(7, saves.Count);
         var starts = 0; form.StartupToggleRequested += () => starts++;
         var launch = toggles.Single(c => c.Text == "Launch at Startup");
         form.SetStartupState(false, true); Click(launch); Assert.Equal(1, starts);
         launch.Checked = false; Assert.Equal(2, starts); // UIA Toggle changes Checked without Click.
         form.SetStartupState(false, false); Assert.False(launch.Checked); Assert.False(launch.Enabled); Assert.Equal(2, starts);
         launch.Checked = true; Assert.Equal(2, starts); // A disabled control cannot request a startup change.
+        Assert.Equal(7, saves.Count); // Startup dispatch does not save the independent background or alert preferences.
     });
 
     [Fact]
@@ -67,7 +89,11 @@ public sealed class ToggleSwitchTests
         form.Render([new("Codex", AgentMeter.Core.ProviderStatus.Error, Failure: AgentMeter.Core.FailureKind.LoggedOut)], false, false);
         form.Show(); form.ShowSettings(); form.SetStartupState(false, true);
         var panel = Controls(form).OfType<Panel>().Single(c => c.Name == "settings");
-        var expected = new[] { "Monitor Codex", "Monitor Claude Code", "Retry provider checks", "Launch at Startup", "Show monitor", "Tray Icon", "Appearance", "Reset compact monitor position" };
+        var expected = new[] { "Monitor Codex", "Monitor Claude Code", "Retry provider checks", "Launch at Startup", "Start in background",
+            "Show monitor", "Tray Icon", "Appearance", "Reset compact monitor position", "Usage alerts", "Codex alerts", "Claude Code alerts",
+            "Enable alert threshold 1", "Alert threshold 1, percent used", "Enable alert threshold 2", "Alert threshold 2, percent used",
+            "Enable alert threshold 3", "Alert threshold 3, percent used", "Snooze alerts for 1 hour",
+            "Snooze alerts until tomorrow at 09:00 local time", "Send test notification" };
         var first = panel.Controls.Cast<Control>().Single(c => c.AccessibleName == expected[0]);
         first.Focus(); Assert.True(first.Focused);
         foreach (var name in expected.Skip(1))
@@ -75,6 +101,16 @@ public sealed class ToggleSwitchTests
             Assert.True(panel.SelectNextControl(form.ActiveControl, true, true, true, false));
             Assert.Equal(name, form.ActiveControl?.AccessibleName);
         }
+        var resume = Controls(panel).OfType<Button>().Single(control => control.AccessibleName == "Resume alerts");
+        Assert.False(resume.Enabled); // An inactive snooze is skipped by native Tab navigation.
+        form.SetPreferences(new Preferences(Alerts: new AgentMeter.Core.UsageAlertSettings(SnoozedUntil: DateTimeOffset.UtcNow.AddHours(1))));
+        Assert.True(resume.Enabled);
+        var tomorrow = Controls(panel).OfType<Button>().Single(control => control.AccessibleName == "Snooze alerts until tomorrow at 09:00 local time");
+        tomorrow.Focus(); Assert.True(tomorrow.Focused);
+        Assert.True(panel.SelectNextControl(form.ActiveControl, true, true, true, false));
+        Assert.Equal("Resume alerts", form.ActiveControl?.AccessibleName);
+        Assert.True(panel.SelectNextControl(form.ActiveControl, true, true, true, false));
+        Assert.Equal("Send test notification", form.ActiveControl?.AccessibleName);
     });
 
     [Theory]
