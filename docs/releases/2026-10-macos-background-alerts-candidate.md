@@ -11,7 +11,7 @@ macOS internal build advances to **5**. Windows internal/package build numbers
 remain independent. The changed key/feed requires new artifacts and verification,
 not relabeling earlier checks or notarization receipts.
 
-Build 5 will use `https://tryllumi.com/appcast-v2.xml` and the new Sparkle Keychain
+Build 5 uses `https://tryllumi.com/appcast-v2.xml` and the new Sparkle Keychain
 account `io.github.praneshsivasankaran.llumi.sparkle.v2`. Existing 1.1.3 cannot install
 it through its old-key updater. The old public `https://tryllumi.com/appcast.xml`
 remains intact. See [the migration contract](../product-spec/updater-key-migration-220.md).
@@ -58,13 +58,17 @@ Evidence from earlier local review builds is retained in
 for checks against the final distribution artifact.
 
 The 1.1.4 and 2.2.0/build 4 rows below retain historical evidence. Build 4's app and
-DMG were notarized successfully but are superseded by the new-key build 5 plan.
-No build 5 test, artifact, signing or device result is claimed until recorded below.
+DMG were notarized successfully but are superseded by the new-key build 5 artifacts.
+The current results below are recorded in local `dist/macos-2.2.0-build5/release-state.json`.
 
 | Status | Evidence and limit |
 | --- | --- |
 | Implemented | Background lifecycle, compact popup, quota alerts, receipt persistence, notification controls and feedback, shared popup appearance, Claude missing/null usage fix. |
-| Current build 5 migration | Authorized and pending: new key/account/feed metadata, source rebuild, affected tests/privacy checks, new app/DMG signing and notarization, final hashes, local signed new-feed metadata, manual-install preservation and future new-key updater validation. |
+| Build 5 source and tests | Release source `c9d35b3a2640ea2d3c7fc5c204d884a00c81b937`, with runtime metadata change `f877457`; release state records a clean source worktree. Native suite: 247 executed, four intentional skips, zero failures. Distribution: 17 passed; updater policy: 23 passed. Website tooling at `afec470`: 25 passed. |
+| Build 5 final artifact trust | App and DMG are Developer ID signed; both Apple notarization submissions were Accepted with zero issues, then stapled and accepted by Gatekeeper. Local final feed and archive signatures verified. Exact final DMG size/hash and source provenance appear below. |
+| Build 5 future new-key updater | A disposable new-key 2.2.0/build 4 host downloaded and installed the exact final build 5 app, relaunched as one process, and displayed the completion notice, which was acknowledged. Old-key feed, tampered feed, signed malformed feed and bad archive signature were rejected; equal build was not offered; offline error was recoverable. This validates the new key chain, not an old-key 1.1.3 in-app migration. |
+| Build 5 manual installation | Installed `/Applications/Llumi.app` manually from the notarized DMG over 1.1.3; exact final bytes verified. Both providers were Live; all nine tracked setting values and their presence matched the pre-migration state, Launch at Login remained on, and no false update-completion notice appeared. Explicit second launch retained the same PID; Quit stopped the process. |
+| Build 5 native limits and cleanup | Temporary feed, automatic-update and background preferences restored; all nine tracked fields match their original values and presence. Cold background launch started the process, but UI inspection reopened the window, so final window absence/Dock behavior was not independently established. Initial installed notification denial was handled without enabling alerts. The owner enabled system permission; the installed app reported the test accepted, and the owner confirmed the final notification worked. |
 | Previous-label candidate regression | The complete 1.1.4/build 4 native suite ran on 2026-10-12: 247 tests executed, four intentional skips, zero failures. |
 | Superseded build 4 candidate checks | Full native suite: 247 tests, four intentional skips, zero failures. Universal Release build, built-app privacy, 17 distribution guards, 15 updater-policy tests and unsigned DMG checksum/mount/contained-app checks passed. The refreshed isolated review app visibly displayed Version 2.2.0, started without the main window, showed both providers Live, and kept monitoring after close. Five user-setting field hashes were unchanged; the receipt store continued updating with fresh observations. |
 | Superseded build 4 signed app | Source `71e75c3dd6e243b38c023f3b6b0cda4ffb10070c`. All six code targets passed strict signature, Hardened Runtime, secure timestamp, approved publisher/team and empty-entitlement checks. The app satisfies the installed 1.1.3 app's exact designated requirement. Apple's app notarization submission was Accepted with zero issues; the app was stapled and Gatekeeper accepted it. |
@@ -79,28 +83,52 @@ No build 5 test, artifact, signing or device result is claimed until recorded be
 | Previous-label production build/package | Universal arm64/x86_64 Release 1.1.4/build 4 succeeded. Canonical bundle validation, source/built-app privacy checks, 17 distribution guards and 15 updater-policy tests passed. Unsigned DMG checksum, mount and contained-app validation passed. Production metadata now rejects any local-review marker. |
 | Previous-label 1.1.4 review smoke | Replaced the isolated review bundle using the same Release executable. Background launch suppressed the main window; both providers returned Live, Claude with five-hour/weekly windows. Notch Open reached the full UI; closing retained monitoring; Finder launch reopened the same single process; Quit stopped it; next launch stayed in background. Six persisted setting fields retained identical hashes, and native login registration still reported on. |
 | Previous-label notification and screenshots | The 1.1.4 native test request was accepted by macOS; this does not prove a visible banner under current screen-sharing suppression. Earlier owner-confirmed banner evidence remains separate. An opt-in native fixture capture test passed, producing light/dark popup and stale/unavailable images with synthetic data. Actual 1.1.4 alert settings were captured through native UI in the review chat. |
-| Unverified final gates | Build 5 rebuild/tests/signing/notarization and feed/archive signatures; manual 1.1.3-to-2.2.0 installation with preserved settings; isolated future new-key Sparkle upgrade; final installed-path login session; live OS System-theme switch with popup open; Intel runtime. A 1.1.3-to-new-key-2.2.0 in-app upgrade is not the supported migration path. |
-| Publication | Not authorized. No GitHub release, public feed/website change, public release upload or user update occurred. The owner separately authorized the completed Apple notarization submissions. |
+| Remaining/unverified | Actual logout/login session; live OS System-theme switch with popup open; independent final background-window/Dock observation; physical Intel and Windows execution; owner-created encrypted key backup. A backup helper is prepared but no key backup has been exported. |
+| Publication | Not authorized. No GitHub release, public feed/website deployment, release upload or automatic user update delivery occurred. Apple notarization and the local manual installation were separately authorized. The site builder supports an optional v2 feed, but the site contains no new feed and the old public feed is unchanged. |
 
 Initial preparation found no usable **Developer ID Application** identity and no
 configured `NOTARY_PROFILE`. The owner subsequently explicitly approved a replacement
 Developer ID certificate for the established team `K38622WCYD`. The original
 certificate was left intact; the replacement matches its Keychain private key and
-the approved publisher/team. Build 4 app signing and Apple notarization completed
-as recorded above; build 5 requires fresh artifacts and verification. No certificate/private-key material or notary
+the approved publisher/team. Build 4 and the rebuilt build 5 app/DMG completed their
+own signing and Apple notarization checks. No certificate/private-key material or notary
 credentials are included in this document. The earlier Claude sign-in blocker was
-also resolved; provider and background lifecycle smoke passed on the superseded
-build 4 staged notarized app as recorded above.
+also resolved; both providers were Live in the final manually installed build 5.
+Historical and final native lifecycle evidence remain distinguished above.
 
 ## Current 2.2.0/build 5 migration record
 
-The selected feed is `https://tryllumi.com/appcast-v2.xml`; its signing account is
-`io.github.praneshsivasankaran.llumi.sparkle.v2`. The current plan is one manual
-installation followed by future updates under that new trust chain. The old public
-feed and published releases remain unchanged. New key generation, source/build
-provenance, artifact paths/hashes, test results, signing/notarization, local appcast
-verification and native migration acceptance are **pending recording**. Build 4's
-hash and Apple acceptance below must not be used as evidence for build 5.
+The feed is `https://tryllumi.com/appcast-v2.xml`; its signing account is
+`io.github.praneshsivasankaran.llumi.sparkle.v2`. New key generation and locally
+verified signed feed/archive metadata are complete. The old public feed and
+published releases remain unchanged. The one manual installation from 1.1.3 and
+the separate private future new-key updater test passed as recorded above.
+
+- Source: `c9d35b3a2640ea2d3c7fc5c204d884a00c81b937` (runtime metadata from `f877457`).
+- Final DMG: `dist/macos-2.2.0-build5/Llumi-2.2.0-macos.dmg`.
+- Size: **4,528,761 bytes**.
+- SHA-256: `c76e5ac30b0340d7e52224d4ec0d148b8805f0b41a11fc0300ce2e2be780ca48`.
+- Local signed feed: `dist/macos-2.2.0-build5/appcast-v2.xml`.
+- Local evidence: `dist/macos-2.2.0-build5/release-state.json`.
+
+The feed/archive signatures bind these final bytes. The new feed is unpublished;
+its local verification is not proof of a live public feed. Build 4's hash and Apple
+acceptance below are historical and must not substitute for the build 5 receipt.
+
+The exact final app is now installed at `/Applications/Llumi.app`. Both providers
+returned Live without recording identities or private usage values. Native
+settings were preserved: all nine tracked fields matched their original values
+and presence after temporary feed, automatic-update and background changes were
+restored. Launch at Login remained on; an actual logout/login startup has not been
+exercised. The initial notification denial was resolved by the owner locally.
+The installed app reported permission allowed and test accepted; the owner then
+confirmed the final notification worked. Alert enablement remains at its original
+off setting. A cold background process launch
+and same-PID second launch were observed, but UI inspection reopened the main
+window; independent final hidden-window/Dock confirmation remains unverified.
+
+The encrypted Sparkle key backup helper is prepared for the owner. It has not
+exported a backup; owner-controlled encrypted backup remains outstanding.
 
 ## Superseded 2.2.0/build 4 artifact record
 
@@ -134,7 +162,7 @@ manual installation; original-key restoration is no longer the selected plan.
 
 At the build 4 checkpoint, the separate ad-hoc signed Llumi Review app showed
 **Version 2.2.0**, with updater disabled and user settings preserved. Its previous
-1.1.4 bundle was backed up. The installed production 1.1.3 app remains untouched.
+1.1.4 bundle was backed up. At that checkpoint the installed production 1.1.3 app was untouched.
 After the staged notarized-app smoke, the temporary background preference was
 restored to its original absence, all eight tracked setting hashes matched their
 pre-test values, and the feed preference was unchanged. Llumi Review was restored
@@ -184,14 +212,11 @@ regressions cover those paths. DeepSeek low-balance tests remain deferred with t
 unimplemented adapter.
 
 The blocked build 4 attempt left installed production 1.1.3 untouched, with no feed
-preference change or private update server. For the authorized build 5 route,
-rebuild/sign/notarize the new-key app and DMG, then generate and verify local
-new-feed metadata. Validate manual replacement of a recoverable 1.1.3 installation
-with settings preserved. Test future new-key updates separately using isolated
-signed fixtures and a loopback-only feed; do not misreport this as an old-key
-1.1.3 in-app migration. Finish native login-session and System-appearance checks
-on the final installed candidate. Keep release uploads and public feed/site changes
-blocked until separate publication authorization.
+preference change or private update server. The subsequent authorized build 5 route
+completed a manual replacement and a separate private new-key updater test as
+recorded in the current section. Remaining native checks and owner backup are
+listed above. Keep release uploads and public feed/site changes blocked until
+separate publication authorization.
 
 ## Provider feasibility
 

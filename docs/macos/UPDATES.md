@@ -1,7 +1,7 @@
 # macOS updates
 
 The active local candidate is **2.2.0/build 5**. See [its preparation record](../releases/2026-10-macos-background-alerts-candidate.md)
-for current pending validation and explicitly historical build 4 evidence. The latest public release is
+for completed local checks, remaining native/backup items and historical build 4 evidence. The latest public release is
 [1.1.3/build 3](../releases/2026-10-macos-1.1.3.md), published on 2026-10-05.
 Public feeds, notes and downloads remain unchanged during 2.2.0 preparation.
 
@@ -18,11 +18,44 @@ must survive the manual installation. The new feed supports future compatible
 updates after installation and publication; it is not currently published.
 
 Follow [the migration contract](../product-spec/updater-key-migration-220.md).
-New source/build artifacts, tests, signing/notarization and local signed metadata
-must be validated afresh; the notarized build 4 receipts do not transfer. Manual
-installation acceptance and an isolated future new-key updater test are separate
-gates. No signature, notarization, Gatekeeper, transport or downgrade checks may
-be disabled to make old-key clients accept the new candidate.
+Build 5 completed fresh tests, signing/notarization and local feed/archive signature
+verification; it does not reuse build 4 receipts. Manual installation and an isolated
+future new-key updater test both passed, as recorded below. No signature,
+notarization, Gatekeeper, transport or downgrade checks were disabled to make
+old-key clients accept the new candidate.
+
+## Local build 5 acceptance
+
+Release source is `c9d35b3a2640ea2d3c7fc5c204d884a00c81b937`, with runtime metadata
+from `f877457`. The native suite ran 247 tests with four intentional skips and no
+failures; 17 distribution and 23 updater-policy tests passed. Website tooling at
+`afec470` passed 25 tests. Both the app and DMG received Apple Accepted results
+with zero issues, were stapled and passed Gatekeeper. Local feed/archive signatures
+verified against the new key. The exact final DMG and provenance are in the
+[candidate record](../releases/2026-10-macos-background-alerts-candidate.md#current-220build-5-migration-record)
+and local `dist/macos-2.2.0-build5/release-state.json`.
+
+A disposable **new-key** 2.2.0/build 4 host downloaded and installed the exact final
+build 5, then relaunched as one process. Its completion notice was observed and
+acknowledged. Old-key feed, tampered feed, signed malformed feed and invalid archive
+signature were rejected. An equal build was not offered, and an unavailable local
+server produced a recoverable error. This is future new-key updater validation;
+it does not claim a 1.1.3 old-key in-app upgrade.
+
+The separate manual installation replaced `/Applications/Llumi.app` 1.1.3 with exact
+build 5 bytes from the notarized DMG. Both providers were Live, all nine tracked
+setting values and their presence were preserved, Launch at Login remained on, and no false completion notice
+appeared. Second launch retained the process; Quit stopped it. Temporary feed, automatic-update and background overrides were restored.
+After the owner enabled system permission locally, the installed app reported the
+test accepted and the owner confirmed the final notification worked. Alerts remain
+at their original off setting. Cold background launch started the process, but UI observation reopened
+the window, so final window absence/Dock state is not independently confirmed.
+Actual logout/login, live OS System appearance with popup open, Intel/Windows
+execution and the owner's encrypted key backup remain unverified. The backup
+helper is prepared and has not exported the key.
+
+The optional v2 site-builder support is tested; no new feed is present in the site
+and nothing has been deployed. The old public feed remains unchanged.
 
 ## Update behavior introduced in 1.1.3
 
@@ -69,7 +102,7 @@ Official references: [setup](https://sparkle-project.org/documentation/), [progr
 
 A dedicated Sparkle EdDSA key was generated for earlier releases with upstream `generate_keys --account io.github.praneshsivasankaran.llumi.sparkle` and stored in login Keychain. That historical record does not establish its current availability. During 2.2.0/build 4 preparation on 2026-10-12, the official appcast tool reported the original key missing (`-25300`); focused login/iCloud Keychain checks found no matching item. No replacement Sparkle key was created during that attempt. The separately approved replacement Developer ID identity signed build 4's app and DMG; both passed Apple notarization, stapling and Gatekeeper. Those receipts remain historical and nothing was published.
 
-The owner then authorized a new Sparkle key in account `io.github.praneshsivasankaran.llumi.sparkle.v2`, the separate `appcast-v2.xml` feed and a one-time manual installation. Original-key restoration is no longer the selected route. Build 5 must embed the newly generated public key and new feed, then complete fresh validation. Do not claim key generation, new-build trust or new feed/archive signatures until their results are recorded. Keep the private key in Keychain; never export it into reports, source or generation arguments.
+The owner then authorized a new Sparkle key in account `io.github.praneshsivasankaran.llumi.sparkle.v2`, the separate `appcast-v2.xml` feed and a one-time manual installation. Original-key restoration is no longer the selected route. Build 5 embeds the new public key/feed and completed fresh app/DMG trust and local feed/archive signature checks. The private key remains in Keychain; it was not exported into reports, source or generation arguments. Owner-controlled encrypted backup is outstanding; the prepared helper has not exported it.
 
 Use the final `Llumi-<version>-macos.dmg` for both manual distribution and compatible new-key update enclosures (`Llumi-2.2.0-macos.dmg` containing build 5 for this candidate only after completing its final gates). Sparkle officially supports DMG updates. A separate ZIP update artifact is unnecessary. Keep build 5 output separate from the superseded build 4 DMG with the same filename. Both app and DMG must be Developer ID signed, notarized and stapled before the final archive signatures are generated. Signing order is explicitly inside-out across the reviewed Sparkle helpers, framework, then Llumi. The reviewed helper entitlements are empty. The release verifier requires exact `Developer ID Application: Pranesh S (K38622WCYD)` and `TeamIdentifier=K38622WCYD`, secure timestamp and strict validity; it also checks nested publishers. Sparkle's own installer checks the host signing requirement/bundle identity. An EdDSA signature is an additional requirement, not a substitute for release verification.
 
@@ -83,7 +116,7 @@ scripts/macos/generate-appcast.sh /path/to/pinned/Sparkle/bin /path/to/local/arc
 scripts/macos/generate-appcast.sh /path/to/pinned/Sparkle/bin /path/to/local/archives --execute
 ```
 
-Default is a plan only. Execution checks the official generator's checksum, exact final DMG name, notarized publisher, mounted app version/build/bundle ID/public key and nested code before generation. It selects the current build, avoids delta archives and requires an updater host build of at least 2. Output stays local. Published download URL is prepared for the eventual new GitHub release; no feed/release upload is performed. The final enclosure length, archive/feed signatures and release date are recorded in the published feed. Future releases require regeneration from their own final stapled bytes.
+Default is a plan only. Execution checks the official tools' checksums and confirms the Keychain public key matches the candidate before signing, plus exact final DMG name, notarized publisher, mounted app version/build/bundle ID/public key and nested code before generation. It selects the current build and avoids delta archives. The new build 5 feed records minimum update version 5; disposable private fixtures are tested separately. Output stays local. Published download URL is prepared for the eventual new GitHub release; no feed/release upload is performed. The final enclosure length, archive/feed signatures and intended release metadata are recorded in the local signed feed. Future releases require regeneration from their own final stapled bytes.
 
 ## Prepublication validation record
 

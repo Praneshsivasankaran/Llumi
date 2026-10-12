@@ -8,7 +8,7 @@ BIN="$1"; ARCHIVES="$2"; MODE="${3:---dry-run}"
 python3 - "$ROOT/scripts/macos/sparkle-layout.json" "$BIN" <<'CHECK'
 import hashlib, json, pathlib, sys
 expected = json.loads(pathlib.Path(sys.argv[1]).read_text())['tools_sha256']
-for name in ['generate_appcast', 'sign_update']:
+for name in ['generate_keys', 'generate_appcast', 'sign_update']:
     assert hashlib.sha256((pathlib.Path(sys.argv[2])/name).read_bytes()).hexdigest() == expected[name], 'Unreviewed Sparkle tool'
 CHECK
 CONFIG=$(python3 - "$ROOT/macos/release-candidate.json" <<'CHECK'
@@ -37,6 +37,9 @@ fi
 VERIFY=--notarized
 [[ "$MODE" != --stage-signed ]] || VERIFY=--signed
 "$ROOT/scripts/macos/verify-release.sh" "$DMG" "$VERIFY"
+# A correct account name alone does not prove it contains the key trusted by the app.
+FOUND_PUBLIC=$("$BIN/generate_keys" --account "$ACCOUNT" -p)
+[[ "$FOUND_PUBLIC" == "$PUBLIC_ED_KEY" ]] || fail 'Keychain signing key does not match the candidate public key'
 [[ -f "$ARCHIVES/Llumi-$VERSION-macos.txt" ]] || fail 'Missing reviewed release notes'
 "${COMMAND[@]}"
 "$BIN/sign_update" --account "$ACCOUNT" --verify "$ARCHIVES/$FEED_NAME"

@@ -19,7 +19,17 @@ metadata attempt failed; no replacement key or appcast was created at that stage
 The owner subsequently chose a new Sparkle key in account
 `io.github.praneshsivasankaran.llumi.sparkle.v2` and future feed
 `https://tryllumi.com/appcast-v2.xml`, with one manual Mac installation from 1.1.3.
-Build 5 artifacts, trust and migration checks are pending in the
+Build 5 from `c9d35b3a2640ea2d3c7fc5c204d884a00c81b937` now has a signed/notarized
+app and DMG, verified local feed/archive signatures, a successful manual installation
+over 1.1.3, and a separate successful private future new-key update test. Native
+tests ran 247 cases with four intentional skips and zero failures; distribution,
+updater-policy and site-tool tests passed 17, 23 and 25 cases respectively.
+Final installed notification permission was enabled locally by the owner; macOS
+accepted the test and the owner confirmed it worked. Temporary feed, update and
+background test preferences were restored, with all nine tracked fields preserved. Actual
+logout/login, independent final hidden-window/Dock observation, System appearance
+change with popup open, Intel runtime and owner encrypted key backup are not
+established. Exact evidence and remaining items are in the
 [Mac candidate record](../releases/2026-10-macos-background-alerts-candidate.md).
 Those are macOS-only distribution checks; they do not establish Windows signing,
 Store acceptance, installation or notification readiness. No publication occurred.
