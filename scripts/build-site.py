@@ -168,9 +168,15 @@ def build(output, base_url="", include_review=False):
             raise ValueError("The canonical Pages base URL must be HTTPS without query/fragment")
         base_url = base_url.rstrip("/") + "/"
     media = ["codex.svg", "claude.svg", "llumi-macos-usage.webp", "llumi-macos-usage-small.webp", "llumi-social.png"]
+    feeds = ["appcast.xml"]
+    new_feed = ROOT / "site/appcast-v2.xml"
+    if new_feed.is_symlink() or (new_feed.exists() and not new_feed.is_file()):
+        raise ValueError("Optional appcast-v2.xml must be a regular file")
+    if new_feed.is_file():
+        feeds.append(new_feed.name)
     releases = load_releases(include_review)
     output.mkdir(parents=True, exist_ok=True)
-    allowed = {"index.html", "privacy/index.html", "support/index.html", "releases/index.html", "styles.css", "release.css", "mark.svg", "app.js", "appcast.xml", ".nojekyll"} | {"media/" + name for name in media}
+    allowed = {"index.html", "privacy/index.html", "support/index.html", "releases/index.html", "styles.css", "release.css", "mark.svg", "app.js", ".nojekyll"} | {"media/" + name for name in media} | set(feeds)
     allowed |= {release_route(item) + "index.html" for item in releases}
     existing = {p.relative_to(output).as_posix() for p in output.rglob("*") if p.is_file()}
     if existing - allowed or any(p.is_symlink() for p in output.rglob("*")):
@@ -232,8 +238,9 @@ def build(output, base_url="", include_review=False):
         target.write_text("\n".join(line.rstrip() for line in rendered.splitlines()) + "\n", encoding="utf-8")
     for name in ("styles.css", "release.css", "mark.svg", "app.js"):
         shutil.copyfile(ROOT / "site" / name, output / name)
-    # Preserve Sparkle's signed feed byte for byte; template rendering invalidates it.
-    shutil.copyfile(ROOT / "site/appcast.xml", output / "appcast.xml")
+    # Preserve each separately signed feed byte for byte; rendering invalidates it.
+    for name in feeds:
+        shutil.copyfile(ROOT / "site" / name, output / name)
     (output / "media").mkdir(exist_ok=True)
     for name in media:
         shutil.copyfile(ROOT / "site/media" / name, output / "media" / name)

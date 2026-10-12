@@ -7,6 +7,7 @@ import re
 import unittest
 import json
 import base64
+import shutil
 import xml.etree.ElementTree as ET
 from unittest.mock import patch
 import tempfile
@@ -77,6 +78,8 @@ class SiteTests(unittest.TestCase):
 
     def test_only_intended_public_output(self):
         expected = {"index.html", "privacy/index.html", "support/index.html", "releases/index.html", "styles.css", "release.css", "mark.svg", "app.js", "appcast.xml", ".nojekyll", "media/codex.svg", "media/claude.svg", "media/llumi-macos-usage.webp", "media/llumi-macos-usage-small.webp", "media/llumi-social.png"}
+        if (ROOT / "site/appcast-v2.xml").is_file():
+            expected.add("appcast-v2.xml")
         expected |= {builder.release_route(item) + "index.html" for item in builder.load_releases()}
         self.assertEqual(self.files, expected)
 
@@ -237,6 +240,13 @@ class SiteTests(unittest.TestCase):
             signature = enclosure.attrib['{' + ns['sparkle'] + '}edSignature']
             self.assertEqual(len(base64.b64decode(signature, validate=True)), 64)
 
+    def test_optional_public_appcast_is_preserved_when_present(self):
+        source = ROOT / "site/appcast-v2.xml"
+        if source.is_file():
+            self.assertEqual((SITE / source.name).read_bytes(), source.read_bytes())
+        else:
+            self.assertFalse((SITE / source.name).exists())
+
     def test_titles_identity_and_visible_content(self):
         for name, title in [("index.html", "Llumi — Track your AI coding usage"), ("privacy/index.html", "Llumi Privacy Policy"), ("support/index.html", "Llumi Support")]:
             page = self.pages[name]
@@ -339,6 +349,58 @@ class SiteTests(unittest.TestCase):
         rendered = builder.render_privacy("# Privacy\n\n<script>alert(1)</script>")
         self.assertNotIn("<script>", rendered)
         self.assertIn("&lt;script&gt;", rendered)
+
+
+class OptionalAppcastTests(unittest.TestCase):
+    def setUp(self):
+        temporary = tempfile.TemporaryDirectory()
+        self.addCleanup(temporary.cleanup)
+        self.root = Path(temporary.name) / "source"
+        # All feed fixtures live in this temporary copy, never in the real site.
+        shutil.copytree(ROOT / "site", self.root / "site",
+                        ignore=shutil.ignore_patterns("appcast-v2.xml"))
+        shutil.copyfile(ROOT / "PRIVACY.md", self.root / "PRIVACY.md")
+        self.legacy = b'<?xml version="1.0"?>\r\n<rss><!-- synthetic legacy feed --></rss>\r\n'
+        (self.root / "site/appcast.xml").write_bytes(self.legacy)
+        self.new_feed = self.root / "site/appcast-v2.xml"
+        self.output = Path(temporary.name) / "output"
+        root_patch = patch.object(builder, "ROOT", self.root)
+        root_patch.start()
+        self.addCleanup(root_patch.stop)
+
+    def test_optional_feed_adds_exact_bytes_without_changing_existing_output(self):
+        for include_review in (False, True):
+            with self.subTest(include_review=include_review):
+                baseline = self.output / str(include_review) / "without"
+                builder.build(baseline, include_review=include_review)
+                before = {path.relative_to(baseline).as_posix(): path.read_bytes()
+                          for path in baseline.rglob("*") if path.is_file()}
+                self.assertNotIn("appcast-v2.xml", before)
+                self.assertEqual(before["appcast.xml"], self.legacy)
+                new_bytes = b'<?xml version="1.0"?>\r\n<rss><!-- {{DO_NOT_RENDER}} synthetic new feed --></rss>\r\n'
+                self.new_feed.write_bytes(new_bytes)
+                output = self.output / str(include_review) / "with"
+                builder.build(output, include_review=include_review)
+                after = {path.relative_to(output).as_posix(): path.read_bytes()
+                         for path in output.rglob("*") if path.is_file()}
+                self.assertEqual(after, {**before, "appcast-v2.xml": new_bytes})
+                self.assertEqual((self.root / "site/appcast.xml").read_bytes(), self.legacy)
+                self.new_feed.unlink()
+
+    def test_absent_feed_cannot_leave_stale_output_for_publication(self):
+        self.output.mkdir()
+        (self.output / "appcast-v2.xml").write_bytes(b"synthetic stale feed")
+        with self.assertRaisesRegex(ValueError, "fresh output directory"):
+            builder.build(self.output)
+
+    def test_optional_feed_rejects_directory_and_symlink_inputs(self):
+        self.new_feed.mkdir()
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            builder.build(self.output)
+        self.new_feed.rmdir()
+        self.new_feed.symlink_to(self.root / "site/appcast.xml")
+        with self.assertRaisesRegex(ValueError, "regular file"):
+            builder.build(self.output)
 
 
 if __name__ == "__main__":
