@@ -14,8 +14,12 @@ No taskbar changes are attempted or claimed on macOS.
   interface and its Dock entry. Closing the full interface keeps monitoring alive;
   the background preference hides the Dock entry again. Quit stops owned work.
 - The kernel instance lease remains the sole instance mechanism, including app copies.
-- Menu-bar click opens a compact charcoal-grey popover with blue accents and a
-  monochrome three-bars mark. Right click retains native action-menu access.
+- Menu-bar click opens a compact popover with blue accents and a monochrome
+  three-bars mark. It follows the app's shared Light, Dark or System appearance
+  setting immediately, including an already-created popup. Dark uses charcoal-grey
+  surfaces; Light uses light neutral surfaces with legible text and blue accents.
+  Windows should follow the same shared appearance contract in its tray popup.
+  Right click retains native action-menu access.
 - Show enabled providers and every supported reported window; missing usage/reset
   remains unknown. Show last successful observation, live/stale/error state and
   available reset countdowns. Refresh, Settings, Open Llumi and Quit are accessible.

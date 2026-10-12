@@ -61,13 +61,25 @@ import AppKit
       .appendingPathComponent("Llumi/AllowanceReview", isDirectory: true)
     guard FileManager.default.fileExists(atPath: directory.appendingPathComponent("capture-request").path)
     else { throw XCTSkip("Native fixture screenshots are opt-in local review artifacts.") }
+    _ = NSApplication.shared
     // The standalone XCTest runner has no app asset catalog. Resolve the real
     // sibling build's images for this render process without modifying a bundle.
     let products = Bundle(for: Self.self).bundleURL.deletingLastPathComponent()
     let app = try XCTUnwrap(Bundle(url: products.appendingPathComponent("Llumi.app")))
-    for name in ["CodexLogo", "ClaudeCodeMascot"] {
-      XCTAssertNotNil(app.image(forResource: name))
-    }
+    // Bundle.image(forResource:) cannot resolve these compiled SVG assets from
+    // the standalone runner, although SwiftUI's explicit bundle lookup can.
+    let catalog = try XCTUnwrap(app.url(forResource: "Assets", withExtension: "car"))
+    let inspect = Process(), output = Pipe()
+    inspect.executableURL = URL(fileURLWithPath: "/usr/bin/assetutil")
+    inspect.arguments = ["--info", catalog.path]
+    inspect.standardOutput = output
+    try inspect.run()
+    let entries = try XCTUnwrap(JSONSerialization.jsonObject(
+      with: output.fileHandleForReading.readDataToEndOfFile()) as? [[String: Any]])
+    inspect.waitUntilExit()
+    XCTAssertEqual(inspect.terminationStatus, 0)
+    let names = Set(entries.compactMap { $0["Name"] as? String })
+    XCTAssertTrue(names.isSuperset(of: ["CodexLogo", "ClaudeCodeMascot"]))
     let suite = "Llumi-Allowance-Render-" + UUID().uuidString
     let defaults = try XCTUnwrap(UserDefaults(suiteName: suite))
     defer { defaults.removePersistentDomain(forName: suite) }
@@ -117,6 +129,18 @@ import AppKit
           .background(Color(nsColor: .windowBackgroundColor)).preferredColorScheme(.dark),
           name: name + "-dark", size: CGSize(width: 800, height: 620),
           directory: directory, appearance: .darkAqua)
+      }
+      if name == "both-window" || name == "stale-unavailable" {
+        for preference in [AppAppearance.light, .dark] {
+          model.preferences.appearance = preference
+          // Let the native appearance reach SwiftUI; a forced test color scheme
+          // would conceal popup overrides that disagree with the app setting.
+          try await capture(UsagePopoverView(model: model, refresh: {}, settings: {}, open: {}, quit: {},
+              assetBundle: app),
+            name: "popup-" + name + "-" + preference.rawValue,
+            size: CGSize(width: 360, height: 520), directory: directory,
+            appearance: try XCTUnwrap(preference.native?.name))
+        }
       }
       let notch = NotchPresentation()
       notch.state.reconcile(activity: ActivitySnapshot(codex: SurfaceActivity(cli: true),

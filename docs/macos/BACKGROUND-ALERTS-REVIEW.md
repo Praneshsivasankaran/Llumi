@@ -188,6 +188,30 @@ identity and multi-window delivery. It found no new credential extraction, helpe
 server, authentication mutation or extra inference calls. Existing refresh scheduling
 and subprocess restrictions remain the only monitoring paths.
 
+## Popup appearance follow-up, 2026-10-12
+
+The user found that the menu-bar popup stayed dark after choosing Light. Both the
+NSPopover and SwiftUI content had forced dark overrides. The popup now uses the
+existing shared appearance preference, reapplies it to a cached popup, and uses
+adaptive text, borders, cards and blue accents. System resolves the application's
+effective appearance and observes changes; NSPopover's nil appearance defaults to
+VibrantLight and is not used as an inheritance shortcut. Observation stops on quit.
+
+Validation: 28 selected native checks ran, 27 passed and one unrelated opt-in setup
+capture was skipped; zero failures in the final run. The initial capture attempt
+exposed an existing standalone-runner asset assertion problem. The harness now
+checks compiled asset names and passes the app bundle to SwiftUI, matching other
+views. Native light/dark popup captures with live, stale and unavailable synthetic
+readings were visually inspected. They are saved alongside the review app under
+`screenshots/popup-*-light.png` and `screenshots/popup-*-dark.png`.
+
+A fresh universal Release build, production privacy audit, ad-hoc signature check
+and public-tree hygiene passed. The rebuilt app preserved the user's Light setting
+and alert opt-in. These captures validate native content rendering; a real system
+appearance change with the popup open has not been device-validated. The background
+popup still needs the user's menu-bar click because the available screen-control
+tool cannot target the status item directly. No provider or credential code changed.
+
 ## Windows handoff
 
 Adopt [the shared contract](../product-spec/background-alerts.md). Keep Start in

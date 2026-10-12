@@ -13,6 +13,7 @@ import SwiftUI
   private var status: NSStatusItem!
   private var statusMenu: NSMenu?
   private var usagePopover: NSPopover?
+  private var appearanceObservation: NSKeyValueObservation?
   private var schedule: Task<Void, Never>?
   private var wake: Task<Void, Never>?
   private var observers: [NSObjectProtocol] = []
@@ -68,6 +69,12 @@ import SwiftUI
     notch = NotchController(open: { [weak self] in self?.openMain() })
     model.resetNotchPositionAction = { [weak self] in self?.notch.resetPosition() }
     model.preferences.changed = { [weak self] in self?.applyPreferences() }
+    appearanceObservation = NSApp.observe(\.effectiveAppearance) { [weak self] _, _ in
+      Task { @MainActor in
+        guard let self, !self.quitting else { return }
+        self.applyPopoverAppearance()
+      }
+    }
     applyPreferences()
     let event = NSAppleEventManager.shared().currentAppleEvent
     let loginLaunch =
@@ -227,7 +234,6 @@ import SwiftUI
       let popover = NSPopover()
       popover.behavior = .transient
       popover.contentSize = NSSize(width: 360, height: 520)
-      popover.appearance = NSAppearance(named: .darkAqua)
       popover.contentViewController = NSHostingController(rootView: UsagePopoverView(model: model,
         refresh: { [weak self] in self?.manualRefresh() },
         settings: { [weak self] in self?.openSettings() },
@@ -235,6 +241,7 @@ import SwiftUI
         quit: { [weak self] in self?.quit() }))
       usagePopover = popover
     }
+    applyPopoverAppearance()
     usagePopover?.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
     NSApp.activate(ignoringOtherApps: true)
   }
@@ -265,6 +272,7 @@ import SwiftUI
   }
   private func applyPreferences() {
     NSApp.appearance = model.preferences.appearance.native
+    applyPopoverAppearance()
     if BackgroundPolicy.showsMenu(startInBackground: model.preferences.startInBackground,
       menuEnabled: model.preferences.menuEnabled) {
       createMenu()
@@ -283,6 +291,11 @@ import SwiftUI
       activity?.setEnabledProviders(enabled)
       Task { [weak self] in await self?.store?.setEnabledProviders(enabled) }
     }
+  }
+  private func applyPopoverAppearance() {
+    // NSPopover's nil appearance defaults to VibrantLight rather than reliably
+    // inheriting the app, so resolve System and observe effective appearance.
+    usagePopover?.appearance = model.preferences.appearance.native ?? NSApp.effectiveAppearance
   }
   @objc func openSetup() {
     guard !quitting else { return }
@@ -370,6 +383,8 @@ import SwiftUI
   func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
     guard !quitting else { return .terminateLater }
     quitting = true
+    appearanceObservation?.invalidate()
+    appearanceObservation = nil
     model.alerts.stop()
     schedule?.cancel()
     wake?.cancel()
