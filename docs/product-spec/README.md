@@ -18,6 +18,7 @@ Before changing behavior:
 | [Settings and lifecycle](settings.md) | Preferences, startup, background operation and quit |
 | [Privacy](privacy.md) | Data boundaries, isolation, credentials and diagnostics |
 | [Background and alerts](background-alerts.md) | macOS update and shared lifecycle/alert contracts |
+| [macOS 2.2.0 updater-key migration](updater-key-migration-220.md) | One-time manual installation, separate new feed and preserved update verification |
 
 ## Native platform adaptations
 

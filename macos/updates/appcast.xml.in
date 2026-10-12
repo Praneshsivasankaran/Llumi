@@ -4,10 +4,10 @@
 <rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle">
  <channel><title>Llumi macOS Updates</title>
   <item><title>Llumi 2.2.0</title><pubDate>RELEASE_DATE_PENDING</pubDate>
-   <sparkle:version>4</sparkle:version><sparkle:shortVersionString>2.2.0</sparkle:shortVersionString>
+   <sparkle:version>5</sparkle:version><sparkle:shortVersionString>2.2.0</sparkle:shortVersionString>
    <sparkle:minimumSystemVersion>14.0</sparkle:minimumSystemVersion>
-   <sparkle:minimumUpdateVersion>2</sparkle:minimumUpdateVersion>
-   <description sparkle:format="plain-text">Optional background startup, a compact usage popup that follows appearance settings, and configurable usage alerts with persistent account/window deduplication.</description>
+   <sparkle:minimumUpdateVersion>5</sparkle:minimumUpdateVersion>
+   <description sparkle:format="plain-text">Optional background startup, a compact usage popup that follows appearance settings, and configurable usage alerts with persistent account/window deduplication. Existing Llumi users must install this version manually once to move to the new signed update feed.</description>
    <enclosure url="ARTIFACT_HTTPS_URL_PENDING" length="ARTIFACT_LENGTH_PENDING" type="application/octet-stream" sparkle:edSignature="OFFICIAL_TOOL_SIGNATURE_PENDING"/>
   </item>
  </channel>

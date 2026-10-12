@@ -2,7 +2,7 @@
 
 The latest published macOS release is
 [Llumi 1.1.3/build 3](../releases/2026-10-macos-1.1.3.md), published on 2026-10-05.
-The next local candidate is **2.2.0/build 4**, with background mode, optional usage
+The next local candidate is **2.2.0/build 5**, with background mode, optional usage
 alerts and shared popup appearance. See [candidate notes, validation and remaining
 gates](../releases/2026-10-macos-background-alerts-candidate.md). It has not been
 published; preparation does not authorize release uploads or public updater changes.

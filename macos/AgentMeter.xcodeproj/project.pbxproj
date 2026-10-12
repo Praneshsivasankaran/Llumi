@@ -871,7 +871,7 @@
 				<key>MARKETING_VERSION</key>
 				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>4</string>
+				<string>5</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi</string>
 				<key>INFOPLIST_FILE</key>
@@ -907,7 +907,7 @@
 				<key>MARKETING_VERSION</key>
 				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>4</string>
+				<string>5</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi</string>
 				<key>INFOPLIST_FILE</key>
@@ -963,7 +963,7 @@
 				<key>MARKETING_VERSION</key>
 				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>4</string>
+				<string>5</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi.tests</string>
 				<key>GENERATE_INFOPLIST_FILE</key>
@@ -999,7 +999,7 @@
 				<key>MARKETING_VERSION</key>
 				<string>2.2.0</string>
 				<key>CURRENT_PROJECT_VERSION</key>
-				<string>4</string>
+				<string>5</string>
 				<key>PRODUCT_BUNDLE_IDENTIFIER</key>
 				<string>io.github.praneshsivasankaran.llumi.tests</string>
 				<key>GENERATE_INFOPLIST_FILE</key>

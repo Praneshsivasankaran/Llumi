@@ -4,6 +4,11 @@ The macOS local update follows [Background and alerts](background-alerts.md), wh
 supersedes the earlier exclusions of notifications and a usage popup below. Windows
 has not yet implemented this update.
 
+The macOS 2.2.0 transition follows [the one-time manual updater-key migration](updater-key-migration-220.md).
+Existing 1.1.3 cannot use its in-app updater to enter the new key/feed trust chain;
+valid preferences and native update controls retain their existing semantics after
+manual installation. The old public feed remains intact.
+
 Windows 2.1.3 adopts the macOS 1.1.3 product contract in [Windows catch-up requirements](windows-213.md), which supersedes conflicting earlier Windows allowance, setup and provider-selection rules below. Intentional native differences remain.
 
 Windows Settings uses on/off slider switches and omits the tray-availability explanation, independence/account/telemetry note, automatic-save footer, diagnostics copy action and passive diagnostics privacy note. Persistence and monitor-position errors remain visible when they occur. macOS copy remains unchanged.

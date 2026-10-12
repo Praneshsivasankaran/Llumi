@@ -1,22 +1,26 @@
 # Windows handoff: background mode and usage alerts
 
-Prepared 2026-10-12 from the macOS local candidate; macOS version/build **2.2.0 / 4**.
+Prepared 2026-10-12 from the macOS local candidate; macOS version/build **2.2.0 / 5**.
 The owner selected **2.2.0** as the shared marketing version for macOS and Windows.
-Native internal/package build numbers remain independent; the unreleased Mac build
-stays 4. Earlier Mac checks recorded as 1.1.4/build 4 retain that historical label.
+Native internal/package build numbers remain independent. The Mac internal build
+advances to 5 for its new Sparkle key/feed; earlier 1.1.4/build 4 and 2.2.0/build 4
+checks retain their historical labels.
 This is an implementation contract, not a claim that this update exists or has been
 tested on Windows. Start with [the shared product specification](../product-spec/background-alerts.md)
 and preserve the current Windows allowance/setup behavior in
 [windows-213.md](../product-spec/windows-213.md). Do not copy the Mac preference
 domain, bundle identity, notification framework or internal build number.
 
-Mac signing reference: the 2.2.0/build 4 app from source
+Historical Mac signing reference: the superseded 2.2.0/build 4 app from source
 `71e75c3dd6e243b38c023f3b6b0cda4ffb10070c` passed Developer ID signing, Apple app
 notarization, stapling and Gatekeeper. The final DMG also passed Apple notarization,
-stapling, Gatekeeper and mounted contained-app verification. Sparkle feed/archive
-signing and the private upgrade remain blocked on restoring the original updater
-key; no replacement key or appcast was created. Final native gates remain listed
-in the [Mac candidate record](../releases/2026-10-macos-background-alerts-candidate.md).
+stapling, Gatekeeper and mounted contained-app verification. Its old-key updater
+metadata attempt failed; no replacement key or appcast was created at that stage.
+The owner subsequently chose a new Sparkle key in account
+`io.github.praneshsivasankaran.llumi.sparkle.v2` and future feed
+`https://tryllumi.com/appcast-v2.xml`, with one manual Mac installation from 1.1.3.
+Build 5 artifacts, trust and migration checks are pending in the
+[Mac candidate record](../releases/2026-10-macos-background-alerts-candidate.md).
 Those are macOS-only distribution checks; they do not establish Windows signing,
 Store acceptance, installation or notification readiness. No publication occurred.
 

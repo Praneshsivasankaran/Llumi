@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Security regression tests; never sign, read a private key, or contact a feed."""
 import copy, json, pathlib, plistlib, unittest
-from release_policy import validate_metadata, validate_publisher
+from release_policy import validate_metadata, validate_publisher, merge_release_state, LEGACY_PUBLIC_ED_KEY
 ROOT = pathlib.Path(__file__).resolve().parents[2]
 
 class UpdaterPolicyTests(unittest.TestCase):
@@ -45,9 +45,43 @@ class UpdaterPolicyTests(unittest.TestCase):
                 with self.assertRaisesRegex(AssertionError, 'Local review metadata'):
                     self.check(info)
     def test_non_https_or_different_feed_rejected(self):
-        for url in ['http://tryllumi.com/appcast.xml','https://example.invalid/appcast.xml','file:///tmp/appcast.xml']:
+        for url in ['https://tryllumi.com/appcast.xml','http://tryllumi.com/appcast-v2.xml',
+                    'https://example.invalid/appcast-v2.xml','file:///tmp/appcast-v2.xml']:
             info=copy.deepcopy(self.info);info['SUFeedURL']=url
             with self.assertRaises(AssertionError):self.check(info)
+    def test_feed_allowlist_cannot_be_bypassed_with_matching_candidate(self):
+        for url in ['https://tryllumi.com/appcast.xml','http://tryllumi.com/appcast-v2.xml',
+                    'https://example.invalid/appcast-v2.xml','https://tryllumi.com/appcast-v2.xml?preview=1',
+                    'https://tryllumi.com/appcast-v2.xml/','https://user@tryllumi.com/appcast-v2.xml']:
+            with self.subTest(url=url):
+                info=copy.deepcopy(self.info);candidate=copy.deepcopy(self.candidate)
+                info['SUFeedURL']=candidate['feed_url']=url
+                with self.assertRaisesRegex(AssertionError, 'Unexpected/non-HTTPS feed'):
+                    self.check(info,candidate)
+    def test_legacy_or_unexpected_signing_account_rejected(self):
+        for account in ['io.github.praneshsivasankaran.llumi.sparkle','ed25519',
+                        'io.github.praneshsivasankaran.llumi.sparkle.v2.extra','']:
+            with self.subTest(account=account):
+                candidate=copy.deepcopy(self.candidate);candidate['keychain_account']=account
+                with self.assertRaisesRegex(AssertionError, 'Unexpected updater Keychain account'):
+                    self.check(candidate=candidate)
+    def test_legacy_key_rejected_even_with_matching_candidate(self):
+        info=copy.deepcopy(self.info);candidate=copy.deepcopy(self.candidate)
+        info['SUPublicEDKey']=candidate['public_ed_key']=LEGACY_PUBLIC_ED_KEY
+        with self.assertRaisesRegex(AssertionError, 'Legacy updater public key'):
+            self.check(info,candidate)
+    def test_invalid_public_key_rejected_even_with_matching_candidate(self):
+        for key in ['not-base64', '', 'YQ==', None]:
+            with self.subTest(key=key):
+                info=copy.deepcopy(self.info);candidate=copy.deepcopy(self.candidate)
+                info['SUPublicEDKey']=candidate['public_ed_key']=key
+                with self.assertRaisesRegex(AssertionError, 'Invalid public key'):
+                    self.check(info,candidate)
+    def test_new_lineage_cannot_reuse_previous_local_build(self):
+        info=copy.deepcopy(self.info);candidate=copy.deepcopy(self.candidate)
+        info['CFBundleVersion']=candidate['build']='4'
+        with self.assertRaisesRegex(AssertionError, 'Build predates new updater lineage'):
+            self.check(info,candidate)
     def test_unknown_key_or_disabled_verification_rejected(self):
         for key,value in [('SUPublicEDKey','AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA='),('SUVerifyUpdateBeforeExtraction',False),('SURequireSignedFeed',False),('SUSignedFeedFailureExpirationInterval',1728000)]:
             info=copy.deepcopy(self.info);info[key]=value
@@ -86,5 +120,37 @@ class UpdaterPolicyTests(unittest.TestCase):
         self.assertEqual(packages[0]['requirement'],{'kind':'exactVersion','version':self.candidate['sparkle_version']})
         pins=json.loads((ROOT/'macos/AgentMeter.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved').read_text())['pins']
         self.assertEqual(pins[0]['state']['revision'], self.candidate['sparkle_revision'])
+
+class ReleaseStateTests(unittest.TestCase):
+    def setUp(self):
+        self.verified={'version':'2.2.0','build':'5','dmg':'Llumi-2.2.0-macos.dmg',
+            'feed_url':'https://tryllumi.com/appcast-v2.xml',
+            'keychain_account':'io.github.praneshsivasankaran.llumi.sparkle.v2',
+            'public_ed_key':'synthetic-public-key', 'sha256':'final-hash',
+            'sparkle_signature_verified':True,'feed_signature_verified':True,'publication_authorized':False}
+    def test_verification_preserves_provenance_and_updates_current_result(self):
+        previous={'version':'2.2.0','build':'5','sha256':'pre-stapling-hash',
+            'source_commit':'synthetic-commit','notarization':{'app':'accepted','dmg':'accepted'},
+            'native_checks':{'background_launch':True},'sparkle_signature_verified':False}
+        result=merge_release_state(previous,self.verified)
+        for field in ['source_commit','notarization','native_checks']:
+            self.assertEqual(result[field],previous[field])
+        self.assertEqual(result['sha256'],'final-hash')
+        self.assertIs(result['sparkle_signature_verified'],True)
+        self.assertIs(result['publication_authorized'],False)
+        self.assertEqual(previous['sha256'],'pre-stapling-hash')
+    def test_another_release_or_lineage_cannot_supply_provenance(self):
+        for field,value in [('version','1.1.3'),('build','4'),('dmg','other.dmg'),
+                            ('feed_url','https://tryllumi.com/appcast.xml'),
+                            ('keychain_account','io.github.praneshsivasankaran.llumi.sparkle'),
+                            ('public_ed_key',LEGACY_PUBLIC_ED_KEY)]:
+            with self.subTest(field=field):
+                with self.assertRaisesRegex(AssertionError, 'another release or updater lineage'):
+                    merge_release_state({field:value},self.verified)
+    def test_missing_state_can_be_initialized_but_invalid_state_is_rejected(self):
+        self.assertEqual(merge_release_state({},self.verified),self.verified)
+        for previous in [None, [], 'invalid']:
+            with self.subTest(previous=previous), self.assertRaisesRegex(AssertionError, 'Invalid existing release state'):
+                merge_release_state(previous,self.verified)
 
 if __name__=='__main__':unittest.main()

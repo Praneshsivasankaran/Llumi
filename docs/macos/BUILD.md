@@ -1,6 +1,6 @@
 # Build Llumi for macOS
 
-The active local candidate is **2.2.0/build 4**; see
+The active local candidate is **2.2.0/build 5**; see
 [candidate notes and validation](../releases/2026-10-macos-background-alerts-candidate.md).
 The latest published macOS release remains the immutable
 [1.1.3/build 3 release](../releases/2026-10-macos-1.1.3.md). Local preparation does not
