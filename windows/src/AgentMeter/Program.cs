@@ -40,8 +40,8 @@ internal static class Program
         {
             log.Write("application.started");
             Application.ThreadException += (_, _) => log.Write("application.ui-error");
-            using var context = new TrayContext(new RefreshCoordinator(CreateProviders(log.Write), log.Write), log, showEvent, quitEvent: quitEvent);
-            if (!args.Contains("--startup", StringComparer.Ordinal)) context.OpenPanel();
+            using var context = new TrayContext(new RefreshCoordinator(CreateProviders(log.Write), log.Write), log, showEvent,
+                quitEvent: quitEvent, startupLaunch: args.Contains("--startup", StringComparer.Ordinal));
             Application.Run(context);
             log.Write("application.exited");
             return 0;
