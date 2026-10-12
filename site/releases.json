@@ -3,6 +3,55 @@
   "releases": [
     {
       "platform": "windows",
+      "version": "2.2.0",
+      "build": 1,
+      "status": "published",
+      "published_at": "2026-10-12",
+      "submitted_at": "2026-10-12",
+      "title": "Usage alerts and quieter launches.",
+      "summary": "Optional usage alerts, snooze controls and Start in background for Windows.",
+      "sections": [
+        {
+          "title": "Usage alerts",
+          "items": [
+            "Get optional Windows notifications for Codex and Claude Code. Alerts start off, with editable thresholds at 75%, 90% and 95% used.",
+            "Choose distinct whole percentages from 1 to 100. Enable each provider and threshold separately.",
+            "Alerts use fresh, verified usage readings and reported reset times. Handled thresholds stay remembered across restarts, so the same warning does not keep repeating.",
+            "Send a test notification from Settings and check notification availability. Windows notification settings and Do Not Disturb still apply."
+          ]
+        },
+        {
+          "title": "Alert snooze",
+          "items": [
+            "Snooze alerts for one hour or until tomorrow at 09:00 local time, or resume early. The saved deadline stays visible in Settings.",
+            "Monitoring continues during snooze. Alerts resume without a backlog, including after sleep, offline time or restart.",
+            "Test notifications remain available during snooze without consuming usage thresholds."
+          ]
+        },
+        {
+          "title": "Start in background",
+          "items": [
+            "Choose whether ordinary launches open the main window. Start in background is off by default and is separate from Launch at Startup; login launches remain quiet.",
+            "First-time setup stays visible. Open Llumi again to restore its existing window. Changing the setting applies to future launches.",
+            "With the tray icon disabled, background launches keep a minimized taskbar window. Closing keeps monitoring active; Quit exits Llumi."
+          ]
+        },
+        {
+          "title": "Settings improvements",
+          "items": [
+            "Settings keeps its scroll position while provider status updates.",
+            "Invalid threshold edits show an unsaved warning while other alert switches and snooze controls remain usable."
+          ]
+        }
+      ],
+      "notice": "Available through Microsoft Store for Windows 10 22H2 or later and Windows 11 on x64. Updates are managed by Microsoft Store. Alerts warn about usage; they do not stop agents or limit spending.",
+      "source_documents": [
+        "docs/releases/2026-10-windows-2.2.0.md",
+        "docs/product-spec/windows-alerts-background.md"
+      ]
+    },
+    {
+      "platform": "windows",
       "version": "2.1.3",
       "build": 1,
       "status": "submitted",

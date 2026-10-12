@@ -27,11 +27,13 @@ The browser harness covers Chromium, Firefox and WebKit; desktop and narrow layo
 
 ## Configuration and deployment
 
-`site/config.json` supplies canonical/OG URLs, the canonical GitHub repository and download status. macOS links to the verified public Llumi 1.1.3 DMG. Windows 2.0.2.0 is published in Microsoft Store. Both Windows download links point to product `9NV153Q5K5MQ`, enabled with owner authorization after public metadata verification and physical installation acceptance. No unsigned Windows download is offered.
+`site/config.json` supplies canonical/OG URLs, the canonical GitHub repository and download status. macOS links to the verified public Llumi 1.1.3 DMG. Windows 2.2.0.0 is published in Microsoft Store, verified on 2026-10-12. Both Windows download links point to product `9NV153Q5K5MQ`, enabled with owner authorization after public metadata verification and physical installation acceptance. No unsigned Windows download is offered.
 
 `wrangler.jsonc` declares only the two owner-confirmed website domains. `site/worker.mjs` implements canonical redirects, then delegates to static assets. The builder also copies the finalized Sparkle-signed `site/appcast.xml` byte for byte to `/appcast.xml`; verify the deployed feed and its enclosure signature against the public DMG. Deployment is explicit with `wrangler deploy` after build, tests and authorization. Do not alter unrelated DNS or mail records. The GitHub website workflow validates and packages output; it does not deploy automatically.
 
 The owner authorized the Windows 2.1.3 release and its website notes on 2026-10-08. Keep its entry in `site/releases.json` as `preview` until a real Store submission is verified. Then use `submitted`, its verified `submitted_at` date and a null `published_at`; public output labels it Microsoft Store review. Keep the Windows download version at the last verified public version until Store publication is confirmed. Promote to `published` with the actual publication date only after that check. Mac entries, download URLs and the signed feed are preserved throughout.
+
+Windows 2.2.0 notes and website deployment were authorized on 2026-10-12. Microsoft Store publication was verified that day, so its entry is `published` with `published_at` set to `2026-10-12`, and the Windows download version is `2.2.0.0`. Preserve the separately saved local preview and earlier release history.
 
 ## Historical Store URL compatibility
 

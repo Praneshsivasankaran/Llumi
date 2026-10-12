@@ -16,7 +16,7 @@
     }
   },
   "windows": {
-    "version": "2.0.2.0",
+    "version": "2.2.0.0",
     "download_url": "https://apps.microsoft.com/detail/9NV153Q5K5MQ",
     "compatibility": "Windows 10 (22H2+) / 11 \u00b7 x64"
   }
